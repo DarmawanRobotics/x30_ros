@@ -51,22 +51,30 @@ class TestFakeX30(unittest.TestCase):
         robot.handle(cmd(p.STEPPING))
         self.assertEqual(robot.basic_state, p.STATE_TORQUE_STANDING)
 
-    def test_axes_move_the_robot_in_non_manual_mode(self):
-        """Autonomous axis commands need stepping and non-manual mode; the handheld's do not."""
-        robot = FakeX30(basic_state=p.STATE_STEPPING)
-        robot.handle(cmd(p.AXIS_FORWARD, 16384))
+    def test_axes_follow_the_control_mode(self):
+        """Stepping only; 0x21 axes in manual mode, 0x31 axes in non-manual mode."""
+        robot = FakeX30(basic_state=p.STATE_STEPPING)            # manual mode
+        robot.handle(cmd(p.AXIS_FORWARD, 16384))                 # 0x31: ignored in manual
         robot.advance(0.1)
         self.assertEqual(robot.velocity, (0.0, 0.0, 0.0))
         robot.handle(cmd(p.AXIS_FORWARD, 16384, prefix=p.PREFIX_REMOTE))
         robot.advance(0.2)
         self.assertAlmostEqual(robot.velocity[0], 0.6, places=3)
-        robot.handle(cmd(p.NON_MANUAL_MODE))
+        robot.handle(cmd(p.NON_MANUAL_MODE))                     # the axes start over
+        robot.advance(0.3)
+        self.assertEqual(robot.velocity, (0.0, 0.0, 0.0))
+        robot.handle(cmd(p.AXIS_FORWARD, 16384, prefix=p.PREFIX_REMOTE))  # 0x21 now ignored
         robot.handle(cmd(p.AXIS_TURN, -32767))
         robot.advance(1.0)
+        self.assertEqual(robot.velocity[0], 0.0)
         self.assertAlmostEqual(robot.velocity[2], 0.45)  # turn axis -: counter-clockwise
         self.assertGreater(robot.pose[0], 0.0)
         robot.advance(2.5)  # 1.2.3: no axis command for more than a second
         self.assertEqual(robot.velocity, (0.0, 0.0, 0.0))
+        loose = FakeX30(basic_state=p.STATE_STEPPING, require_mode=False)
+        loose.handle(cmd(p.AXIS_FORWARD, 16384))
+        loose.advance(0.1)
+        self.assertGreater(loose.velocity[0], 0.0)
 
     def test_axes_ignored_when_not_stepping(self):
         robot = FakeX30(basic_state=p.STATE_TORQUE_STANDING, non_manual=True)
@@ -82,12 +90,19 @@ class TestFakeX30(unittest.TestCase):
         self.assertTrue(self.robot.connected)
         self.assertEqual(self.robot.heartbeats, 1)
         self.robot.handle(cmd(p.SOFT_ESTOP))
-        self.assertEqual(self.robot.basic_state, p.STATE_EMERGENCY)
+        self.robot.handle(cmd(p.SOFT_ESTOP))
+        self.assertEqual((self.robot.basic_state, self.robot.estops), (p.STATE_EMERGENCY, 2))
         rcs = p.decode_rcs(p.parse_datagram(self.robot.rcs_report()).payload)
         self.assertEqual(p.name_of(p.EMERGENCY_SOURCES, rcs.emergency_source), 'client')
-        self.robot.handle(p.simple(p.SAVE_DATA))
-        self.assertTrue(self.robot.saved)
+        self.robot.handle(p.simple(p.save_data_command(p.SAVE_DATA)))
+        self.assertEqual(self.robot.saved, 0x31010C01)
+        self.robot.handle(p.simple(p.SAVE_DATA_OLD))
+        self.assertEqual(self.robot.saved, 18)
         self.assertEqual(self.robot.codes(p.HEARTBEAT), [0x31040001])
+        frozen = FakeX30()
+        frozen.ignore_height = True
+        frozen.handle(cmd(p.BODY_HEIGHT, p.HEIGHT_CRAWL))
+        self.assertEqual(frozen.height, 0)
 
     def test_reports_decode(self):
         """Every report is a datagram the driver's decoders read."""
@@ -109,24 +124,47 @@ class TestFakePerception(unittest.TestCase):
         """Any message starts the feedback; modes come back as 0x3100EE0x (1.5)."""
         host = FakePerception()
         self.assertFalse(host.feedback_on)
-        self.assertEqual(host.handle(p.simple(p.ELEVATION_QUERY), elevation=True), [])
+        self.assertEqual(host.handle(p.simple(p.ELEVATION_QUERY), 'elevation'), [])
         self.assertTrue(host.feedback_on)
-        host.handle(p.simple(p.ELEVATION_MODE, p.ELEVATION_GRID_GROUND), elevation=True)
-        host.handle(p.simple(p.BRAKE_MODE, 2), elevation=True)
-        host.handle(p.simple(p.ELEVATION_MODE, 99), elevation=True)  # not a mode: ignored
+        host.handle(p.simple(p.ELEVATION_MODE, p.ELEVATION_GRID_GROUND), 'elevation')
+        host.handle(p.simple(p.BRAKE_MODE, 2), 'elevation')
+        host.handle(p.simple(p.ELEVATION_MODE, 99), 'elevation')  # not a mode: ignored
+        host.handle(p.simple(p.OBSTACLE_HEIGHT_LIKELY, 2), 'elevation')
         feedback = {d.code: d.value for d in map(p.parse_datagram, host.feedback())}
         self.assertEqual(feedback, {p.ELEVATION_MODE_STATE: 4, p.BRAKE_MODE_STATE: 2,
                                     p.VELOCITY_SOURCE_STATE: 2})
+        self.assertEqual((host.obstacle_height, host.obstacle_codes), (2, [0x3101EE04]))
+
+    def test_multi_frame_and_lio(self):
+        """Multi-frame needs the odometry on; it turns off only after leaving (1.5.2.4/5)."""
+        host = FakePerception()
+
+        def lio(value):
+            reply = p.parse_datagram(host.handle(p.simple(p.LIO, value), 'lio')[0])
+            return reply.code, p.signed(reply.value)
+
+        host.handle(p.simple(p.ELEVATION_MODE, 20), 'elevation')
+        self.assertEqual(host.elevation_mode, 18)  # odometry off: stuck preparing
+        host.advance(5.0)
+        self.assertEqual(host.elevation_mode, 18)
+        self.assertEqual(lio(p.LIO_ON), (p.LIO, 0))
+        host.handle(p.simple(p.ELEVATION_MODE, 20), 'elevation')
+        host.advance(6.0)
+        self.assertEqual(host.elevation_mode, 20)
+        self.assertEqual(lio(p.LIO_OFF), (p.LIO, -1))  # still in multi-frame
+        host.handle(p.simple(p.ELEVATION_MODE, 3), 'elevation')
+        self.assertEqual(lio(p.LIO_OFF), (p.LIO, 0))
+        self.assertFalse(host.lio_on)
 
     def test_charging(self):
         """Request / response with charge_manager_state (1.4)."""
         host = FakePerception()
-        reply = p.parse_datagram(host.handle(p.simple(p.CHARGE, p.CHARGE_START), False)[0])
+        reply = p.parse_datagram(host.handle(p.simple(p.CHARGE, p.CHARGE_START), 'charge')[0])
         self.assertEqual((reply.code, reply.value), (p.CHARGE, 1))
         host.advance(1.0)
-        reply = p.parse_datagram(host.handle(p.simple(p.CHARGE_QUERY), False)[0])
+        reply = p.parse_datagram(host.handle(p.simple(p.CHARGE_QUERY), 'charge')[0])
         self.assertEqual((reply.code, reply.value), (p.CHARGE_QUERY, 2))
-        host.handle(p.simple(p.CHARGE, p.CHARGE_CLEAR), False)
+        host.handle(p.simple(p.CHARGE, p.CHARGE_CLEAR), 'charge')
         self.assertEqual(host.charge_state, 0)
 
 
@@ -139,7 +177,7 @@ class TestServer(unittest.TestCase):
         robot = FakeX30()
         server = FakeRobotServer(robot, FakePerception(), motion_port=0,
                                  report_to=client.local, vmap_port=0, charge_port=0,
-                                 rate_hz=100.0).start()
+                                 lio_port=0, rate_hz=100.0).start()
         try:
             codes = set()
             end = time.monotonic() + 3.0
@@ -162,6 +200,37 @@ class TestServer(unittest.TestCase):
         finally:
             server.stop()
             client.stop()
+
+    def test_perception_ports(self):
+        """Every elevation map client gets the feedback; the odometry port answers."""
+        inboxes = [queue.Queue(), queue.Queue()]
+        clients = [UdpLink('127.0.0.1', 9, '127.0.0.1', 0, lambda d, a, q=q: q.put(d))
+                   for q in inboxes]
+        for client in clients:
+            client.start()
+        server = FakeRobotServer(FakeX30(), FakePerception(), motion_port=0,
+                                 report_to=('127.0.0.1', 9), vmap_port=0, charge_port=0,
+                                 lio_port=0, rate_hz=100.0).start()
+
+        def next_code(inbox, code):
+            end = time.monotonic() + 3.0
+            while time.monotonic() < end:
+                d = p.parse_datagram(inbox.get(timeout=1.0))
+                if d.code == code:
+                    return d
+            return None
+
+        try:
+            for client in clients:
+                client.send(p.simple(p.ELEVATION_QUERY), ('127.0.0.1', server.vmap_port))
+            for inbox in inboxes:
+                self.assertEqual(next_code(inbox, p.ELEVATION_MODE_STATE).value, 3)
+            clients[0].send(p.simple(p.LIO, p.LIO_ON), ('127.0.0.1', server.lio_port))
+            self.assertEqual(next_code(inboxes[0], p.LIO).value, 0)
+        finally:
+            server.stop()
+            for client in clients:
+                client.stop()
 
 
 if __name__ == '__main__':
