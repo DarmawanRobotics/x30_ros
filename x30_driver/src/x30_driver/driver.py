@@ -515,14 +515,23 @@ class X30Driver:
                 self.state_name(self.basic_state()))
         return True, 'standing (torque control)'
 
-    def release(self):
-        """End a velocity hold (stand_up, start_stepping); return a note for the reply."""
-        if self.stream.release():
+    def release(self, since):
+        """
+        End a velocity hold (stand_up, start_stepping); return a note for the reply.
+
+        since: the stream's hold_seq when the service started; a hold that came in after it
+        (emergency_stop) stays.
+        """
+        if self.stream.release(since):
             return ' (velocity hold released: cmd_vel must be zero or quiet once)'
+        if self.stream.hold_seq != since:
+            return ' (velocity hold kept: {} came in meanwhile)'.format(
+                self.stream.hold_reason or 'a hold')
         return ''
 
     def on_stand_up(self, _request):
         """Stand up from sitting, then (auto_torque_control) torque-controlled standing."""
+        holds = self.stream.hold_seq  # before the state is read: a later hold is kept
         state = self.basic_state()
         if state is None:
             return self.no_reports()
@@ -530,7 +539,7 @@ class X30Driver:
             return self.reply(False, 'busy ({})'.format(self.state_name(state)))
         if state == p.STATE_EMERGENCY:
             return self.reply(False, 'emergency stop or fall: clear it on the robot first')
-        note = self.release()
+        note = self.release(holds)
         if state == p.STATE_INITIAL_STANDING and self.auto_torque_control:
             ok, message = self.to_torque_standing()
             return self.reply(ok, message + note)
@@ -564,6 +573,7 @@ class X30Driver:
         if state is None:
             return self.no_reports()
         if state == p.STATE_SITTING:
+            self.hold('sit_down')  # as after sitting down: until stand_up or start_stepping
             return self.reply(True, 'already sitting')
         if state == p.STATE_EMERGENCY:
             return self.reply(False, 'emergency stop or fall: clear it on the robot first')
@@ -598,14 +608,15 @@ class X30Driver:
 
     def on_start_stepping(self, _request):
         """Torque-controlled standing -> stepping (from initial standing via torque control)."""
+        holds = self.stream.hold_seq  # before the state is read: a later hold is kept
         state = self.basic_state()
         if state is None:
             return self.no_reports()
         if state == p.STATE_STEPPING:
-            return self.reply(True, 'already stepping' + self.release())
+            return self.reply(True, 'already stepping' + self.release(holds))
         if state not in (p.STATE_INITIAL_STANDING, p.STATE_TORQUE_STANDING):
             return self.reply(False, 'stand up first ({})'.format(self.state_name(state)))
-        note = self.release()
+        note = self.release(holds)
         if state == p.STATE_INITIAL_STANDING:
             ok, message = self.to_torque_standing()
             if not ok:

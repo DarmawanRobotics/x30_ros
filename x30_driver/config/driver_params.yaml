@@ -45,7 +45,7 @@ velocity_mode: axis
 velocity_topic: /cmd_vel_corrected
 cmd_rate_hz: 50.0                  # 1.2.3: 50 Hz; the robot drops an axis after 1 s
 cmd_timeout_sec: 0.5               # cmd_vel older than this: zeros
-stop_burst_sec: 0.5                # zeros streamed after the timeout, then silence
+stop_burst_sec: 0.5                # zeros streamed after motion (at least one), then silence
 max_vx: 1.0                        # m/s, clamp of cmd_vel; the gait's own maximum applies too
 max_vy: 0.5                        # m/s
 max_wz: 1.0                        # rad/s
@@ -59,14 +59,16 @@ invert_vy: false                   # true if +linear.y moves the robot RIGHT (RE
 invert_wz: false                   # true if +angular.z turns the robot RIGHT (README checklist)
 
 # Switches at the start of an episode (the first motion command after cmd_vel was quiet for
-# cmd_timeout_sec + stop_burst_sec), never later in it. The robot walks in the stepping state
-# only, and obeys this driver in non-manual mode (prefix 0x31) or manual mode (0x21) only (1.2.4).
+# cmd_timeout_sec + stop_burst_sec) with the gate open, never later in it: only quiet ends an
+# episode, a hold, takeover or fall does not. The robot walks in the stepping state only, and
+# obeys this driver in non-manual mode (prefix 0x31) or manual mode (0x21) only (1.2.4).
 # Nothing moves the robot after sit_down, emergency_stop or stop_stepping until stand_up or
 # start_stepping, nor after a takeover (the robot leaves that mode, or manual_mode / the other
 # mode service) until the robot reports that mode again, nor during an emergency stop or fall;
 # then cmd_vel has to be zero (one message) or quiet (cmd_timeout_sec) once. No timer re-arms.
-auto_control_mode: true            # episode start: that mode (fresh report), 3 tries 0.5 s apart
-auto_stepping: true                # episode start: stepping from torque standing, 3 tries
+auto_control_mode: true            # episode start: that mode (fresh report), 3 tries in 2 s
+auto_stepping: true                # episode start: stepping from torque standing, 3 tries in
+#                                    4 x transition_timeout_sec
 idle_stop_stepping_sec: 0.0        # stop stepping after this long without motion (0: never)
 # Removed in 0.3.0: mode_refresh_sec, stepping_retry_sec (the episode switches above replace them).
 

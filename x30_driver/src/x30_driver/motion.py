@@ -4,17 +4,21 @@ Velocity stream of the X30 driver: what goes to the motion host, and when. No RO
 The rules (shared by the Deep Robotics drivers):
 
 - An episode starts with the first motion command after cmd_vel was quiet for
-  cmd_timeout_sec + stop_burst_sec (or the first ever). Only then, and only with the gate open,
-  the driver switches the robot to the control mode that obeys it and starts stepping from
-  torque-controlled standing: a few tries each, never again in that episode.
+  cmd_timeout_sec + stop_burst_sec (or the first ever), whatever the gate shows; only quiet ends
+  it. If the gate is open at that moment, the driver switches the robot to the control mode that
+  obeys it and starts stepping from torque-controlled standing: a few tries each, within a
+  deadline from the episode start, never again in that episode (not after a hold, a takeover or
+  an emergency stop either: the gate closing does not end the episode).
 - The gate closes on a hold (sit_down, emergency_stop, stop_stepping; released by stand_up or
-  start_stepping), on a takeover (the robot leaves that control mode after it was seen in it;
-  the latch ends only when the robot reports that mode again) and while the robot reports an
-  emergency stop or fall. After it opens again, motion goes out only once cmd_vel has been zero
-  (one message) or quiet (cmd_timeout_sec): a stream that kept running never drives the robot
-  off. Nothing re-arms on a timer.
-- Zeros go out for stop_burst_sec after the last non-zero command or after the gate closed, then
-  nothing, even while zero Twists keep arriving.
+  start_stepping unless another hold came in while they ran), on a takeover (the robot leaves
+  that control mode after it was seen in it; the latch ends only when the robot reports that
+  mode again) and while the robot reports an emergency stop or fall. After it opens again,
+  motion goes out only once cmd_vel has been zero (one message) or quiet (cmd_timeout_sec): a
+  stream that kept running never drives the robot off. Nothing re-arms on a timer.
+- After motion, zeros go out from the first period that sends none: for stop_burst_sec, and at
+  least once however late that period comes (axis zeros while the robot steps or its state is
+  unknown). The gate closing also sends zeros for stop_burst_sec. Then nothing, even while zero
+  Twists keep arriving.
 """
 
 import math
@@ -27,9 +31,11 @@ from x30_driver import protocol as p
 EPSILON = p.VELOCITY_EPSILON
 ZERO = (0.0, 0.0, 0.0)
 ZERO_AXES = (0, 0, 0)
-MODE_TRIES = 3          # control mode requests at the start of an episode
-MODE_TRY_SEC = 0.5      # between them
-STEPPING_TRIES = 3      # stepping toggles at the start of an episode (spaced by the ToggleGuard)
+MODE_TRIES = 3          # control mode requests at the start of an episode,
+MODE_TRY_SEC = 0.5      # this far apart,
+MODE_WINDOW_SEC = (MODE_TRIES + 1) * MODE_TRY_SEC   # within this from the episode start
+STEPPING_TRIES = 3      # stepping toggles at the start of an episode (spaced by the ToggleGuard),
+STEPPING_WINDOW = STEPPING_TRIES + 1   # within this many ToggleGuard timeouts from its start
 
 
 @dataclass
@@ -218,12 +224,14 @@ class VelocityStream:
         self.toggles = ToggleGuard(toggle_timeout_sec)
         self._lock = threading.Lock()
         self._hold = None  # type: Optional[str]
+        self._hold_seq = 0  # bumped by every hold
         self._latch = None  # type: Optional[str]
         self._end_on_target = False
         self._target_seen = False
         self._disarm = None  # type: Optional[str]
         self._armed = True
         self._episode = False
+        self._episode_at = 0.0  # when the episode started
         self._episode_new = False
         self._mode_phase = False
         self._mode_tries = 0
@@ -231,6 +239,8 @@ class VelocityStream:
         self._step_phase = False
         self._step_tries = 0
         self._drove = False
+        self._sent_motion = False  # the last period sent motion: the zero burst is due
+        self._zero_owed = False    # no zero went out since the burst started
         self._burst_until = None  # type: Optional[float]
 
     # -------------------------------------------------------------- inputs
@@ -240,26 +250,48 @@ class VelocityStream:
         with self._lock:
             previous = self.policy.stamp
             self.policy.command(vx, vy, wz, now)
+            c = self.config
+            if previous is None or now - previous > c.cmd_timeout_sec + c.stop_burst_sec:
+                self._end_episode()  # cmd_vel was quiet
             if not is_motion(self.policy.current):
                 if self._open():
                     self._armed = True  # a zero after the release: what follows is no stale stream
                 return
-            c = self.config
-            if previous is None or now - previous > c.cmd_timeout_sec + c.stop_burst_sec:
-                self._end_episode()
-            if self._open() and self._armed and not self._episode:
+            if not self._episode:
+                # the first motion after quiet starts the episode whatever the gate shows, so a
+                # gate that opens later in it brings no switches; they run only if it is open now
                 self._episode = True
-                self._episode_new = True
+                self._episode_at = now
+                self._episode_new = self._open() and self._armed
 
     def hold(self, now: float, service: str):
         """Hold until release() (stand_up, start_stepping) and then a zero or quiet cmd_vel."""
         with self._lock:
             self._hold = service
+            self._hold_seq += 1
             self._close(now)
 
-    def release(self) -> bool:
-        """End a hold; return True when there was one."""
+    @property
+    def hold_seq(self) -> int:
+        """Return the hold counter, bumped by every hold: a releasing service reads it first."""
         with self._lock:
+            return self._hold_seq
+
+    @property
+    def hold_reason(self) -> Optional[str]:
+        """Return the service that holds, None without a hold."""
+        return self._hold
+
+    def release(self, since: Optional[int] = None) -> bool:
+        """
+        End a hold; return True when there was one.
+
+        since: the hold_seq the releasing service started with. A hold that came in after it (an
+        emergency_stop while stand_up ran) stays.
+        """
+        with self._lock:
+            if since is not None and since != self._hold_seq:
+                return False
             held, self._hold = self._hold is not None, None
             return held
 
@@ -284,7 +316,8 @@ class VelocityStream:
 
     def _close(self, now: float):
         self._armed = False
-        self._end_episode()
+        # the episode goes on (only quiet ends it), its switches do not
+        self._episode_new = self._mode_phase = self._step_phase = False
         self._burst_until = now + self.config.stop_burst_sec
 
     def _end_episode(self):
@@ -387,9 +420,11 @@ class VelocityStream:
                 self._step_phase = (a.auto_stepping
                                     and view.basic_state == p.STATE_TORQUE_STANDING)
                 self._step_tries = 0
+            # a report that comes back late in the episode gets no try: the tries have deadlines
+            age = now - self._episode_at
             if self._mode_phase:
-                if in_target:
-                    self._mode_phase = False
+                if in_target or age > MODE_WINDOW_SEC:
+                    self._mode_phase = False  # in the mode, or too late
                 elif in_target is False and (self._mode_try_at is None
                                              or now - self._mode_try_at >= MODE_TRY_SEC):
                     if self._mode_tries < MODE_TRIES:
@@ -400,7 +435,9 @@ class VelocityStream:
                         self._mode_phase = False  # gave up
             if self._step_phase:
                 state = view.basic_state
-                if state == p.STATE_TORQUE_STANDING:
+                if age > STEPPING_WINDOW * self.toggles.timeout_sec:
+                    self._step_phase = False  # too late
+                elif state == p.STATE_TORQUE_STANDING:
                     if self._step_tries < STEPPING_TRIES:
                         if self.toggles.request(now, p.STEPPING, state):
                             out.append(p.STEPPING)
@@ -421,35 +458,52 @@ class VelocityStream:
     def _emit(self, now: float, view: RobotView, in_target: Optional[bool], moving: bool,
               step: StreamStep):
         """Fill in the axis values or the twist, and why cmd_vel does not move the robot."""
-        c = self.config
         driving = moving and self._open() and self._armed
-        burst = self._burst_until is not None and now <= self._burst_until
         if moving and not driving:
             step.ignored = self._gate(now)
         want = self.policy.current if driving else None
         if self.mode == 'topic':
-            if want is not None:
-                step.twist = want
-                self._burst_until = now + c.stop_burst_sec
-            elif burst:
-                step.twist = ZERO
-            return
-        if view.basic_state != p.STATE_STEPPING:
+            step.twist = want
+        elif view.basic_state != p.STATE_STEPPING:
             if want is not None:
                 step.ignored = ('no fresh motion state report' if view.basic_state is None
                                 else 'not stepping ({})'.format(
                                     p.name_of(p.BASIC_STATES, view.basic_state)))
+        elif want is not None:
+            axes = self.policy.axes(want, view.gait_state, view.crawl)
+            if axes is None:
+                step.ignored = 'no speed limits for the {} gait (gait_limits)'.format(
+                    p.name_of(p.GAIT_STATES, view.gait_state))
+            elif axes != ZERO_AXES:
+                step.axes = axes
+                self._drove = True
+                if in_target is False:
+                    step.ignored = '{} mode: the robot obeys the {} side'.format(
+                        mode_name(view.non_manual),
+                        'perception' if view.non_manual else 'handheld')
+        if step.twist is not None or step.axes is not None:
+            self._sent_motion, self._zero_owed, self._burst_until = True, False, None
+        else:
+            self._zeros(now, view, step)
+
+    def _zeros(self, now: float, view: RobotView, step: StreamStep):
+        """
+        Fill in the zero burst of a period that sends no motion.
+
+        It starts at the first such period after motion, however late that comes, and sends at
+        least one zero: axis zeros while the robot steps or its state is unknown.
+        """
+        if self._sent_motion:
+            self._sent_motion = False
+            self._burst_until = now + self.config.stop_burst_sec
+            self._zero_owed = True
+        if self._burst_until is None:
             return
-        axes = None if want is None else self.policy.axes(want, view.gait_state, view.crawl)
-        if want is not None and axes is None:
-            step.ignored = 'no speed limits for the {} gait (gait_limits)'.format(
-                p.name_of(p.GAIT_STATES, view.gait_state))
-        if axes is not None and axes != ZERO_AXES:
-            step.axes = axes
-            self._burst_until = now + c.stop_burst_sec
-            self._drove = True
-            if in_target is False:
-                step.ignored = '{} mode: the robot obeys the {} side'.format(
-                    mode_name(view.non_manual), 'perception' if view.non_manual else 'handheld')
-        elif burst:
+        if now >= self._burst_until and not self._zero_owed:
+            self._burst_until = None
+        elif self.mode == 'topic':
+            step.twist = ZERO
+            self._zero_owed = False
+        elif view.basic_state in (p.STATE_STEPPING, None):
             step.axes = ZERO_AXES
+            self._zero_owed = False

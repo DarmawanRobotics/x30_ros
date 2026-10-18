@@ -276,6 +276,47 @@ class TestServicesHold(NodeTest):
         self.assertIn('hold released', response.message)
         self.assertVelocityGate(node, 'idle', 2.0)
 
+    def test_sit_down_while_sitting_holds_too(self):
+        """'already sitting' holds: no switches for cmd_vel, none after standing up by hand."""
+        node = self.node(FakeX30(basic_state=p.STATE_SITTING, non_manual=False))
+        response = node.call('sit_down')
+        self.assertEqual((response.success, response.message), (True, 'already sitting'))
+        self.assertEqual(node.node.stream.gate(time.monotonic()), 'hold:sit_down')
+        node.drive(0.3)
+        time.sleep(1.0)
+        node.stop_driving()
+        self.assertEqual(node.sent(p.NON_MANUAL_MODE), [])
+        node.robot.basic_state = p.STATE_TORQUE_STANDING  # stood up on the handheld
+        node.robot.set_mode(True)
+        time.sleep(1.2)  # quiet: the next stream is a new episode
+        node.drive(0.3)
+        time.sleep(1.5)
+        self.assertEqual(node.sent(p.STEPPING), [])
+        self.assertVelocityGate(node, 'hold:sit_down')
+
+    def hold_lands_during(self, service):
+        """Run the service with emergency_stop's hold landing inside its first state read."""
+        node = self.node(FakeX30(basic_state=p.STATE_TORQUE_STANDING, non_manual=True))
+        real = node.node.basic_state
+        fired = []
+
+        def basic_state():
+            state = real()
+            if not fired:
+                fired.append(True)
+                node.node.stream.hold(time.monotonic(), 'emergency_stop')  # its own thread
+            return state
+        node.node.basic_state = basic_state
+        response = node.call(service)
+        self.assertIn('velocity hold kept: emergency_stop came in', response.message)
+        self.assertEqual(node.node.stream.gate(time.monotonic()), 'hold:emergency_stop')
+
+    def test_emergency_stop_during_stand_up_keeps_its_hold(self):
+        self.hold_lands_during('stand_up')
+
+    def test_emergency_stop_during_start_stepping_keeps_its_hold(self):
+        self.hold_lands_during('start_stepping')
+
     def test_posture_services_one_at_a_time(self):
         """Two start_stepping at once: one stepping toggle goes out."""
         node = self.node(FakeX30(basic_state=p.STATE_TORQUE_STANDING, non_manual=True))

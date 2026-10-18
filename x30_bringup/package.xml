@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_bringup</name>
-  <version>0.3.0</version>
+  <version>0.3.1</version>
   <description>One launch for the Deep Robotics Jueying X30: x30_driver and the URDF with robot_state_publisher.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

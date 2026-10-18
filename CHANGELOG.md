@@ -3,6 +3,30 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [0.3.1] - 2026-10-18
+
+### Fixed (safety)
+- `x30_driver`: only a quiet `cmd_vel` ends an episode. Before, a hold, a takeover or an
+  emergency stop or fall ended it, so the stream that kept running started a new one after the
+  gate opened and one zero: after a handback, a recovered fall or `stop_stepping` then
+  `stand_up`, the driver toggled stepping on its own and walked. An episode now starts with the
+  first motion after quiet whatever the gate shows; its switches run only if the gate is open
+  then.
+- `x30_driver`: at least one zero goes out after motion. The zero burst started at the period
+  that sent the last motion and needed a fresh stepping report, so a late period, a
+  `stop_burst_sec` shorter than one period or a stale motion state report lost every zero and
+  the robot walked on until its own 1 s axis timeout. The burst now starts at the first period
+  without motion and sends zeros while the robot steps or its state is unknown (axis and topic
+  mode).
+- `x30_driver`: `sit_down` on a robot that already sits holds the velocity stream too (before,
+  it answered "already sitting" without the hold).
+- `x30_driver`: the episode's mode and stepping tries have deadlines from the episode start
+  (2 s; 4 × `transition_timeout_sec`). Before, a report that was stale for a while got its
+  remaining try whenever it came back, however late in the episode.
+- `x30_driver`: a hold that comes in while `stand_up` or `start_stepping` runs (an
+  `emergency_stop` on its own service thread) is no longer released by them; their answer says
+  the hold was kept.
+
 ## [0.3.0] - 2026-10-18
 
 One rule set for the Deep Robotics drivers (x30_ros, lite3_ros2, m20_ros2).
