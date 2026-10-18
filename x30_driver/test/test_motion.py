@@ -194,6 +194,84 @@ class TestEpisodes(unittest.TestCase):
         bench.run(1.0, FORWARD)
         self.assertEqual(bench.commands(resume), [])
 
+    def test_the_gate_closing_does_not_end_the_episode(self):
+        """A hold, a takeover or a fall mid-episode: open again, the stream gets no switches."""
+        def hold(bench):
+            bench.stream.hold(bench.t, 'stop_stepping')
+            bench.view = view(p.STATE_TORQUE_STANDING)
+            bench.run(1.0, STOP)
+            bench.stream.release()  # stand_up: already standing
+
+        def takeover(bench):
+            bench.view = view(p.STATE_TORQUE_STANDING, non_manual=False)
+            bench.run(1.0, STOP)
+            bench.view = view(p.STATE_TORQUE_STANDING)  # handed back
+
+        def fall(bench):
+            bench.view = view(p.STATE_EMERGENCY)
+            bench.run(1.0, FORWARD)
+            bench.view = view(p.STATE_TORQUE_STANDING)  # recovered by hand
+
+        for close in (hold, takeover, fall):
+            with self.subTest(close=close.__name__):
+                bench = Bench(view(p.STATE_TORQUE_STANDING))
+                bench.run(DT, FORWARD)
+                self.assertEqual(bench.commands(), [p.STEPPING])
+                bench.view = view()
+                bench.run(6.0, FORWARD)  # past the toggle guard
+                close(bench)
+                reopened = bench.t
+                bench.run(0.1, STOP)  # armed again
+                bench.run(2.0, FORWARD)
+                self.assertEqual(bench.gate, 'driving')
+                self.assertEqual(bench.commands(reopened), [])
+                bench.run(1.2)  # quiet: the next motion starts a new episode
+                later = bench.t
+                bench.run(DT, FORWARD)
+                self.assertEqual(bench.commands(later), [p.STEPPING])
+
+    def test_an_episode_that_starts_closed_gets_no_switches(self):
+        """The first motion after quiet came during a hold: released later, still none."""
+        bench = Bench(view(p.STATE_TORQUE_STANDING, non_manual=False))
+        bench.stream.hold(0.0, 'sit_down')
+        bench.run(1.0, FORWARD)
+        self.assertTrue(bench.stream.release())
+        bench.run(DT, STOP)
+        bench.run(2.0, FORWARD)
+        self.assertEqual(bench.commands(), [])
+        bench.run(1.2)  # quiet
+        later = bench.t
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.commands(later), [p.NON_MANUAL_MODE, p.STEPPING])
+
+    def test_tries_end_with_a_deadline(self):
+        """A report that comes back late in the episode gets no try (zeros keep the episode)."""
+        stepping = Bench(view(p.STATE_TORQUE_STANDING), auto_control_mode=False)
+        stepping.run(DT, FORWARD)
+        self.assertEqual(stepping.commands(), [p.STEPPING])
+        start = stepping.t
+        stepping.view = view(None)  # no fresh motion state report
+        stepping.run(30.0, STOP)
+        stepping.view = view(p.STATE_TORQUE_STANDING)  # back, still standing
+        stepping.run(1.0, STOP)
+        self.assertEqual(stepping.commands(start), [])
+        mode = Bench(view(non_manual=False), auto_stepping=False)
+        mode.run(DT, FORWARD)
+        self.assertEqual(mode.commands(), [p.NON_MANUAL_MODE])
+        start = mode.t
+        mode.view = view(non_manual=None)  # no fresh RcsData
+        mode.run(30.0, STOP)
+        mode.view = view(non_manual=False)
+        mode.run(1.0, STOP)
+        self.assertEqual(mode.commands(start), [])
+        early = Bench(view(non_manual=False), auto_stepping=False)
+        early.run(DT, FORWARD)
+        early.view = view(non_manual=None)
+        early.run(0.6, FORWARD)
+        early.view = view(non_manual=False)  # back within the deadline: the tries go on
+        early.run(3.0, FORWARD)
+        self.assertEqual(early.commands(), [p.NON_MANUAL_MODE] * 3)
+
     def test_idle_stop_stepping(self):
         bench = Bench(view(), idle_stop_stepping_sec=2.0)
         bench.run(0.5, FORWARD)

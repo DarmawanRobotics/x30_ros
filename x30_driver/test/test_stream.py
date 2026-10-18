@@ -218,5 +218,56 @@ class TestClosedLoop(unittest.TestCase):
         self.assertLessEqual(sent[-1][0], start + 0.5 + 1e-6)
 
 
+class TestEpisodeEndsOnlyOnQuiet(unittest.TestCase):
+    """The same cmd_vel stream after the gate closed and opened again: no switches."""
+
+    def episode(self):
+        """Start stepping at the episode start, then drive past the toggle guard's 5 s."""
+        run = Loop(FakeX30(basic_state=p.STATE_TORQUE_STANDING, non_manual=True))
+        robot = run.run(6.0, FORWARD)
+        self.assertEqual(robot.basic_state, p.STATE_STEPPING)
+        self.assertEqual(len(run.sent_since(0.0, p.STEPPING)), 1)
+        self.assertAlmostEqual(robot.velocity[0], 0.3, places=3)
+        return run
+
+    def assertNoRestart(self, run):
+        """Check that the stream, armed again by a zero, toggles nothing until a quiet."""
+        since = run.t
+        run.run(0.1, STOP)
+        robot = run.run(1.0, FORWARD)
+        self.assertEqual(run.sent_since(since, p.STEPPING), [])
+        self.assertEqual(robot.basic_state, p.STATE_TORQUE_STANDING)
+        self.assertEqual(robot.velocity, (0.0, 0.0, 0.0))
+        run.run(1.2)  # quiet: the next motion starts a new episode
+        self.assertEqual(run.run(1.0, FORWARD).basic_state, p.STATE_STEPPING)
+
+    def test_handback_after_a_takeover(self):
+        run = self.episode()
+        run.robot.set_mode(False)  # the operator takes over on the handheld
+        run.run(0.2, FORWARD)
+        self.assertIn('took over', run.stream.latch_reason)
+        run.robot.handle(p.simple(p.code(p.STEPPING, p.PREFIX_REMOTE)))  # and stops stepping
+        run.run(1.0, STOP)
+        run.robot.set_mode(True)  # handed back
+        self.assertNoRestart(run)
+
+    def test_recovered_fall(self):
+        run = self.episode()
+        run.robot.basic_state = p.STATE_EMERGENCY  # a fall
+        run.run(0.5, FORWARD)
+        self.assertEqual(run.stream.gate(run.t), 'disarmed:emergency stop or fall')
+        run.robot.basic_state = p.STATE_TORQUE_STANDING  # recovered by hand
+        self.assertNoRestart(run)
+
+    def test_stand_up_after_stop_stepping(self):
+        run = self.episode()
+        run.stream.hold(run.t, 'stop_stepping')  # what the service does
+        self.assertTrue(run.toggle(p.STEPPING))
+        run.run(1.0, STOP)
+        self.assertEqual(run.robot.basic_state, p.STATE_TORQUE_STANDING)
+        run.stream.release()  # stand_up: already standing
+        self.assertNoRestart(run)
+
+
 if __name__ == '__main__':
     unittest.main()
