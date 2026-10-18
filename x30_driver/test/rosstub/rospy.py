@@ -15,6 +15,7 @@ services = {}      # name -> handler
 subscribers = {}   # topic -> callback
 timers = []        # Timer
 errors = []        # exceptions raised in timer callbacks
+warnings = []      # throttled warnings (format, args)
 _shutdown_hooks = []
 _shutting = threading.Event()
 
@@ -27,6 +28,7 @@ def reset():
     subscribers.clear()
     del timers[:]
     del errors[:]
+    del warnings[:]
     del _shutdown_hooks[:]
     _shutting.clear()
 
@@ -94,6 +96,10 @@ def _log(*args):
 
 
 loginfo = logwarn = logerr = logfatal = logdebug = _log
+
+
+def logwarn_throttle(period, msg, *args):
+    warnings.append((msg, args))
 
 
 def init_node(name):

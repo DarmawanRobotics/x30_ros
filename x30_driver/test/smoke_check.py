@@ -125,7 +125,7 @@ class TestDriver(unittest.TestCase):
         self.assertEqual(state['control_mode'], 'manual')
         self.assertEqual(state['robot_name'], 'X30-SIM')
         self.assertEqual((state['rcs_layout'], state['motion_layout']), ('natural', 'natural'))
-        self.assertEqual((state['armed'], state['obeyed_in']), ('True', 'non-manual'))
+        self.assertEqual((state['velocity'], state['obeyed_in']), ('idle', 'non-manual'))
 
         odom = topic('odom', Odometry)
         self.assertEqual((odom.header.frame_id, odom.child_frame_id), ('odom', 'base_link'))
@@ -181,30 +181,51 @@ class TestDriver(unittest.TestCase):
             time.sleep(0.05)
         self.assertEqual(odom.twist.twist.angular.z, 0.0)
 
+    def zero(self):
+        """Publish one zero cmd_vel."""
+        self.cmd_vel.publish(Twist())
+        time.sleep(0.1)
+
     def test_3_takeover(self):
-        """manual_mode while cmd_vel drives: the driver hands over and switches back only later."""
+        """manual_mode is a latch: it ends only with non_manual_mode, then a zero first."""
         self.keep_driving(0.3)
         self.drive(0.3, 0.0, 0.0, lambda o: abs(o.twist.twist.linear.x - 0.3) < 0.005)
         self.assertCall('manual_mode', contains='manual mode')
         self.assertHolds('control_mode', 'manual', 1.5)       # cmd_vel keeps coming
         self.assertEqual(self.last_odom().twist.twist.linear.x, 0.0)
-        self.assertIn('manual_mode', wait_state(lambda v: v['armed'] == 'False')['disarmed_by'])
+        self.assertEqual(wait_state(lambda v: v['velocity'] == 'takeover (manual mode)')
+                         ['velocity'], 'takeover (manual mode)')
         self.stop_driving()
-        self.assertEqual(wait_state(lambda v: v['armed'] == 'True', 5.0)['armed'], 'True')
+        time.sleep(1.5)                                        # quiet: still latched
+        self.keep_driving(0.3)
+        self.assertHolds('control_mode', 'manual', 1.0)
+        self.assertEqual(self.last_odom().twist.twist.linear.x, 0.0)
+        self.assertCall('non_manual_mode', contains='non-manual mode')
+        waiting = 'waiting for zero or quiet cmd_vel'
+        self.assertEqual(wait_state(lambda v: v['velocity'] == waiting)['velocity'], waiting)
+        self.assertEqual(self.last_odom().twist.twist.linear.x, 0.0)
+        self.stop_driving()
+        self.zero()
         odom = self.drive(0.3, 0.0, 0.0, lambda o: abs(o.twist.twist.linear.x - 0.3) < 0.005)
         self.assertAlmostEqual(odom.twist.twist.linear.x, 0.3, delta=0.005)
-        self.assertEqual(wait_state(lambda v: v['control_mode'] == 'non_manual')
-                         ['control_mode'], 'non_manual')
 
     def test_4_stop_stepping_holds(self):
-        """stop_stepping is not undone by cmd_vel that keeps coming."""
+        """stop_stepping holds through quiet and a new stream; start_stepping, then a zero."""
         self.keep_driving(0.3)
         self.drive(0.3, 0.0, 0.0, lambda o: abs(o.twist.twist.linear.x - 0.3) < 0.005)
         self.assertCall('stop_stepping', contains='torque')
         self.assertHolds('basic_state_name', 'torque_standing', 1.5)
         self.stop_driving()
-        self.assertEqual(wait_state(lambda v: v['armed'] == 'True', 5.0)['armed'], 'True')
-        self.assertCall('start_stepping', contains='stepping')
+        time.sleep(1.5)
+        self.keep_driving(0.3)
+        self.assertHolds('basic_state_name', 'torque_standing', 1.0)
+        self.assertEqual(wait_state(lambda v: v['velocity'] == 'hold:stop_stepping')
+                         ['velocity'], 'hold:stop_stepping')
+        self.assertCall('start_stepping', contains='hold released')
+        self.stop_driving()
+        self.zero()
+        odom = self.drive(0.3, 0.0, 0.0, lambda o: abs(o.twist.twist.linear.x - 0.3) < 0.005)
+        self.assertAlmostEqual(odom.twist.twist.linear.x, 0.3, delta=0.005)
 
     def test_5_gaits_and_height(self):
         """Gaits answer with the reported gait; crawl height allows walk and slope only."""

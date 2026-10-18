@@ -14,12 +14,13 @@ from x30_driver import protocol as p  # noqa: E402
 from x30_driver.motion import (  # noqa: E402
     AutoConfig,
     RobotView,
-    ToggleGuard,
     VelocityConfig,
     VelocityStream,
 )
 
 DT = 0.02  # cmd_rate_hz 50
+FORWARD = (0.3, 0.0, 0.0)
+STOP = (0.0, 0.0, 0.0)
 
 
 class Loop:
@@ -31,9 +32,9 @@ class Loop:
         self.stream = VelocityStream(velocity or VelocityConfig(),
                                      AutoConfig(target_non_manual=prefix == p.PREFIX_AUTONOMOUS,
                                                 **auto))
-        self.guard = ToggleGuard(timeout_sec=5.0)
         self.t = 0.0
-        self.sent = []    # (time, command base) of every mode / toggle command
+        self.sent = []      # (time, command base) of every mode / toggle command
+        self.axes_log = []  # (time, axis values) of every period with axis commands
         self.step = None
         self._views = collections.deque(maxlen=lag + 1)
 
@@ -42,8 +43,8 @@ class Loop:
         self.robot.handle(p.simple(p.code(base, self.prefix), value))
 
     def toggle(self, base):
-        """send_toggle: one stand/sit or stepping toggle until the reports show it."""
-        if not self.guard.request(self.t, base, self.view().basic_state):
+        """send_toggle of the services: through the stream's guard."""
+        if not self.stream.toggles.request(self.t, base, self.view().basic_state):
             return False
         self.send(base)
         return True
@@ -53,6 +54,10 @@ class Loop:
 
     def sent_since(self, t, base):
         return [s for s in self.sent if s[0] >= t and s[1] == base]
+
+    def axis_datagrams(self, t):
+        """Return the axis values the robot received since t, one tuple per period."""
+        return [s for s in self.axes_log if s[0] >= t]
 
     def run(self, seconds, cmd=None):
         """Run the loop; cmd: (vx, vy, wz) published every period, None: nothing published."""
@@ -67,114 +72,150 @@ class Loop:
                 self.stream.command(*cmd, self.t)
             self.step = self.stream.step(self.t, self.view())
             for base in self.step.commands:
-                if base == p.STEPPING:
-                    self.toggle(base)
-                else:
-                    self.send(base)
+                self.send(base)  # the stream already passed its toggles through the guard
             if self.step.axes is not None:
+                self.axes_log.append((self.t, self.step.axes))
                 for axis, value in zip(AXES, self.step.axes):
                     r.handle(p.axis(p.code(axis, self.prefix), value))
         return self.robot
 
 
-FORWARD = (0.3, 0.0, 0.0)
-
-
 class TestClosedLoop(unittest.TestCase):
     def test_drives_in_non_manual_mode(self):
-        """0x31: non-manual mode and stepping on the way, then the commanded speed."""
-        loop = Loop(FakeX30(basic_state=p.STATE_TORQUE_STANDING))
-        robot = loop.run(1.0, FORWARD)
+        """0x31: non-manual mode and stepping at the episode start, then the commanded speed."""
+        run = Loop(FakeX30(basic_state=p.STATE_TORQUE_STANDING))
+        robot = run.run(1.0, FORWARD)
         self.assertTrue(robot.non_manual)
         self.assertEqual(robot.basic_state, p.STATE_STEPPING)
         self.assertAlmostEqual(robot.velocity[0], 0.3, places=3)
+        self.assertEqual(run.stream.gate(run.t), 'driving')
 
-    def test_handheld_takeover_is_not_reverted(self):
-        """Manual on the handheld while cmd_vel drives: the driver backs off until it rests."""
-        loop = Loop(FakeX30(basic_state=p.STATE_STEPPING))
-        loop.run(1.0, FORWARD)
-        loop.robot.set_mode(False)  # the operator switches on the handheld
-        takeover = loop.t
-        robot = loop.run(3.0, FORWARD)
+    def test_handheld_takeover_is_a_latch(self):
+        """Manual on the handheld: no switch back through zeros, silence and new motion."""
+        run = Loop(FakeX30(basic_state=p.STATE_STEPPING))
+        run.run(1.0, FORWARD)
+        run.robot.set_mode(False)  # the operator switches on the handheld
+        takeover = run.t
+        robot = run.run(3.0, FORWARD)
+        robot = run.run(5.0, STOP)
+        robot = run.run(5.0)
+        robot = run.run(2.0, FORWARD)
         self.assertFalse(robot.non_manual)
-        self.assertEqual(loop.sent_since(takeover, p.NON_MANUAL_MODE), [])
+        self.assertEqual(run.sent_since(takeover, p.NON_MANUAL_MODE), [])
         self.assertEqual(robot.velocity, (0.0, 0.0, 0.0))
-        self.assertIn('took over', loop.step.ignored)
-        loop.run(1.5)  # cmd_vel rests
-        self.assertTrue(loop.stream.armed)
-        robot = loop.run(1.0, FORWARD)
-        self.assertTrue(robot.non_manual)
+        self.assertEqual(run.stream.gate(run.t), 'takeover (manual mode)')
+        robot.set_mode(True)  # handed back on the handheld; cmd_vel still streams
+        robot = run.run(1.0, FORWARD)
+        self.assertEqual(robot.velocity, (0.0, 0.0, 0.0))
+        self.assertEqual(run.stream.gate(run.t), 'waiting for zero or quiet cmd_vel')
+        run.run(DT, STOP)
+        robot = run.run(1.0, FORWARD)
         self.assertAlmostEqual(robot.velocity[0], 0.3, places=3)
+
+    def test_takeover_while_idle_latches(self):
+        run = Loop(FakeX30(basic_state=p.STATE_STEPPING, non_manual=True))
+        run.run(1.0, STOP)
+        run.robot.set_mode(False)
+        idle = run.t
+        robot = run.run(3.0, FORWARD)
+        self.assertFalse(robot.non_manual)
+        self.assertEqual(run.sent_since(idle, p.NON_MANUAL_MODE), [])
+        self.assertEqual(robot.velocity, (0.0, 0.0, 0.0))
 
     def test_remote_prefix_drives_in_manual_mode(self):
         """0x21 (acting as the handheld): the robot obeys in manual mode, so that is the target."""
-        loop = Loop(FakeX30(basic_state=p.STATE_STEPPING, non_manual=True),
-                    prefix=p.PREFIX_REMOTE)
-        robot = loop.run(1.0, FORWARD)
+        run = Loop(FakeX30(basic_state=p.STATE_STEPPING, non_manual=True),
+                   prefix=p.PREFIX_REMOTE)
+        robot = run.run(1.0, FORWARD)
         self.assertFalse(robot.non_manual)
-        self.assertEqual(loop.sent[0][1], p.MANUAL_MODE)
+        self.assertEqual(run.sent[0][1], p.MANUAL_MODE)
         self.assertAlmostEqual(robot.velocity[0], 0.3, places=3)
-        # 0x31 with the robot left in manual mode would not move it
         stuck = Loop(FakeX30(basic_state=p.STATE_STEPPING), auto_control_mode=False)
         self.assertEqual(stuck.run(1.0, FORWARD).velocity, (0.0, 0.0, 0.0))
         self.assertIn('manual mode', stuck.step.ignored)
 
-    def test_stop_stepping_is_not_undone(self):
-        """A service stop disarms: cmd_vel that keeps coming does not start stepping again."""
-        loop = Loop(FakeX30(basic_state=p.STATE_STEPPING, non_manual=True))
-        loop.run(1.0, FORWARD)
-        loop.stream.disarm(loop.t, 'stop_stepping')  # what the service does
-        self.assertTrue(loop.toggle(p.STEPPING))
-        stop = loop.t
-        robot = loop.run(3.0, FORWARD)
+    def test_stop_stepping_holds_until_start_stepping(self):
+        run = Loop(FakeX30(basic_state=p.STATE_STEPPING, non_manual=True))
+        run.run(1.0, FORWARD)
+        run.stream.hold(run.t, 'stop_stepping')  # what the service does
+        self.assertTrue(run.toggle(p.STEPPING))
+        stop = run.t
+        robot = run.run(3.0, FORWARD)
+        robot = run.run(2.0)
+        robot = run.run(1.0, FORWARD)  # a new episode: still held
         self.assertEqual(robot.basic_state, p.STATE_TORQUE_STANDING)
-        self.assertEqual(loop.sent_since(stop + DT, p.STEPPING), [])
-        loop.run(1.5)
-        robot = loop.run(1.0, FORWARD)  # rested: the next motion steps again
+        self.assertEqual(run.sent_since(stop + DT, p.STEPPING), [])
+        run.stream.release()  # start_stepping
+        self.assertTrue(run.toggle(p.STEPPING))
+        robot = run.run(1.0, FORWARD)
         self.assertEqual(robot.basic_state, p.STATE_STEPPING)
+        self.assertEqual(robot.velocity, (0.0, 0.0, 0.0))  # the stream kept running
+        run.run(DT, STOP)
+        self.assertAlmostEqual(run.run(1.0, FORWARD).velocity[0], 0.3, places=3)
 
     def test_emergency_stop_holds_back(self):
-        loop = Loop(FakeX30(basic_state=p.STATE_STEPPING, non_manual=True))
-        loop.run(0.5, FORWARD)
-        loop.robot.handle(p.simple(p.code(p.SOFT_ESTOP)))
-        estop = loop.t
-        loop.run(3.0, FORWARD)
-        self.assertEqual(loop.sent_since(estop, p.STEPPING), [])
-        self.assertFalse(loop.stream.armed)
-        self.assertIn('emergency', loop.step.ignored)
+        run = Loop(FakeX30(basic_state=p.STATE_STEPPING, non_manual=True))
+        run.run(0.5, FORWARD)
+        run.robot.handle(p.simple(p.code(p.SOFT_ESTOP)))
+        estop = run.t
+        run.run(3.0, FORWARD)
+        self.assertEqual(run.sent_since(estop, p.STEPPING), [])
+        self.assertEqual(run.stream.gate(run.t), 'disarmed:emergency stop or fall')
+
+    def test_stepping_stopped_mid_episode_stays(self):
+        """The handheld stops stepping while cmd_vel streams: no toggle until a new episode."""
+        run = Loop(FakeX30(basic_state=p.STATE_TORQUE_STANDING, non_manual=True))
+        run.run(1.0, FORWARD)
+        run.robot.handle(p.simple(p.code(p.STEPPING, p.PREFIX_REMOTE)))  # the handheld
+        middle = run.t
+        robot = run.run(4.0, FORWARD)
+        self.assertEqual(robot.basic_state, p.STATE_TORQUE_STANDING)
+        self.assertEqual(run.sent_since(middle, p.STEPPING), [])
+        run.run(1.2)
+        self.assertEqual(run.run(1.0, FORWARD).basic_state, p.STATE_STEPPING)
 
     def test_toggles_wait_for_the_state(self):
         """With reports 60 ms late, a second stepping toggle would undo the first: refused."""
-        loop = Loop(FakeX30(basic_state=p.STATE_TORQUE_STANDING, non_manual=True), lag=3)
-        loop.run(0.1)
-        loop.run(DT, FORWARD)  # the automatic switch toggles stepping
-        self.assertEqual(len(loop.sent_since(0.0, p.STEPPING)), 1)
-        self.assertEqual(loop.view().basic_state, p.STATE_TORQUE_STANDING)  # not reported yet
-        self.assertFalse(loop.toggle(p.STEPPING))  # e.g. start_stepping: refused
-        robot = loop.run(1.0, FORWARD)
+        run = Loop(FakeX30(basic_state=p.STATE_TORQUE_STANDING, non_manual=True), lag=3)
+        run.run(0.1)
+        run.run(DT, FORWARD)  # the episode start toggles stepping
+        self.assertEqual(len(run.sent_since(0.0, p.STEPPING)), 1)
+        self.assertEqual(run.view().basic_state, p.STATE_TORQUE_STANDING)  # not reported yet
+        self.assertFalse(run.toggle(p.STEPPING))  # e.g. start_stepping: refused
+        robot = run.run(1.0, FORWARD)
         self.assertEqual(robot.basic_state, p.STATE_STEPPING)
-        self.assertEqual(len(loop.sent_since(0.0, p.STEPPING)), 1)
+        self.assertEqual(len(run.sent_since(0.0, p.STEPPING)), 1)
 
     def test_no_axes_without_motion_reports(self):
         robot = FakeX30(basic_state=p.STATE_STEPPING, non_manual=True)
         robot.send_motion = False
-        loop = Loop(robot)
-        self.assertEqual(loop.run(1.0, FORWARD).velocity, (0.0, 0.0, 0.0))
+        run = Loop(robot)
+        self.assertEqual(run.run(1.0, FORWARD).velocity, (0.0, 0.0, 0.0))
         self.assertEqual(robot.codes(p.AXIS_FORWARD), [])
-        self.assertEqual(loop.step.ignored, 'no fresh motion state report')
+        self.assertEqual(run.step.ignored, 'no fresh motion state report')
 
     def test_gaits_without_limits_do_not_move(self):
-        """Silent is not in Appendix B: zeros, unless gait_limits gives its speeds."""
+        """Silent is not in Appendix B: nothing moves, unless gait_limits gives its speeds."""
         robot = FakeX30(basic_state=p.STATE_STEPPING, gait_state=p.GAIT_STATE_SILENT,
                         non_manual=True)
-        loop = Loop(robot)
-        self.assertEqual(loop.run(1.0, FORWARD).velocity, (0.0, 0.0, 0.0))
-        self.assertIn('silent', loop.step.ignored)
+        run = Loop(robot)
+        self.assertEqual(run.run(1.0, FORWARD).velocity, (0.0, 0.0, 0.0))
+        self.assertIn('silent', run.step.ignored)
         table = p.limits_table(p.parse_gait_limits({'silent': [1.2, 0.75, 0.15, 0.45]}))
         robot = FakeX30(basic_state=p.STATE_STEPPING, gait_state=p.GAIT_STATE_SILENT,
                         non_manual=True)
-        loop = Loop(robot, velocity=VelocityConfig(gait_limits=table))
-        self.assertAlmostEqual(loop.run(1.0, FORWARD).velocity[0], 0.3, places=3)
+        run = Loop(robot, velocity=VelocityConfig(gait_limits=table))
+        self.assertAlmostEqual(run.run(1.0, FORWARD).velocity[0], 0.3, places=3)
+
+    def test_zero_twists_send_only_the_burst(self):
+        """4 s of zero Twists after motion: zero axes for stop_burst_sec, then none."""
+        run = Loop(FakeX30(basic_state=p.STATE_STEPPING, non_manual=True))
+        run.run(1.0, FORWARD)
+        start = run.t
+        run.run(4.0, STOP)
+        sent = run.axis_datagrams(start + DT)
+        self.assertEqual([axes for _, axes in sent], [(0, 0, 0)] * 25)
+        self.assertLessEqual(sent[-1][0], start + 0.5 + 1e-6)
 
 
 if __name__ == '__main__':

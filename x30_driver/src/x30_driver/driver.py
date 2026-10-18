@@ -8,6 +8,7 @@ autonomous charging have services too. The decisions live in the ROS-free module
 motion); this node reads parameters, moves datagrams and publishes.
 """
 
+import math
 import threading
 import time
 
@@ -30,7 +31,6 @@ from x30_driver.link import UdpLink
 from x30_driver.motion import (
     AutoConfig,
     RobotView,
-    ToggleGuard,
     VelocityConfig,
     VelocityStream,
     mode_name,
@@ -117,7 +117,6 @@ class X30Driver:
                           heartbeat_hz)
         self.heartbeat_hz = p.heartbeat_rate(heartbeat_hz)
 
-        stop_burst = float(param('stop_burst_sec', 0.5))
         self.gait_table = p.limits_table(gait_overrides)
         self.stream = VelocityStream(
             VelocityConfig(
@@ -125,7 +124,7 @@ class X30Driver:
                 max_vy=float(param('max_vy', 0.5)),
                 max_wz=float(param('max_wz', 1.0)),
                 cmd_timeout_sec=float(param('cmd_timeout_sec', 0.5)),
-                stop_burst_sec=stop_burst,
+                stop_burst_sec=float(param('stop_burst_sec', 0.5)),
                 invert_vy=bool(param('invert_vy', False)),
                 invert_wz=bool(param('invert_wz', False)),
                 dead_zone=int(param('axis_dead_zone', p.AXIS_DEAD_ZONE)),
@@ -134,15 +133,12 @@ class X30Driver:
             AutoConfig(
                 auto_control_mode=bool(param('auto_control_mode', True)),
                 auto_stepping=bool(param('auto_stepping', True)),
-                mode_refresh_sec=float(param('mode_refresh_sec', 2.0)),
-                stepping_retry_sec=float(param('stepping_retry_sec', 2.0)),
                 idle_stop_stepping_sec=float(param('idle_stop_stepping_sec', 0.0)),
                 target_non_manual=self.target_non_manual,
-                rearm_quiet_sec=stop_burst,
             ),
             self.velocity_mode,
+            toggle_timeout_sec=self.transition_timeout,
         )
-        self.toggles = ToggleGuard(self.transition_timeout)
         self._posture_lock = threading.Lock()
         self._velocity_lock = threading.Lock()
         self._stopping = False
@@ -394,18 +390,30 @@ class X30Driver:
 
     def send_toggle(self, base) -> str:
         """Send stand/sit or stepping unless the last toggle is not in the state yet; '' sent."""
-        if not self.toggles.request(time.monotonic(), base, self.basic_state()):
+        if not self.stream.toggles.request(time.monotonic(), base, self.basic_state()):
             return 'the last stand/sit or stepping command does not show in the state yet'
         if not self.send_base(base):
-            self.toggles.cancel()
+            self.stream.toggles.cancel()
             return self.link.last_error or 'not sent'
         return ''
 
     # ------------------------------------------------------------------ motion
 
     def on_cmd_vel(self, msg):
-        """Take a velocity command (base_link, REP-103)."""
-        self.stream.command(msg.linear.x, msg.linear.y, msg.angular.z, time.monotonic())
+        """Take a velocity command (base_link, REP-103); NaN or inf in any field is a stop."""
+        now = time.monotonic()
+        fields = (msg.linear.x, msg.linear.y, msg.linear.z,
+                  msg.angular.x, msg.angular.y, msg.angular.z)
+        if all(math.isfinite(v) for v in fields):
+            self.stream.command(msg.linear.x, msg.linear.y, msg.angular.z, now)
+        else:
+            rospy.logwarn_throttle(2.0, 'cmd_vel with NaN or inf: stopping')
+            self.stream.command(0.0, 0.0, 0.0, now)
+        if self.stream.held(now):
+            rospy.logwarn_throttle(
+                5.0, 'cmd_vel not sent (%s): a hold needs stand_up or start_stepping, a takeover '
+                     'the robot back in %s mode; then cmd_vel must be zero or quiet once',
+                self.stream.gate(now), mode_name(self.target_non_manual))
 
     def send_heartbeat(self, _event=None):
         """
@@ -432,10 +440,8 @@ class X30Driver:
             now = time.monotonic()
             step = self.stream.step(now, self.robot_view(now))
             for base in step.commands:
-                if base == p.STEPPING:
-                    self.send_toggle(base)
-                else:
-                    self.send_base(base)
+                if not self.send_base(base) and base == p.STEPPING:
+                    self.stream.toggles.cancel()  # requested by the stream, not sent
             self._ignored = step.ignored
             if step.twist is not None and self.velocity_pub is not None:
                 msg = Twist()
@@ -450,9 +456,9 @@ class X30Driver:
         if motion is not None and motion.stepping and self.velocity_mode == 'axis':
             self.send_axes((0, 0, 0))
 
-    def disarm(self, reason):
-        """Stop the velocity stream until cmd_vel rests (see motion.AutoSwitch)."""
-        self.stream.disarm(time.monotonic(), reason)
+    def hold(self, service):
+        """Hold the velocity stream until stand_up or start_stepping (see motion)."""
+        self.stream.hold(time.monotonic(), service)
         self.zero_axes_if_stepping()
 
     # ------------------------------------------------------------------ services
@@ -509,19 +515,27 @@ class X30Driver:
                 self.state_name(self.basic_state()))
         return True, 'standing (torque control)'
 
+    def release(self):
+        """End a velocity hold (stand_up, start_stepping); return a note for the reply."""
+        if self.stream.release():
+            return ' (velocity hold released: cmd_vel must be zero or quiet once)'
+        return ''
+
     def on_stand_up(self, _request):
         """Stand up from sitting, then (auto_torque_control) torque-controlled standing."""
         state = self.basic_state()
         if state is None:
             return self.no_reports()
-        if state == p.STATE_INITIAL_STANDING and self.auto_torque_control:
-            return self.reply(*self.to_torque_standing())
-        if state in STANDING:
-            return self.reply(True, 'already standing ({})'.format(self.state_name(state)))
         if state in TRANSITIONS:
             return self.reply(False, 'busy ({})'.format(self.state_name(state)))
         if state == p.STATE_EMERGENCY:
             return self.reply(False, 'emergency stop or fall: clear it on the robot first')
+        note = self.release()
+        if state == p.STATE_INITIAL_STANDING and self.auto_torque_control:
+            ok, message = self.to_torque_standing()
+            return self.reply(ok, message + note)
+        if state in STANDING:
+            return self.reply(True, 'already standing ({}){}'.format(self.state_name(state), note))
         error = self.send_toggle(p.STAND_SIT)
         if error:
             return self.reply(False, error)
@@ -529,8 +543,10 @@ class X30Driver:
             return self.reply(False, 'stand/sit sent, still {}'.format(
                 self.state_name(self.basic_state())))
         if self.auto_torque_control and self.basic_state() == p.STATE_INITIAL_STANDING:
-            return self.reply(*self.to_torque_standing())
-        return self.reply(True, 'standing ({})'.format(self.state_name(self.basic_state())))
+            ok, message = self.to_torque_standing()
+            return self.reply(ok, message + note)
+        return self.reply(True, 'standing ({}){}'.format(
+            self.state_name(self.basic_state()), note))
 
     def stop_stepping(self):
         """Toggle stepping off and wait for torque-controlled standing; return '' or why not."""
@@ -555,7 +571,7 @@ class X30Driver:
             return self.reply(False, 'busy ({})'.format(self.state_name(state)))
         if state == p.STATE_STEPPING and self.stream.recently_moved(time.monotonic(), 1.0):
             return self.reply(False, 'the robot is walking: stop cmd_vel first')
-        self.disarm('sit_down')
+        self.hold('sit_down')
         if state == p.STATE_STEPPING:
             error = self.stop_stepping()
             if error:
@@ -586,29 +602,32 @@ class X30Driver:
         if state is None:
             return self.no_reports()
         if state == p.STATE_STEPPING:
-            return self.reply(True, 'already stepping')
+            return self.reply(True, 'already stepping' + self.release())
+        if state not in (p.STATE_INITIAL_STANDING, p.STATE_TORQUE_STANDING):
+            return self.reply(False, 'stand up first ({})'.format(self.state_name(state)))
+        note = self.release()
         if state == p.STATE_INITIAL_STANDING:
             ok, message = self.to_torque_standing()
             if not ok:
-                return self.reply(False, message)
+                return self.reply(False, message + note)
             state = self.basic_state()
         if state != p.STATE_TORQUE_STANDING:
-            return self.reply(False, 'stand up first ({})'.format(self.state_name(state)))
+            return self.reply(False, 'stand up first ({}){}'.format(self.state_name(state), note))
         error = self.send_toggle(p.STEPPING)
         if error:
-            return self.reply(False, error)
+            return self.reply(False, error + note)
         if self.wait_for(lambda m: m.basic_state == p.STATE_STEPPING,
                          self.transition_timeout) is None:
-            return self.reply(False, 'start stepping sent, still {}'.format(
-                self.state_name(self.basic_state())))
-        return self.reply(True, 'stepping')
+            return self.reply(False, 'start stepping sent, still {}{}'.format(
+                self.state_name(self.basic_state()), note))
+        return self.reply(True, 'stepping' + note)
 
     def on_stop_stepping(self, _request):
         """Go from stepping to torque-controlled standing; cmd_vel does not undo it."""
         state = self.basic_state()
         if state is None:
             return self.no_reports()
-        self.disarm('stop_stepping')
+        self.hold('stop_stepping')
         if state in (p.STATE_TORQUE_STANDING, p.STATE_INITIAL_STANDING):
             return self.reply(True, 'already standing ({})'.format(self.state_name(state)))
         if state != p.STATE_STEPPING:
@@ -632,14 +651,16 @@ class X30Driver:
         """
         Switch the control mode; return (success, message).
 
-        Leaving the mode this driver is obeyed in disarms the velocity stream (the automatic
-        switch must not take it back); asking for it arms the stream at once.
+        Leaving the mode this driver is obeyed in is a takeover: the velocity stream latches
+        until the robot reports that mode again. Asking for that mode ends the latch once the
+        robot reports it; then cmd_vel must be zero or quiet once.
         """
         name = mode_name(non_manual)
         if non_manual == self.target_non_manual:
-            self.stream.arm()
+            self.stream.request_handback()
         else:
-            self.disarm(reason)
+            self.stream.latch(time.monotonic(), reason)
+            self.zero_axes_if_stepping()
         if not self.send_base(p.NON_MANUAL_MODE if non_manual else p.MANUAL_MODE):
             return False, self.link.last_error
         if self.fresh_rcs() is None:
@@ -734,7 +755,7 @@ class X30Driver:
 
     def on_emergency_stop(self, _request):
         """Soft emergency stop, sent several times at once; confirm it in the reports."""
-        self.stream.disarm(time.monotonic(), 'emergency_stop')
+        self.stream.hold(time.monotonic(), 'emergency_stop')
         data = p.simple(p.code(p.SOFT_ESTOP, self.prefix))
         sent = self.link.send_all([data] * ESTOP_REPEAT)
         if not sent:
@@ -1064,16 +1085,19 @@ class X30Driver:
             values.append(('imu_rpy_deg', ' '.join('{:.1f}'.format(v) for v in sensor.rpy_deg)))
         if self.perception is not None:
             values += [(key, self.feedback_name(key, value)) for key, value in feedback.items()]
+        now = time.monotonic()
+        gate = self.stream.gate(now)
         ignored = self._ignored
-        if ignored:
+        if self.stream.held(now):
+            warnings.append('cmd_vel not sent ({})'.format(gate))
+        elif ignored:
             warnings.append('cmd_vel ignored: ' + ignored)
+        if ignored:
             values.append(('cmd_vel_ignored', ignored))
-        armed = self.stream.armed
-        values += [('armed', armed),
-                   ('disarmed_by', '-' if armed else self.stream.auto.disarm_reason),
+        values += [('velocity', gate),
+                   ('takeover', self.stream.latch_reason or '-'),
                    ('velocity_mode', self.velocity_mode),
-                   ('cmd', ' '.join('{:.2f}'.format(v)
-                                    for v in self.stream.sent_command(time.monotonic()))),
+                   ('cmd', ' '.join('{:.2f}'.format(v) for v in self.stream.sent_command(now))),
                    ('command_prefix', '0x{:02X}'.format(self.prefix)),
                    ('obeyed_in', mode_name(self.target_non_manual))]
         if problems:
