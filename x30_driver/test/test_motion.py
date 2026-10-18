@@ -386,6 +386,19 @@ class TestHolds(unittest.TestCase):
         bench.run(2.0, FORWARD)
         self.assertEqual(bench.axes(start), [NO_AXES] * 25)  # stop_burst_sec at 50 Hz
 
+    def test_a_hold_during_a_releasing_service_stays(self):
+        """stand_up reads hold_seq first: an emergency_stop hold that came in after it stays."""
+        bench = Bench(view())
+        bench.stream.hold(0.0, 'sit_down')
+        since = bench.stream.hold_seq  # stand_up starts
+        bench.stream.hold(0.0, 'emergency_stop')
+        self.assertFalse(bench.stream.release(since))
+        self.assertEqual(bench.gate, 'hold:emergency_stop')
+        self.assertEqual(bench.stream.hold_reason, 'emergency_stop')
+        self.assertTrue(bench.stream.release(bench.stream.hold_seq))
+        self.assertEqual(bench.gate, 'waiting for zero or quiet cmd_vel')
+        self.assertIsNone(bench.stream.hold_reason)
+
     def test_emergency_report_disarms_until_it_clears(self):
         bench = Bench(view())
         bench.run(0.5, FORWARD)

@@ -10,11 +10,11 @@ The rules (shared by the Deep Robotics drivers):
   deadline from the episode start, never again in that episode (not after a hold, a takeover or
   an emergency stop either: the gate closing does not end the episode).
 - The gate closes on a hold (sit_down, emergency_stop, stop_stepping; released by stand_up or
-  start_stepping), on a takeover (the robot leaves that control mode after it was seen in it;
-  the latch ends only when the robot reports that mode again) and while the robot reports an
-  emergency stop or fall. After it opens again, motion goes out only once cmd_vel has been zero
-  (one message) or quiet (cmd_timeout_sec): a stream that kept running never drives the robot
-  off. Nothing re-arms on a timer.
+  start_stepping unless another hold came in while they ran), on a takeover (the robot leaves
+  that control mode after it was seen in it; the latch ends only when the robot reports that
+  mode again) and while the robot reports an emergency stop or fall. After it opens again,
+  motion goes out only once cmd_vel has been zero (one message) or quiet (cmd_timeout_sec): a
+  stream that kept running never drives the robot off. Nothing re-arms on a timer.
 - After motion, zeros go out from the first period that sends none: for stop_burst_sec, and at
   least once however late that period comes (axis zeros while the robot steps or its state is
   unknown). The gate closing also sends zeros for stop_burst_sec. Then nothing, even while zero
@@ -224,6 +224,7 @@ class VelocityStream:
         self.toggles = ToggleGuard(toggle_timeout_sec)
         self._lock = threading.Lock()
         self._hold = None  # type: Optional[str]
+        self._hold_seq = 0  # bumped by every hold
         self._latch = None  # type: Optional[str]
         self._end_on_target = False
         self._target_seen = False
@@ -267,11 +268,30 @@ class VelocityStream:
         """Hold until release() (stand_up, start_stepping) and then a zero or quiet cmd_vel."""
         with self._lock:
             self._hold = service
+            self._hold_seq += 1
             self._close(now)
 
-    def release(self) -> bool:
-        """End a hold; return True when there was one."""
+    @property
+    def hold_seq(self) -> int:
+        """Return the hold counter, bumped by every hold: a releasing service reads it first."""
         with self._lock:
+            return self._hold_seq
+
+    @property
+    def hold_reason(self) -> Optional[str]:
+        """Return the service that holds, None without a hold."""
+        return self._hold
+
+    def release(self, since: Optional[int] = None) -> bool:
+        """
+        End a hold; return True when there was one.
+
+        since: the hold_seq the releasing service started with. A hold that came in after it (an
+        emergency_stop while stand_up ran) stays.
+        """
+        with self._lock:
+            if since is not None and since != self._hold_seq:
+                return False
             held, self._hold = self._hold is not None, None
             return held
 
