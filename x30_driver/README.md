@@ -44,10 +44,10 @@ state shows the previous one (or after `transition_timeout_sec`).
 
 | Service | Sends | Notes |
 |---|---|---|
-| `stand_up` | stand/sit `0x31010202`, then torque control `0x3101020A` | sitting → initial standing → torque-controlled standing (`auto_torque_control`); nothing to do when standing; releases a velocity hold |
-| `sit_down` | stop stepping `0x31010201`, stand/sit `0x31010202` | from stepping it stops stepping first; refused while walking; holds the velocity stream until `stand_up` or `start_stepping` |
+| `stand_up` | stand/sit `0x31010202`, then torque control `0x3101020A` | sitting → initial standing → torque-controlled standing (`auto_torque_control`); nothing to do when standing; releases a velocity hold, but not one that came in while it ran |
+| `sit_down` | stop stepping `0x31010201`, stand/sit `0x31010202` | from stepping it stops stepping first; refused while walking; holds the velocity stream until `stand_up` or `start_stepping`, also when the robot already sits |
 | `torque_control` | `0x3101020A` | initial standing → torque-controlled standing |
-| `start_stepping` | toggle `0x31010201` | only from torque-controlled (or initial) standing; releases a velocity hold |
+| `start_stepping` | toggle `0x31010201` | only from torque-controlled (or initial) standing; releases a velocity hold, but not one that came in while it ran |
 | `stop_stepping` | toggle `0x31010201` | only while stepping; holds the velocity stream until `stand_up` or `start_stepping` |
 | `non_manual_mode`, `manual_mode` | `0x31010C03`, `0x31010C02` | waits for `is_nav_mode` in `0x1008`; leaving the mode the driver is obeyed in is a takeover (latch); asking for it ends the latch once the robot reports it |
 | `height_normal`, `height_crawl` | `0x31010406` value 2 / 0 | no crawl in off-road, stair and run, nor without a fresh motion state report; no change in L-Walk, Mountain, Silent; fails when `0x11050F08` still shows the old height (succeeds without any height report) |
@@ -95,24 +95,31 @@ turn right: lateral and turn are negated (`invert_vy` / `invert_wz` flip them ag
 robot disagrees).
 
 The axes only move the robot in the **stepping** state; in torque-controlled standing the same
-commands change the body's pose (1.2.3.1), so the driver sends nothing then, nor without a fresh
-`0x1009` (younger than `state_timeout_sec`), and shows why in `cmd_vel_ignored`. The robot obeys
+commands change the body's pose (1.2.3.1), so the driver sends no motion then, nor without a
+fresh `0x1009` (younger than `state_timeout_sec`; the zeros below still go out then), and shows
+why in `cmd_vel_ignored`. The robot obeys
 each source in one control mode (1.2.4): `0x31` (autonomous module, default) in **non-manual
 mode**, `0x21` (remote control: the driver acts as the handheld) in **manual mode**; `state`
 shows it as `obeyed_in`.
 
 **Episodes.** An episode starts with the first motion command after `cmd_vel` was quiet (no
-message) for `cmd_timeout_sec + stop_burst_sec`, or the first ever. Only then, with the gate open:
+message) for `cmd_timeout_sec + stop_burst_sec`, or the first ever, whatever the gate shows. If
+the gate is open at that moment:
 
 - `auto_control_mode`: that mode (`0x31010C03`, or `0x21010C02` with `0x21`) when a fresh `0x1008`
-  says the robot is not in it (never blindly), up to 3 tries 0.5 s apart until it reports it;
+  says the robot is not in it (never blindly), up to 3 tries 0.5 s apart within 2 s of the
+  episode start, until it reports it;
 - `auto_stepping`: the stepping toggle `0x31010201` when the robot is in torque-controlled
-  standing, up to 3 tries through the toggle guard until it reports stepping.
+  standing, up to 3 tries through the toggle guard within 4 × `transition_timeout_sec` of the
+  episode start, until it reports stepping.
 
-Never again in that episode: if the robot stops stepping mid-episode (the handheld, a fall), the
-driver leaves it. Zero Twists do not end an episode; only quiet does. When the switch made at the
-start succeeds, the episode's command drives at once. `idle_stop_stepping_sec` (0: off) stops
-stepping again after that long without motion.
+A report that comes back after that gets no try. Never again in that episode: if the robot stops
+stepping mid-episode (the handheld, a fall), the driver leaves it. Only quiet ends an episode:
+zero Twists do not, and neither does the gate closing, so a stream that runs on through a hold,
+a takeover or a fall gets no switches when the gate opens again (call `start_stepping` or the
+mode service, or let `cmd_vel` go quiet once). When the switch made at the start succeeds, the
+episode's command drives at once. `idle_stop_stepping_sec` (0: off) stops stepping again after
+that long without motion.
 
 **The gate** (`velocity` in `state`; a throttled WARN while motion is asked for and held back):
 
@@ -122,17 +129,21 @@ stepping again after that long without motion.
   only when the robot reports that mode again: handed back on the handheld, or `non_manual_mode`
   (`manual_mode` with `0x21`). `takeover` in `state` says who took over.
 - `hold:sit_down`, `hold:emergency_stop`, `hold:stop_stepping`: until `stand_up` or
-  `start_stepping` (the mode services do not release a hold).
+  `start_stepping` (the mode services do not release a hold). A hold that comes in while
+  `stand_up` or `start_stepping` runs (an `emergency_stop`) stays; their answer says so.
 - `disarmed:emergency stop or fall`: while the robot reports it.
 - `waiting for zero or quiet cmd_vel`: after any of these ended, motion goes out only once
   `cmd_vel` has been zero (one message) or quiet (`cmd_timeout_sec`); a stream that kept running
   never drives the robot off. No timer re-arms anything.
 
-**Zeros.** The driver sends zeros for `stop_burst_sec` after the last non-zero axis values (when
-`cmd_vel` goes zero or stale for `cmd_timeout_sec`) or after the gate closes, then nothing, even
-while zero Twists keep arriving (with `0x21` they would fight a real handheld); the robot
-decelerates to zero after 1 s without an axis command. A `cmd_vel` with NaN or inf in any of its
-six fields is a stop. On shutdown the stream stops and zero axes go out three times.
+**Zeros.** After non-zero axis values, the driver sends zeros from the first period that sends
+none (`cmd_vel` zero or stale for `cmd_timeout_sec`, or the gate closed): for `stop_burst_sec`,
+and at least once however late that period runs or however short `stop_burst_sec` is, while the
+robot steps or the motion state report is stale. The gate closing sends zeros for
+`stop_burst_sec` too. Then nothing, even while zero Twists keep arriving (with `0x21` they would
+fight a real handheld); the robot decelerates to zero after 1 s without an axis command. A
+`cmd_vel` with NaN or inf in any of its six fields is a stop. On shutdown the stream stops and
+zero axes go out three times.
 
 `velocity_mode: topic` publishes `cmd_vel` to `velocity_topic` (`/cmd_vel_corrected`) instead:
 in non-manual mode the motion program executes that topic (2.3). It is for a driver started
@@ -222,12 +233,15 @@ python3 -m pytest test        # without ROS: codec, policy, stream, link, simula
 
 The codec is checked against the document's worked example (Appendix A), every command code the
 document prints, the struct sizes and field offsets of each layout and Appendix B. The velocity
-policy, the velocity stream (episodes, takeover latch, holds, the zero or quiet rule, zero burst,
-NaN) and the toggle guard have unit tests; `test_stream.py` runs the stream in a closed loop with
-the simulated robot in simulated time (takeover while driving and while idle, holds until
-`start_stepping`, stepping stopped mid-episode, toggles with late reports, unknown gaits, control
-mode per prefix, 4 s of zero Twists); `test_node.py` runs the node against the simulated robot
-over UDP with the rospy stand-ins of `test/rosstub` (every service behaviour, the gate in
-`state`, NaN in any field, shutdown, start-up checks);
+policy, the velocity stream (episodes and the deadlines of their tries, takeover latch, holds,
+the zero or quiet rule, zero burst with late periods and stale reports, NaN) and the toggle guard
+have unit tests; `test_stream.py` runs the stream in a closed loop with the simulated robot in
+simulated time (takeover while driving and while idle, holds until `start_stepping`, stepping
+stopped mid-episode, no switches after a handback, a recovered fall or `stand_up` in the same
+stream, toggles with late reports, unknown gaits, control mode per prefix, 4 s of zero Twists, a
+late period); `test_node.py` runs the node against the simulated robot over UDP with the rospy
+stand-ins of `test/rosstub` (every service behaviour, an `emergency_stop` landing while
+`stand_up` or `start_stepping` runs, the gate in `state`, NaN in any field, shutdown, start-up
+checks);
 `test/smoke.test` (rostest) runs it through the real ROS interface. The parameter file is checked
 against the node.

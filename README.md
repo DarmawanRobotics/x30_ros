@@ -119,26 +119,30 @@ walk and slope at crawl height). Run and Silent are not in the table: in them th
 zeros unless `gait_limits` gives their speeds. Below 0.001 m/s (rad/s) a velocity is zero; a
 larger one that falls inside the dead zone (655) goes out as 656. Lateral and yaw are negated
 (the robot: + right, + turn right). Axis commands go out only in the stepping state and while the
-motion state report is fresh: in torque-controlled standing they would change the body's pose.
+motion state report is fresh (zeros also while it is stale): in torque-controlled standing they
+would change the body's pose.
 
 The robot obeys the driver's source in one control mode: `0x31` (default) in non-manual mode,
 `0x21` (the driver acting as the handheld) in manual mode. An **episode** starts with the first
-motion command after `cmd_vel` was quiet for `cmd_timeout_sec + stop_burst_sec`; only then the
-driver switches to that mode (`auto_control_mode`, on a fresh report, 3 tries) and starts
-stepping from torque-controlled standing (`auto_stepping`, 3 tries), never again in that episode.
+motion command after `cmd_vel` was quiet for `cmd_timeout_sec + stop_burst_sec`, and only quiet
+ends it. If the gate is open at that moment, the driver switches to that mode
+(`auto_control_mode`, on a fresh report, 3 tries within 2 s) and starts stepping from
+torque-controlled standing (`auto_stepping`, 3 tries within 4 × `transition_timeout_sec`), never
+again in that episode: not after a hold, a takeover or a fall either.
 The **gate** (`velocity` in `state`) stops all motion:
 
 - `takeover (manual mode)`: the robot left that mode after it was seen in it (the handheld, or
   `manual_mode`), moving or not. It ends only when the robot reports that mode again (handed back
   on the handheld, or `non_manual_mode`); nothing switches it back by itself.
 - `hold:sit_down`, `hold:emergency_stop`, `hold:stop_stepping`: until `stand_up` or
-  `start_stepping`.
+  `start_stepping` (a hold that comes in while they run stays).
 - `disarmed:emergency stop or fall`: while the robot reports it.
 - then `waiting for zero or quiet cmd_vel`: motion goes out again only once `cmd_vel` has been
   zero (one message) or quiet (`cmd_timeout_sec`); a stream that kept running never drives off.
 
-Zeros go out for `stop_burst_sec` after the last motion or the gate closing, then nothing, even
-while zero Twists keep arriving; a `cmd_vel` with NaN or inf in any field is a stop.
+After motion, zeros go out from the first period without it, for `stop_burst_sec` and at least
+once however late that period runs; the gate closing sends them too. Then nothing, even while
+zero Twists keep arriving; a `cmd_vel` with NaN or inf in any field is a stop.
 `velocity_mode: topic` republishes `cmd_vel` to `/cmd_vel_corrected` instead, for a driver on the
 X30's own ROS master (2.3).
 
@@ -192,16 +196,19 @@ On a new robot, in an open area, with someone at the handheld:
   shutdown the stream stops and zero axes go out three times.
 - `emergency_stop` is the soft emergency stop, sent three times; it answers once the robot
   reports emergency stop or fall. The handheld and the robot's own stop button always work too.
-- The driver switches the mode and starts stepping only at the start of an episode. After the
-  operator left the mode that obeys it (manual on the handheld, or `manual_mode`), it never
-  switches back: the takeover ends only when the robot reports that mode again. `stop_stepping`,
-  `sit_down` and `emergency_stop` hold until `stand_up` or `start_stepping`. After either, a
-  `cmd_vel` stream that kept running has to be zero or quiet once before the robot moves. No
-  timer re-arms anything.
-- Zeros go out for `stop_burst_sec` after motion, then nothing (zero Twists are not repeated: with
-  `0x21` they would fight a real handheld); NaN or inf in a `cmd_vel` field is a stop.
-- Axis commands only go out in the stepping state, with a fresh motion state report, in a gait
-  with known speeds; `sit_down` refuses while the robot walks. Stand/sit and stepping are
+- The driver switches the mode and starts stepping only at the start of an episode, with the
+  gate open; only a quiet `cmd_vel` ends an episode, so a stream that runs on through a hold, a
+  takeover or a fall never brings the switches back. After the operator left the mode that obeys
+  it (manual on the handheld, or `manual_mode`), it never switches back: the takeover ends only
+  when the robot reports that mode again. `stop_stepping`, `sit_down` (also when already
+  sitting) and `emergency_stop` hold until `stand_up` or `start_stepping`; a hold that comes in
+  while those run stays. After either, a `cmd_vel` stream that kept running has to be zero or
+  quiet once before the robot moves. No timer re-arms anything.
+- After motion, zeros go out for `stop_burst_sec` and at least once, even from a late period or
+  with a stale motion state report, then nothing (zero Twists are not repeated: with `0x21`
+  they would fight a real handheld); NaN or inf in a `cmd_vel` field is a stop.
+- Non-zero axis commands only go out in the stepping state, with a fresh motion state report, in
+  a gait with known speeds; `sit_down` refuses while the robot walks. Stand/sit and stepping are
   toggles: a second one is refused until the state shows the first.
 - Crawl height allows walk and slope only (and needs a fresh motion state report); L-Walk,
   Mountain and Silent allow no height change; the stair gaits need the matching elevation map
