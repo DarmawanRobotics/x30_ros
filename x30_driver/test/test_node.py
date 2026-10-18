@@ -150,6 +150,10 @@ class NodeTest(unittest.TestCase):
     def assertMoving(self, node, vx=0.3):
         self.assertTrue(wait(lambda: abs(node.robot.velocity[0] - vx) < 0.005), node.state())
 
+    def assertVelocityGate(self, node, value, timeout=3.0):
+        self.assertTrue(wait(lambda: node.state().get('velocity') == value, timeout),
+                        node.state().get('velocity'))
+
     def assertStill(self, node, seconds=1.0):
         """Check that the robot stops within 0.3 s and then stays still for this long."""
         wait(lambda: node.robot.velocity == (0.0, 0.0, 0.0), 0.3)
@@ -160,48 +164,89 @@ class NodeTest(unittest.TestCase):
 
 
 class TestTakeover(NodeTest):
-    def test_manual_mode_service_hands_over(self):
-        """manual_mode while cmd_vel drives: the driver does not switch back until it rests."""
+    def test_manual_mode_service_latches_until_non_manual_mode(self):
+        """manual_mode: no switch back after quiet; non_manual_mode, then a zero, drives."""
         node = self.stepping()
         node.drive(0.3)
         self.assertMoving(node)
         response = node.call('manual_mode')
         self.assertTrue(response.success, response.message)
         before = len(node.sent(p.NON_MANUAL_MODE))
-        self.assertStill(node, 1.5)  # cmd_vel keeps coming
+        self.assertStill(node, 1.0)  # cmd_vel keeps coming
+        self.assertVelocityGate(node, 'takeover (manual mode)')
+        self.assertEqual(node.state()['takeover'], 'manual_mode service')
+        node.stop_driving()
+        time.sleep(1.5)  # quiet: still latched
+        node.drive(0.3)
+        self.assertStill(node, 1.0)
         self.assertFalse(node.robot.non_manual)
         self.assertEqual(len(node.sent(p.NON_MANUAL_MODE)), before)
-        self.assertTrue(wait(lambda: node.state().get('armed') == 'False'))
-        self.assertIn('manual_mode', node.state()['cmd_vel_ignored'])
+        response = node.call('non_manual_mode')
+        self.assertTrue(response.success, response.message)
+        self.assertVelocityGate(node, 'waiting for zero or quiet cmd_vel')
+        self.assertStill(node, 0.5)  # the stream kept running
         node.stop_driving()
-        time.sleep(1.2)  # quiet for cmd_timeout_sec + stop_burst_sec
+        node.cmd(0.0)
         node.drive(0.3)
         self.assertMoving(node)
-        self.assertTrue(node.robot.non_manual)
 
-    def test_handheld_takeover_is_not_reverted(self):
+    def test_handheld_takeover_is_a_latch(self):
         node = self.stepping()
         node.drive(0.3)
         self.assertMoving(node)
         before = len(node.sent(p.NON_MANUAL_MODE))
         node.robot.set_mode(False)  # the operator switches to manual on the handheld
-        self.assertStill(node, 1.5)
+        self.assertStill(node, 1.0)
+        self.assertIn('took over', node.state().get('takeover', ''))
+        node.stop_driving()
+        time.sleep(1.5)
+        node.drive(0.3)
+        self.assertStill(node, 1.0)
         self.assertFalse(node.robot.non_manual)
         self.assertEqual(len(node.sent(p.NON_MANUAL_MODE)), before)
-        self.assertIn('took over', node.state().get('disarmed_by', ''))
+        node.robot.set_mode(True)  # handed back on the handheld
+        self.assertVelocityGate(node, 'waiting for zero or quiet cmd_vel')
+        node.stop_driving()
+        node.cmd(0.0)
+        node.drive(0.3)
+        self.assertMoving(node)
+
+    def test_takeover_while_cmd_vel_is_zero(self):
+        node = self.stepping()
+        node.drive(0.0)
+        time.sleep(0.3)
+        node.robot.set_mode(False)
+        self.assertVelocityGate(node, 'takeover (manual mode)')
+        node.drive(0.3)
+        self.assertStill(node, 1.0)
+        self.assertFalse(node.robot.non_manual)
+        self.assertTrue(any('not sent' in w[0] for w in rospy.warnings))
 
 
 class TestServicesHold(NodeTest):
-    def test_stop_stepping_is_not_undone(self):
+    def test_stop_stepping_holds_until_start_stepping(self):
         node = self.stepping()
         node.drive(0.3)
         self.assertMoving(node)
         response = node.call('stop_stepping')
         self.assertTrue(response.success, response.message)
         toggles = len(node.sent(p.STEPPING))
-        time.sleep(1.5)  # cmd_vel keeps coming
+        time.sleep(1.0)  # cmd_vel keeps coming
+        node.stop_driving()
+        time.sleep(1.5)  # quiet: still held
+        node.drive(0.3)
+        time.sleep(1.0)
         self.assertEqual(node.robot.basic_state, p.STATE_TORQUE_STANDING)
         self.assertEqual(len(node.sent(p.STEPPING)), toggles)
+        self.assertVelocityGate(node, 'hold:stop_stepping')
+        response = node.call('start_stepping')
+        self.assertTrue(response.success, response.message)
+        self.assertIn('hold released', response.message)
+        self.assertStill(node, 0.5)  # the stream kept running: a zero first
+        node.stop_driving()
+        node.cmd(0.0)
+        node.drive(0.3)
+        self.assertMoving(node)
 
     def test_emergency_stop_three_times_and_confirmed(self):
         node = self.stepping()
@@ -217,13 +262,19 @@ class TestServicesHold(NodeTest):
         self.assertEqual(len(node.sent(p.NON_MANUAL_MODE)), modes)
         self.assertEqual(node.sent(p.STEPPING), [])
 
-    def test_sit_down_holds(self):
+    def test_sit_down_holds_until_stand_up(self):
         node = self.stepping()
         response = node.call('sit_down')
         self.assertTrue(response.success, response.message)
         node.drive(0.3)
         time.sleep(1.0)
         self.assertEqual(node.robot.basic_state, p.STATE_SITTING)
+        self.assertVelocityGate(node, 'hold:sit_down')
+        node.stop_driving()
+        response = node.call('stand_up')
+        self.assertTrue(response.success, response.message)
+        self.assertIn('hold released', response.message)
+        self.assertVelocityGate(node, 'idle', 2.0)
 
     def test_posture_services_one_at_a_time(self):
         """Two start_stepping at once: one stepping toggle goes out."""
@@ -281,13 +332,47 @@ class TestAxes(NodeTest):
         self.assertEqual(len(node.sent(p.AXIS_FORWARD)), axes)
         self.assertIn('no fresh motion state', node.state().get('cmd_vel_ignored', ''))
 
-    def test_gait_without_limits_streams_zeros(self):
+    def test_gait_without_limits_does_not_move(self):
         node = self.stepping(gait=p.GAIT_STATE_SILENT)
         node.drive(0.3)
         self.assertStill(node, 1.0)
-        self.assertTrue(node.sent(p.AXIS_FORWARD))  # zeros go out
         self.assertIn('silent', node.state().get('cmd_vel_ignored', ''))
         self.assertTrue(node.state()['gait_speeds'].startswith('none'))
+
+    def test_nan_in_any_field_stops(self):
+        node = self.stepping()
+        node.drive(0.3)
+        self.assertMoving(node)
+        node.stop_driving()
+        msg = Twist()
+        msg.linear.x, msg.angular.x = 0.3, float('nan')
+        stop = threading.Event()
+
+        def run():
+            while not stop.is_set():
+                rospy.subscribers['cmd_vel'](msg)
+                time.sleep(0.05)
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        try:
+            self.assertStill(node, 1.0)
+        finally:
+            stop.set()
+            thread.join()
+        self.assertTrue(any('NaN' in w[0] for w in rospy.warnings))
+
+    def test_zero_twists_send_only_the_burst(self):
+        node = self.stepping()
+        node.drive(0.3)
+        self.assertMoving(node)
+        node.drive(0.0)
+        start = len(node.robot.values)
+        time.sleep(4.0)
+        node.stop_driving()
+        axes = [v for code, v in list(node.robot.values)[start:] if code & 0xFFFFFF in AXES]
+        self.assertTrue(axes)
+        self.assertEqual(set(axes), {0})
+        self.assertLessEqual(len(axes), 3 * 32)  # stop_burst_sec at 50 Hz, three axes
 
     def test_gait_limits_parameter(self):
         node = self.stepping(gait=p.GAIT_STATE_SILENT,
