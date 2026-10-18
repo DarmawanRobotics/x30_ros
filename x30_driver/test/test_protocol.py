@@ -112,6 +112,23 @@ class TestHead(unittest.TestCase):
                          (0x1008, 0x1009, 0x100A, 0x100B))
         self.assertEqual((p.BATTERY, p.BODY_HEIGHT_STATUS), (0x21050F0A, 0x11050F08))
 
+    def test_prefix_and_heartbeat_limits(self):
+        """Only the document's two source bytes; heartbeat at least 2 Hz (1.2, 1.2.1)."""
+        self.assertEqual(p.check_prefix(0x21), 0x21)
+        self.assertEqual(p.check_prefix('49'), 0x31)
+        for bad in (0x00, 0x11, 0x41, 0x2131):
+            with self.assertRaises(ValueError):
+                p.check_prefix(bad)
+        self.assertEqual(p.heartbeat_rate(0.5), 2.0)
+        self.assertEqual(p.heartbeat_rate(5), 5.0)
+
+    def test_save_data_code(self):
+        """The new save data code carries the source byte; the old raw 18 does not."""
+        self.assertEqual(p.save_data_command(p.SAVE_DATA), 0x31010C01)
+        self.assertEqual(p.save_data_command(p.SAVE_DATA, p.PREFIX_REMOTE), 0x21010C01)
+        self.assertEqual(p.save_data_command(p.SAVE_DATA_OLD), 18)
+        self.assertEqual(p.save_data_command(0x21010C01, p.PREFIX_AUTONOMOUS), 0x31010C01)
+
     def test_malformed(self):
         """Short heads, unknown types and truncated payloads are dropped."""
         self.assertIsNone(p.parse_datagram(b'\x01\x02'))
@@ -267,9 +284,28 @@ class TestVelocity(unittest.TestCase):
         self.assertEqual(p.gait_limits(0, crawl=True).forward, 0.6)
         self.assertEqual(p.gait_limits(2, crawl=True).forward, 0.35)
         self.assertEqual(p.gait_limits(1, crawl=True).forward, 0.3)
-        self.assertEqual(p.gait_limits(3), p.gait_limits(0))     # run: not in Appendix B
-        self.assertEqual(p.gait_limits(None), p.gait_limits(0))
+        self.assertIsNone(p.gait_limits(p.GAIT_STATE_RUN))       # not in Appendix B
+        self.assertIsNone(p.gait_limits(p.GAIT_STATE_SILENT))
+        self.assertIsNone(p.gait_limits(None))
         self.assertFalse(p.known_gait(34))
+
+    def test_gait_limits_parameter(self):
+        """gait_limits gives Run / Silent (or overrides) by name or number; bad input raises."""
+        table = p.limits_table(p.parse_gait_limits(
+            {'silent': [0.5, 0.4, 0.2, 0.6], 3: (2.0, 1.0, 0.5, 1.5),
+             'walk': [1.0, 0.5, 0.1, 0.4]}))
+        self.assertEqual(p.gait_limits(34, table=table), p.GaitLimits(0.5, 0.4, 0.2, 0.6))
+        self.assertEqual(p.gait_limits(3, table=table), p.GaitLimits(2.0, 1.0, 0.5, 1.5))
+        self.assertEqual(p.gait_limits(0, crawl=True, table=table).forward, 0.5)
+        self.assertEqual(p.gait_limits(33, table=table), p.GAIT_LIMITS[33])  # untouched
+        self.assertTrue(p.known_gait(34, table))
+        self.assertEqual(p.parse_gait_limits({}), {})
+        self.assertEqual(p.parse_gait_limits(None), {})
+        for bad in ({'sprint': [1, 1, 1, 1]}, {'silent': [1, 1, 1]}, {'silent': [1, 1, 1, 0]},
+                    {'run': [1, 1, float('nan'), 1]}, {'run': 'fast'}, [1, 2, 3, 4]):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    p.parse_gait_limits(bad)
 
     def test_signs(self):
         """REP-103 in, robot axes out: forward +, left -> lateral -, ccw -> turn -."""
@@ -289,6 +325,9 @@ class TestVelocity(unittest.TestCase):
         self.assertEqual(p.velocity_to_axes(-0.01, 0.0, 0.0, walk), (-656, 0, 0))
         self.assertEqual(p.axis_value(655 / 32767 * 1.2, 1.2), 656)  # on the edge: still out
         self.assertEqual(p.velocity_to_axes(0.01, 0.0, 0.0, walk, dead_zone=0), (273, 0, 0))
+        # noise below VELOCITY_EPSILON is 0, never a dead zone bump (no creep)
+        self.assertEqual(p.velocity_to_axes(5e-4, -9e-4, 1e-4, walk), (0, 0, 0))
+        self.assertEqual(p.axis_value(-0.002, 1.2), -656)
         self.assertEqual(p.axis_value(float('nan'), 1.0), 0)
         self.assertEqual(p.axis_value(1.0, 0.0), 0)
 

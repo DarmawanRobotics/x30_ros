@@ -25,11 +25,21 @@ MAX_PAYLOAD = 1024  # receiving buffer of the document's own example (1.1.3)
 # code with 0x21; the constants below leave the prefix out and code() puts it in.
 PREFIX_REMOTE = 0x21
 PREFIX_AUTONOMOUS = 0x31
+PREFIXES = (PREFIX_REMOTE, PREFIX_AUTONOMOUS)
 
 
 def code(base: int, prefix: int = PREFIX_AUTONOMOUS) -> int:
     """Return a command code: the source prefix in the top byte, the command below."""
     return ((int(prefix) & 0xFF) << 24) | (int(base) & 0xFFFFFF)
+
+
+def check_prefix(prefix) -> int:
+    """Return the source prefix when it is one of the document's two; ValueError otherwise."""
+    value = int(prefix)
+    if value not in PREFIXES:
+        raise ValueError('command_prefix must be 0x21 (remote control terminal) or 0x31 '
+                         '(autonomous module), not 0x{:X}'.format(value))
+    return value
 
 
 # ------------------------------------------------------------------ commands to the motion host
@@ -39,6 +49,13 @@ MOTION_HOST_PORT = 43893
 
 HEARTBEAT = 0x040001            # 1.2.1 at least 2 Hz, or the motion program drops the link
 CONNECT = 0x020001              # 1.2.1 sent once after the heartbeat started
+MIN_HEARTBEAT_HZ = 2.0
+
+
+def heartbeat_rate(hz) -> float:
+    """Return a heartbeat rate of at least the document's 2 Hz."""
+    return max(MIN_HEARTBEAT_HZ, float(hz))
+
 
 STAND_SIT = 0x010202            # 1.2.2 alternates sitting and standing
 TORQUE_CONTROL = 0x01020A       # 1.2.2 initial standing -> torque-controlled standing
@@ -47,6 +64,7 @@ STEPPING = 0x010201             # 1.2.2 alternates torque-controlled standing an
 # 1.2.3 Axis commands, [-AXIS_MAX, AXIS_MAX], 50 Hz, invalid after 1 s without one.
 AXIS_MAX = 32767
 AXIS_DEAD_ZONE = 655            # |value| < 655 counts as 0 (1.2.3.2); the driver sends >= 656
+VELOCITY_EPSILON = 1e-3         # m/s, rad/s: below this a velocity is 0 (no dead zone bump)
 AXIS_LEFT_X = 0x010131          # standing: roll (+ raises the left shoulder); stepping: + right
 AXIS_LEFT_Y = 0x010130          # standing: body height (+ up); stepping: + forward
 AXIS_RIGHT_X = 0x010135         # standing: yaw (+ head right); stepping: + turns right
@@ -74,10 +92,19 @@ GAIT_SILENT = 0x010422
 
 SOFT_ESTOP = 0x010C0E           # 1.2.8 lies down at once, joint protection
 
-# 1.2.7 Save data: saves the last 5 minutes and exits the motion program. Full codes as the
-# document gives them, without the source prefix.
+# 1.2.7 Save data: saves the last 5 minutes and exits the motion program. The document prints
+# 0x010C01 without the source byte; the 1.2 note gives every command in 1.2 one (the Lite3
+# manual writes the same command 0x21010C01), so it goes out as prefix << 24 | 0x010C01.
+# Codes below 0x100 (the old 18) go out as they are.
 SAVE_DATA = 0x010C01            # jy_exe v2.2.45 or newer
 SAVE_DATA_OLD = 18              # older jy_exe
+
+
+def save_data_command(command: int, prefix: int = PREFIX_AUTONOMOUS) -> int:
+    """Return the save data code to send: with the source prefix, except the old raw codes."""
+    command = int(command)
+    return command if command < 0x100 else code(command, prefix)
+
 
 # ------------------------------------------------------------------ reports (1.3)
 # Sent to every address in the motion host's network.toml (Application Manual 4.3.2).
@@ -207,23 +234,64 @@ GAIT_LIMITS = {
     GAIT_STATE_L_WALK: GaitLimits(1.0, 1.0, 0.5, 1.2),
     GAIT_STATE_MOUNTAIN: GaitLimits(1.0, 1.0, 0.8, 1.2),
 }
-# Run and Silent are not in Appendix B: scaled like Walk
-DEFAULT_GAIT_LIMITS = GAIT_LIMITS[GAIT_STATE_WALK]
+# Run and Silent are not in Appendix B: the driver does not move the robot in them unless the
+# gait_limits parameter gives their speeds (limits_table).
+DEFAULT_GAIT_LIMITS = GAIT_LIMITS[GAIT_STATE_WALK]  # the simulated robot's guess for them
 CRAWL_FORWARD_FACTOR = 0.5  # walk and slope forward speed at crawl height
+GAIT_NAMES = {name: state for state, name in GAIT_STATES.items()}
 
 
-def gait_limits(gait_state: Optional[int], crawl: bool = False) -> GaitLimits:
-    """Return the speed limits of a gait; unknown gaits use Walk's, crawl halves walk/slope."""
-    limits = GAIT_LIMITS.get(gait_state, DEFAULT_GAIT_LIMITS)
-    if crawl and gait_state in CRAWL_GAITS:
+def gait_limits(gait_state: Optional[int], crawl: bool = False,
+                table: Optional[Dict[int, GaitLimits]] = None) -> Optional[GaitLimits]:
+    """Return a gait's speed limits (crawl halves walk/slope forward); None when unknown."""
+    limits = (GAIT_LIMITS if table is None else table).get(gait_state)
+    if limits is not None and crawl and gait_state in CRAWL_GAITS:
         limits = GaitLimits(limits.forward * CRAWL_FORWARD_FACTOR, limits.backward,
                             limits.lateral, limits.yaw)
     return limits
 
 
-def known_gait(gait_state: Optional[int]) -> bool:
-    """Return True when Appendix B gives the gait's speeds."""
-    return gait_state in GAIT_LIMITS
+def known_gait(gait_state: Optional[int],
+               table: Optional[Dict[int, GaitLimits]] = None) -> bool:
+    """Return True when the table (Appendix B by default) gives the gait's speeds."""
+    return gait_state in (GAIT_LIMITS if table is None else table)
+
+
+def parse_gait_limits(value) -> Dict[int, GaitLimits]:
+    """
+    Read the gait_limits parameter: {gait: [forward, backward, lateral, yaw]}.
+
+    The gait is a name of GAIT_STATES (walk, run, silent, ...) or its number; the four speeds
+    are positive, in m/s and rad/s. Raise ValueError for anything else.
+    """
+    if not value:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError('gait_limits must be a mapping gait: [forward, backward, lateral, yaw]')
+    table = {}
+    for key, speeds in value.items():
+        gait = GAIT_NAMES.get(key, key)
+        try:
+            gait = int(gait)
+        except (TypeError, ValueError):
+            raise ValueError('gait_limits: unknown gait {!r} (one of {})'.format(
+                key, ', '.join(sorted(GAIT_NAMES)))) from None
+        try:
+            numbers = [float(v) for v in speeds]
+        except (TypeError, ValueError):
+            raise ValueError('gait_limits: {} needs four numbers'.format(key)) from None
+        if len(numbers) != 4 or not all(math.isfinite(v) and v > 0.0 for v in numbers):
+            raise ValueError('gait_limits: {} needs four positive speeds [forward, backward, '
+                             'lateral, yaw], not {!r}'.format(key, speeds))
+        table[gait] = GaitLimits(*numbers)
+    return table
+
+
+def limits_table(overrides: Optional[Dict[int, GaitLimits]] = None) -> Dict[int, GaitLimits]:
+    """Return Appendix B with the overrides on top (they replace or add gaits)."""
+    table = dict(GAIT_LIMITS)
+    table.update(overrides or {})
+    return table
 
 
 # ------------------------------------------------------------------ perception host (1.4, 1.5)
@@ -238,9 +306,15 @@ BRAKE_MODE = 0x3101EE02         # 1.5.3: 1 decelerate, 2 detour
 BRAKE_MODE_STATE = 0x3100EE02
 VELOCITY_SOURCE = 0x3101EE03    # 1.5.1: 1 joystick (assist), 2 navigation module
 VELOCITY_SOURCE_STATE = 0x3100EE03
-OBSTACLE_HEIGHT = 0x3100EE04    # 1.5.4 (the document's code): 1 = 8 cm, 2 = 28 cm
+# 1.5.4 as printed: 1 = 8 cm, 2 = 28 cm. It looks like a feedback code (0x3100...); the
+# commands are 0x3101EE0x, so 0x3101EE04 is the likely intended one (obstacle_height_code).
+OBSTACLE_HEIGHT = 0x3100EE04
+OBSTACLE_HEIGHT_LIKELY = 0x3101EE04
 ELEVATION_QUERY = 0x3101EEFF    # Appendix C: any message starts the 10 Hz feedback
 LIO = 0x0BAA0001                # 1.5.2.4: 1 on, 0 off; reply 0 succeeded, -1 failed
+LIO_ON = 1
+LIO_OFF = 0
+LIO_RESULTS = {0: 'succeeded', -1: 'failed'}
 
 ELEVATION_MODES = {
     3: 'solid_ground',
@@ -252,7 +326,10 @@ ELEVATION_MODES = {
 ELEVATION_SOLID_GROUND = 3
 ELEVATION_GRID_GROUND = 4
 ELEVATION_NO_RISERS = 5
+ELEVATION_MULTI_FRAME_PREPARING = 18
 ELEVATION_MULTI_FRAME = 20
+# leaving these needs 1.5.2.5: switch the mode, then turn the LiDAR-inertial odometry off
+MULTI_FRAME_MODES = (ELEVATION_MULTI_FRAME_PREPARING, ELEVATION_MULTI_FRAME)
 BRAKE_MODES = {1: 'decelerate', 2: 'detour'}
 VELOCITY_SOURCES = {1: 'joystick', 2: 'navigation'}
 OBSTACLE_HEIGHTS = {1: 0.08, 2: 0.28}
@@ -453,11 +530,11 @@ def axis_value(velocity: float, maximum: float, dead_zone: int = AXIS_DEAD_ZONE)
     """
     Return the axis value of a velocity at a gait maximum (1.2.3.2).
 
-    v = value / 32767 * vmax, so value = v / vmax * 32767, clamped. A non-zero velocity that
-    falls inside the dead zone (|value| <= 655) is sent as +-656, just outside it, so small
-    commands still move the robot.
+    v = value / 32767 * vmax, so value = v / vmax * 32767, clamped. A velocity below
+    VELOCITY_EPSILON is 0 (noise must not creep); a larger one that falls inside the dead zone
+    (|value| <= 655) is sent as +-656, just outside it, so small commands still move the robot.
     """
-    if not math.isfinite(velocity) or maximum <= 0.0 or velocity == 0.0:
+    if not math.isfinite(velocity) or maximum <= 0.0 or abs(velocity) < VELOCITY_EPSILON:
         return 0
     value = int(round(velocity / maximum * AXIS_MAX))
     value = max(-AXIS_MAX, min(AXIS_MAX, value))
