@@ -1,0 +1,24 @@
+<launch>
+  <!--
+    The X30 robot package: x30_driver and robot_state_publisher with the URDF, in one namespace.
+      params_file / overrides_file: the driver's parameters (see x30_driver/launch/driver.launch)
+      rviz: RViz with the robot model
+  -->
+  <arg name="namespace" default="x30"/>
+  <arg name="params_file" default="$(find x30_driver)/config/driver_params.yaml"/>
+  <arg name="overrides_file" default=""/>
+  <arg name="rviz" default="false"/>
+
+  <include file="$(find x30_driver)/launch/driver.launch">
+    <arg name="namespace" value="$(arg namespace)"/>
+    <arg name="params_file" value="$(arg params_file)"/>
+    <arg name="overrides_file" value="$(arg overrides_file)"/>
+  </include>
+
+  <include file="$(find x30_description)/launch/description.launch">
+    <arg name="namespace" value="$(arg namespace)"/>
+  </include>
+
+  <node if="$(arg rviz)" ns="$(arg namespace)" pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find x30_description)/rviz/x30.rviz"/>
+</launch>
