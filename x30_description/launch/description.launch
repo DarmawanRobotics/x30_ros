@@ -1,0 +1,11 @@
+<launch>
+  <!-- robot_description and robot_state_publisher in the robot's namespace: TF of the legs
+       from <namespace>/joint_states (x30_driver), the LiDAR and IMU frames -->
+  <arg name="namespace" default="x30"/>
+  <arg name="model" default="$(find x30_description)/urdf/x30.urdf.xacro"/>
+
+  <group ns="$(arg namespace)">
+    <param name="robot_description" command="$(find xacro)/xacro '$(arg model)'"/>
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher"/>
+  </group>
+</launch>

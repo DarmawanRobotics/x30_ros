@@ -1,0 +1,254 @@
+<?xml version="1.0"?>
+<!--
+  Deep Robotics Jueying X30.
+  Links, joints, meshes, collisions, inertials and the four LiDAR frames: Deep Robotics' official
+  model (DeepRoboticsLab/deep_robotics_model, X30/urdf/X30.urdf, BSD-3-Clause, see
+  LICENSE.deep_robotics_model), kept with its names so x30_driver's joint_states fit. Only the
+  materials are added (the model has none).
+  base_link is the centre of the body (x forward, y left, z up); the official root TORSO hangs
+  on it with an identity joint. imu_link is at base_link too: the API documentation gives no IMU
+  position. No link may be called body, odom, map or camera_init: those frames belong to the
+  odometry and the navigation stack.
+-->
+<robot name="x30" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="MESH" value="package://x30_description/meshes"/>
+
+  <!-- legs (official model): HipX 291 mm forward / back and 80 mm out, HipY 116.75 mm further
+       out, knee 300 mm and foot 310 mm below -->
+  <xacro:property name="hip_x" value="0.291"/>
+  <xacro:property name="hip_y" value="0.08"/>
+  <xacro:property name="thigh_offset" value="0.11675"/>
+  <xacro:property name="thigh_length" value="0.30"/>
+  <xacro:property name="shank_length" value="0.31"/>
+
+  <material name="x30_body"><color rgba="0.20 0.21 0.23 1.0"/></material>
+  <material name="x30_leg"><color rgba="0.55 0.56 0.58 1.0"/></material>
+  <material name="x30_shank"><color rgba="0.12 0.12 0.13 1.0"/></material>
+
+  <link name="base_link"/>
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="TORSO"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="TORSO">
+    <inertial>
+      <mass value="30.7"/>
+      <inertia ixx="0.364306" ixy="0.00018421" ixz="0.00027469" iyy="0.597627" iyz="0.00026784"
+               izz="0.757267"/>
+    </inertial>
+    <visual>
+      <geometry><mesh filename="${MESH}/torso.STL"/></geometry>
+      <material name="x30_body"/>
+    </visual>
+    <collision>
+      <geometry><box size="0.46 0.26 0.18"/></geometry>
+    </collision>
+  </link>
+
+  <link name="imu_link"/>
+
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!--
+    One leg as in the official model. front, left: 1 | -1. HipX limits are mirrored between the
+    left and right legs. The model mirrors hip and thigh meshes by scale and carries per-leg
+    inertials: they come in unchanged as the blocks hip_inertial, thigh_inertial, shank_inertial.
+  -->
+  <xacro:macro name="leg"
+               params="prefix front left hipx_lower hipx_upper hip_scale thigh_scale
+                       *hip_inertial *thigh_inertial *shank_inertial">
+    <link name="${prefix}_HIP">
+      <xacro:insert_block name="hip_inertial"/>
+      <visual>
+        <geometry><mesh filename="${MESH}/hip.STL" scale="${hip_scale}"/></geometry>
+        <material name="x30_leg"/>
+      </visual>
+    </link>
+    <joint name="${prefix}_HipX_joint" type="revolute">
+      <origin xyz="${front * hip_x} ${left * hip_y} 0"/>
+      <parent link="TORSO"/>
+      <child link="${prefix}_HIP"/>
+      <axis xyz="-1 0 0"/>
+      <dynamics damping="0.0" friction="0.0"/>
+      <limit lower="${hipx_lower}" upper="${hipx_upper}" effort="84" velocity="17.5"/>
+    </joint>
+
+    <link name="${prefix}_THIGH">
+      <xacro:insert_block name="thigh_inertial"/>
+      <visual>
+        <geometry><mesh filename="${MESH}/thigh.STL" scale="${thigh_scale}"/></geometry>
+        <material name="x30_leg"/>
+      </visual>
+      <collision>
+        <origin xyz="-0.02 0 -0.13"/>
+        <geometry><cylinder length="0.25" radius="0.04"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}_HipY_joint" type="revolute">
+      <origin xyz="0 ${left * thigh_offset} 0"/>
+      <parent link="${prefix}_HIP"/>
+      <child link="${prefix}_THIGH"/>
+      <axis xyz="0 -1 0"/>
+      <dynamics damping="0.0" friction="0.0"/>
+      <limit lower="-2.967" upper="0.262" effort="84" velocity="17.5"/>
+    </joint>
+
+    <link name="${prefix}_SHANK">
+      <xacro:insert_block name="shank_inertial"/>
+      <visual>
+        <geometry><mesh filename="${MESH}/shank.STL"/></geometry>
+        <material name="x30_shank"/>
+      </visual>
+      <collision>
+        <origin rpy="0 -0.40 0" xyz="0.02 0 -0.046"/>
+        <geometry><cylinder length="0.1" radius="0.025"/></geometry>
+      </collision>
+      <collision>
+        <origin rpy="0 0 0" xyz="0.045 0 -0.1421"/>
+        <geometry><cylinder length="0.1" radius="0.015"/></geometry>
+      </collision>
+      <collision>
+        <origin rpy="0 0.4 0" xyz="0.02 0 -0.246"/>
+        <geometry><cylinder length="0.08" radius="0.015"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}_Knee_joint" type="revolute">
+      <origin xyz="0 0 ${-thigh_length}"/>
+      <parent link="${prefix}_THIGH"/>
+      <child link="${prefix}_SHANK"/>
+      <axis xyz="0 -1 0"/>
+      <dynamics damping="0.0" friction="0.0"/>
+      <limit lower="0.349" upper="2.531" effort="150" velocity="16.1"/>
+    </joint>
+
+    <link name="${prefix}_FOOT">
+      <inertial>
+        <mass value="0.06"/>
+        <inertia ixx="1e-12" ixy="0" ixz="0" iyy="1e-12" iyz="0" izz="1e-12"/>
+      </inertial>
+      <collision>
+        <geometry><sphere radius="0.036"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}_Ankle" type="fixed" dont_collapse="true">
+      <origin xyz="0 0 ${-shank_length}"/>
+      <parent link="${prefix}_SHANK"/>
+      <child link="${prefix}_FOOT"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:leg prefix="FL" front="1" left="1" hipx_lower="-0.323" hipx_upper="0.585"
+             hip_scale="1 1 1" thigh_scale="1 1 1">
+    <inertial>
+      <origin xyz="-0.0018591 -0.011377 0.00027039"/>
+      <mass value="1.43"/>
+      <inertia ixx="0.0014068" ixy="-1.8545e-05" ixz="2.7664e-06" iyy="0.0026782"
+               iyz="2.1221e-06" izz="0.0015918"/>
+    </inertial>
+    <inertial>
+      <origin xyz="-0.0087581 -0.023554 -0.055162"/>
+      <mass value="4.0809"/>
+      <inertia ixx="0.012604" ixy="0.00020291" ixz="-0.00030875" iyy="0.0164" iyz="0.00036593"
+               izz="0.0061084"/>
+    </inertial>
+    <inertial>
+      <origin xyz="0.014851 2.0685e-05 -0.12283"/>
+      <mass value="0.71386"/>
+      <inertia ixx="0.0093039" ixy="1.7693e-07" ixz="0.00034843" iyy="0.0096272"
+               iyz="-3.7717e-06" izz="0.00041542"/>
+    </inertial>
+  </xacro:leg>
+
+  <xacro:leg prefix="FR" front="1" left="-1" hipx_lower="-0.585" hipx_upper="0.323"
+             hip_scale="1 -1 1" thigh_scale="1 -1 1">
+    <inertial>
+      <origin xyz="-0.0018591 0.011377 -2.7675e-05" rpy="3.14159 0 0"/>
+      <mass value="1.43"/>
+      <inertia ixx="0.0014068" ixy="1.8545e-05" ixz="-4.1487e-06" iyy="0.0026782"
+               iyz="7.0795e-06" izz="0.0015918"/>
+    </inertial>
+    <inertial>
+      <origin xyz="-0.0087433 0.023551 -0.055154"/>
+      <mass value="4.0809"/>
+      <inertia ixx="0.012604" ixy="-0.00020374" ixz="-0.0003086" iyy="0.0164" iyz="-0.00036585"
+               izz="0.0061086"/>
+    </inertial>
+    <inertial>
+      <origin xyz="0.014851 2.0687e-05 -0.12283"/>
+      <mass value="0.71386"/>
+      <inertia ixx="0.0093039" ixy="1.7692e-07" ixz="0.00034843" iyy="0.0096272"
+               iyz="-3.7714e-06" izz="0.00041542"/>
+    </inertial>
+  </xacro:leg>
+
+  <xacro:leg prefix="HL" front="-1" left="1" hipx_lower="-0.323" hipx_upper="0.585"
+             hip_scale="-1 1 1" thigh_scale="1 1 1">
+    <inertial>
+      <origin xyz="0.0018591 -0.011377 -2.7675e-05" rpy="0 3.14159 0"/>
+      <mass value="1.43"/>
+      <inertia ixx="0.0014068" ixy="1.8545e-05" ixz="4.1487e-06" iyy="0.0026782"
+               iyz="-7.0795e-06" izz="0.0015918"/>
+    </inertial>
+    <inertial>
+      <origin xyz="-0.0087581 -0.023554 -0.055162"/>
+      <mass value="4.0809"/>
+      <inertia ixx="0.012604" ixy="0.00020291" ixz="-0.00030875" iyy="0.0164" iyz="0.00036593"
+               izz="0.0061084"/>
+    </inertial>
+    <inertial>
+      <origin xyz="0.014851 2.0679e-05 -0.12283"/>
+      <mass value="0.71386"/>
+      <inertia ixx="0.0093039" ixy="1.7692e-07" ixz="0.00034843" iyy="0.0096272"
+               iyz="-3.7714e-06" izz="0.00041542"/>
+    </inertial>
+  </xacro:leg>
+
+  <xacro:leg prefix="HR" front="-1" left="-1" hipx_lower="-0.585" hipx_upper="0.323"
+             hip_scale="-1 -1 1" thigh_scale="1 -1 1">
+    <inertial>
+      <origin xyz="0.0018591 0.011377 0.00027039" rpy="3.14159 3.14159 0"/>
+      <mass value="1.43"/>
+      <inertia ixx="0.0014068" ixy="-1.8545e-05" ixz="-2.7664e-06" iyy="0.0026782"
+               iyz="-2.1221e-06" izz="0.0015918"/>
+    </inertial>
+    <inertial>
+      <origin xyz="-0.0087433 0.023551 -0.055154"/>
+      <mass value="4.0809"/>
+      <inertia ixx="0.012604" ixy="-0.00020374" ixz="-0.0003086" iyy="0.0164" iyz="-0.00036585"
+               izz="0.0061086"/>
+    </inertial>
+    <inertial>
+      <origin xyz="0.014851 2.0679e-05 -0.12283"/>
+      <mass value="0.71386"/>
+      <inertia ixx="0.0093039" ixy="1.7692e-07" ixz="0.00034843" iyy="0.0096272"
+               iyz="-3.7714e-06" izz="0.00041542"/>
+    </inertial>
+  </xacro:leg>
+
+  <!-- the four LiDARs of the official model, on TORSO -->
+  <xacro:macro name="lidar" params="name xyz pitch">
+    <link name="${name}">
+      <inertial>
+        <mass value="1e-5"/>
+        <inertia ixx="1e-12" ixy="0" ixz="0" iyy="1e-12" iyz="0" izz="1e-12"/>
+      </inertial>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <origin xyz="${xyz}" rpy="0 ${pitch} 0"/>
+      <parent link="TORSO"/>
+      <child link="${name}"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:lidar name="LIDAR_FRONT_UP" xyz="0.44367 0 0.05415" pitch="0.4363"/>
+  <xacro:lidar name="LIDAR_FRONT_DOWN" xyz="0.43297 0 -0.05519" pitch="0.4363"/>
+  <xacro:lidar name="LIDAR_REAR_UP" xyz="-0.46576 0 0.03484" pitch="-0.8029"/>
+  <xacro:lidar name="LIDAR_REAR_DOWN" xyz="-0.41074 0 -0.05601" pitch="-0.8029"/>
+</robot>

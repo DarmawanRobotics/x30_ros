@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>x30_bringup</name>
+  <version>0.1.0</version>
+  <description>One launch for the Deep Robotics Jueying X30: x30_driver and the URDF with robot_state_publisher.</description>
+  <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
+  <license>Apache-2.0</license>
+  <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>x30_description</exec_depend>
+  <exec_depend>x30_driver</exec_depend>
+
+  <test_depend>roslaunch</test_depend>
+</package>

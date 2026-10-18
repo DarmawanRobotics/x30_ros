@@ -1,0 +1,17 @@
+<launch>
+  <!-- the model in RViz, with joint sliders (gui:=true) or all joints at rest (gui:=false) -->
+  <arg name="namespace" default="x30"/>
+  <arg name="gui" default="true"/>
+
+  <include file="$(find x30_description)/launch/description.launch">
+    <arg name="namespace" value="$(arg namespace)"/>
+  </include>
+
+  <group ns="$(arg namespace)">
+    <node if="$(arg gui)" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui"
+          name="joint_state_publisher_gui"/>
+    <node unless="$(arg gui)" pkg="joint_state_publisher" type="joint_state_publisher"
+          name="joint_state_publisher"/>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find x30_description)/rviz/x30.rviz"/>
+  </group>
+</launch>
