@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  noetic:
+    runs-on: ubuntu-latest
+    container:
+      image: ros:noetic-ros-base
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src/x30_ros
+
+      - name: Dependencies
+        run: |
+          source /opt/ros/noetic/setup.bash
+          apt-get update -qq
+          apt-get install -y -qq liburdfdom-tools > /dev/null
+          rosdep update --rosdistro noetic --include-eol-distros
+          # GUI tools of display.launch: not needed to build and test
+          rosdep install --from-paths src --ignore-src -y --rosdistro noetic \
+            --skip-keys "rviz joint_state_publisher_gui"
+
+      - name: Build and test
+        run: |
+          source /opt/ros/noetic/setup.bash
+          # run <name> <command...>: output to <name>.txt; on failure the error lines as one
+          # annotation (the job log itself is not readable through the API)
+          run() {
+            local name=$1; shift
+            if "$@" > "$name.txt" 2>&1; then cat "$name.txt"; return 0; fi
+            cat "$name.txt"
+            msg=$(grep -iE 'error|fail|assert|traceback|exception' "$name.txt" | tail -n 60 \
+              | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
+            echo "::error title=$name::$msg"
+            exit 1
+          }
+          run build catkin_make
+          run run_tests catkin_make run_tests
+          run test_results catkin_test_results build/test_results --verbose
+
+      - name: URDF
+        run: |
+          source /opt/ros/noetic/setup.bash
+          source devel/setup.bash
+          xacro src/x30_ros/x30_description/urdf/x30.urdf.xacro > x30.urdf
+          if ! check_urdf x30.urdf > check_urdf.txt 2>&1; then
+            cat check_urdf.txt
+            echo "::error title=check_urdf::$(tail -n 5 check_urdf.txt | tr '\n' ' ')"
+            exit 1
+          fi
+          cat check_urdf.txt
+
+      - name: Node output of the tests
+        if: failure()
+        run: |
+          [ -f run_tests.txt ] || exit 0
+          msg=$(grep -E 'WARN|ERROR|Traceback|Error|FAIL' run_tests.txt | tail -n 60 \
+            | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
+          echo "::error title=node output::$msg"
