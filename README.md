@@ -98,7 +98,7 @@ Under the namespace (`/x30/` by default). Details in [x30_driver](x30_driver/REA
 | pub | `imu` | `sensor_msgs/Imu` | attitude (reported in degrees), rates, acceleration; frame `imu_link` |
 | pub | `joint_states` | `sensor_msgs/JointState` | `FL_HipX_joint` ... `HR_Knee_joint`: position, velocity, effort (torque) |
 | pub | `battery` | `sensor_msgs/BatteryState` | `percentage` 0–1, voltage, current, capacity |
-| pub | `state` | `diagnostic_msgs/DiagnosticStatus` | `connected`, basic state, gait, control mode, `armed` / `disarmed_by`, `cmd_vel_ignored`, errors, body height, temperatures, elevation map and charging state, ... as key / values |
+| pub | `state` | `diagnostic_msgs/DiagnosticStatus` | `connected`, basic state, gait, control mode, `velocity` (the gate), `takeover`, `cmd_vel_ignored`, errors, body height, temperatures, elevation map and charging state, ... as key / values |
 | pub | `diagnostics` | `diagnostic_msgs/DiagnosticArray` | the same, plus link counters |
 
 **Services** (`std_srvs/Trigger`; each checks the robot's state first and succeeds only when the
@@ -122,14 +122,25 @@ larger one that falls inside the dead zone (655) goes out as 656. Lateral and ya
 motion state report is fresh: in torque-controlled standing they would change the body's pose.
 
 The robot obeys the driver's source in one control mode: `0x31` (default) in non-manual mode,
-`0x21` (the driver acting as the handheld) in manual mode. When `cmd_vel` asks for motion the
-driver switches to that mode (`auto_control_mode`) and starts stepping from torque-controlled
-standing (`auto_stepping`). It **holds back**, sending only zeros and no switches, after an
-operator takeover (the robot leaves that mode while `cmd_vel` moves it, e.g. manual on the
-handheld), after `stop_stepping`, `sit_down`, `emergency_stop` or a mode service that leaves that
-mode, and during an emergency stop or fall; it resumes once `cmd_vel` has been quiet or zero for
-`stop_burst_sec` (`state`: `armed`, `disarmed_by`). `velocity_mode: topic` republishes `cmd_vel`
-to `/cmd_vel_corrected` instead, for a driver on the X30's own ROS master (2.3).
+`0x21` (the driver acting as the handheld) in manual mode. An **episode** starts with the first
+motion command after `cmd_vel` was quiet for `cmd_timeout_sec + stop_burst_sec`; only then the
+driver switches to that mode (`auto_control_mode`, on a fresh report, 3 tries) and starts
+stepping from torque-controlled standing (`auto_stepping`, 3 tries), never again in that episode.
+The **gate** (`velocity` in `state`) stops all motion:
+
+- `takeover (manual mode)`: the robot left that mode after it was seen in it (the handheld, or
+  `manual_mode`), moving or not. It ends only when the robot reports that mode again (handed back
+  on the handheld, or `non_manual_mode`); nothing switches it back by itself.
+- `hold:sit_down`, `hold:emergency_stop`, `hold:stop_stepping`: until `stand_up` or
+  `start_stepping`.
+- `disarmed:emergency stop or fall`: while the robot reports it.
+- then `waiting for zero or quiet cmd_vel`: motion goes out again only once `cmd_vel` has been
+  zero (one message) or quiet (`cmd_timeout_sec`); a stream that kept running never drives off.
+
+Zeros go out for `stop_burst_sec` after the last motion or the gate closing, then nothing, even
+while zero Twists keep arriving; a `cmd_vel` with NaN or inf in any field is a stop.
+`velocity_mode: topic` republishes `cmd_vel` to `/cmd_vel_corrected` instead, for a driver on the
+X30's own ROS master (2.3).
 
 ## Verify on the real robot
 
@@ -155,9 +166,10 @@ On a new robot, in an open area, with someone at the handheld:
 7. **Speed scale:** in each gait you use, compare the `odom` twist with the command (Appendix B
    maximums). Run and silent are not in the table: measure their maximum speeds and give them
    in `gait_limits`, or the driver does not move the robot in them.
-8. **Takeover:** while `cmd_vel` drives the robot, switch to manual on the handheld: the robot
-   follows the handheld, `armed` turns `False` and the driver does not switch back until
-   `cmd_vel` has rested for `stop_burst_sec`.
+8. **Takeover:** while `cmd_vel` drives the robot, and again while it is zero, switch to manual
+   on the handheld: the robot follows the handheld and `velocity` reads `takeover (manual mode)`,
+   also after the autonomy pauses. Switch back to non-manual on the handheld (or call
+   `non_manual_mode`): the driver drives again after a zero or quiet `cmd_vel`.
 9. **Battery:** `battery` voltage and current against the handheld app. The current is in 10 mA
    from Deeprcs 1.10.19 (`battery_current_scale: 0.01`), in A before (`1.0`);
    `battery_voltage_scale` if the voltage is off.
@@ -180,10 +192,14 @@ On a new robot, in an open area, with someone at the handheld:
   shutdown the stream stops and zero axes go out three times.
 - `emergency_stop` is the soft emergency stop, sent three times; it answers once the robot
   reports emergency stop or fall. The handheld and the robot's own stop button always work too.
-- With `auto_control_mode` the driver switches the robot to the mode that obeys it when motion
-  starts, but never back after the operator left it (manual on the handheld, or `manual_mode`)
-  while it was moving, and never right after `stop_stepping`, `sit_down` or `emergency_stop`:
-  `cmd_vel` has to rest for `stop_burst_sec` first.
+- The driver switches the mode and starts stepping only at the start of an episode. After the
+  operator left the mode that obeys it (manual on the handheld, or `manual_mode`), it never
+  switches back: the takeover ends only when the robot reports that mode again. `stop_stepping`,
+  `sit_down` and `emergency_stop` hold until `stand_up` or `start_stepping`. After either, a
+  `cmd_vel` stream that kept running has to be zero or quiet once before the robot moves. No
+  timer re-arms anything.
+- Zeros go out for `stop_burst_sec` after motion, then nothing (zero Twists are not repeated: with
+  `0x21` they would fight a real handheld); NaN or inf in a `cmd_vel` field is a stop.
 - Axis commands only go out in the stepping state, with a fresh motion state report, in a gait
   with known speeds; `sit_down` refuses while the robot walks. Stand/sit and stepping are
   toggles: a second one is refused until the state shows the first.
@@ -205,11 +221,12 @@ python3 -m pytest x30_driver/test x30_description/test   # the ROS-free tests, w
 The codec is tested against the document: its worked example (Appendix A), every command code it
 prints, the struct sizes and field offsets of every layout, the gait speeds of Appendix B and the
 velocity formulas of 1.2.3.2. The velocity stream runs in a closed loop with the simulated robot
-in simulated time (takeover, holds after a stop, toggles, unknown gaits, control mode per
-prefix); the node runs against the simulated robot over UDP with stand-ins for rospy (every
-service), and a rostest runs it through its real ROS interface (reports, posture, `cmd_vel`
-signs, takeover, gaits, height, elevation map with the multi-frame exit, charging, emergency
-stop). The URDF test checks the official model's numbers and that the joints are the driver's.
+in simulated time (takeover latch while driving and while idle, episode switches, holds, zero
+burst, toggles, unknown gaits, control mode per prefix); the node runs against the simulated
+robot over UDP with stand-ins for rospy (every service, NaN, zero Twists), and a rostest runs it
+through its real ROS interface (reports, posture, `cmd_vel` signs, the takeover latch and its
+hand-back, the stop_stepping hold, gaits, height, elevation map with the multi-frame exit,
+charging, emergency stop). The URDF test checks the official model's numbers and that the joints are the driver's.
 CI runs all of it in a `ros:noetic-ros-base` container, plus `check_urdf`.
 
 The URDF and its meshes are Deep Robotics' model

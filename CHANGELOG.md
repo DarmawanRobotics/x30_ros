@@ -3,6 +3,40 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [0.3.0] - 2026-10-18
+
+One rule set for the Deep Robotics drivers (x30_ros, lite3_ros2, m20_ros2).
+
+### Fixed (safety)
+- `x30_driver`: a takeover is a latch. Whenever the robot leaves the control mode that obeys the
+  driver after it was seen in it, moving or not (the handheld, or `manual_mode`; with `0x21`
+  `non_manual_mode` and the velocity source services), nothing moves the robot and nothing
+  switches it back until the robot reports that mode again (handed back on the handheld, or the
+  target mode service). Before, a 0.5 s pause of the autonomy re-armed the driver, which then
+  switched the mode back, and a takeover while `cmd_vel` was zero was not seen.
+- `x30_driver`: `sit_down`, `emergency_stop` and `stop_stepping` hold until `stand_up` or
+  `start_stepping` (before: until `cmd_vel` rested for 0.5 s).
+
+### Changed
+- `x30_driver`: the automatic mode switch and stepping toggle happen only at the start of an
+  episode (the first motion command after `cmd_vel` was quiet for `cmd_timeout_sec +
+  stop_burst_sec`): the mode on a fresh report only, 3 tries 0.5 s apart; stepping from
+  torque-controlled standing, 3 tries through the toggle guard; never again in that episode.
+- `x30_driver`: after a takeover, a hold or an emergency stop or fall ends, motion goes out only
+  once `cmd_vel` has been zero (one message) or quiet (`cmd_timeout_sec`); this now applies to
+  the target mode service too, which no longer re-arms at once. No timer re-arms anything.
+- `x30_driver`: zeros go out for `stop_burst_sec` after the last motion or after the gate closed,
+  then nothing, even while zero Twists keep arriving (axis and topic mode).
+- `x30_driver`: a `cmd_vel` with NaN or inf in any of its six fields is a stop (zeros), with a
+  throttled warning; before, only that component was dropped.
+- `x30_driver`: `state` shows the gate as `velocity` (`driving`, `idle`, `hold:<service>`,
+  `takeover (<mode> mode)`, `disarmed:<reason>`, `waiting for zero or quiet cmd_vel`) and who
+  took over as `takeover`, replacing `armed` and `disarmed_by`; WARN while motion is asked for
+  and held back.
+
+### Removed
+- `x30_driver`: the parameters `mode_refresh_sec` and `stepping_retry_sec`.
+
 ## [0.2.0] - 2026-10-18
 
 ### Fixed (safety)
