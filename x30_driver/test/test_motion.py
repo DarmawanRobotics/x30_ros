@@ -456,11 +456,13 @@ class TestZeros(unittest.TestCase):
                                       if s.twist is not None], [ZERO] * 25)
 
     def test_one_zero_with_a_burst_shorter_than_a_period(self):
-        bench = Bench(view(), velocity=VelocityConfig(stop_burst_sec=0.01))
-        bench.run(0.5, FORWARD)
-        start = bench.t
-        bench.run(2.0, STOP)
-        self.assertEqual(bench.axes(start), [NO_AXES])
+        for burst in (0.01, 0.0):
+            with self.subTest(stop_burst_sec=burst):
+                bench = Bench(view(), velocity=VelocityConfig(stop_burst_sec=burst))
+                bench.run(0.5, FORWARD)
+                start = bench.t
+                bench.run(2.0, STOP)
+                self.assertEqual(bench.axes(start), [NO_AXES])
 
     def test_zeros_while_the_motion_report_is_stale(self):
         """Unknown state at the stop, or while driving: the zeros go out anyway."""
