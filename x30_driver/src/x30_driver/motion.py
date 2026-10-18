@@ -1,4 +1,21 @@
-"""Velocity policy of the X30 driver: what goes to the motion host, and when. No ROS."""
+"""
+Velocity stream of the X30 driver: what goes to the motion host, and when. No ROS.
+
+The rules (shared by the Deep Robotics drivers):
+
+- An episode starts with the first motion command after cmd_vel was quiet for
+  cmd_timeout_sec + stop_burst_sec (or the first ever). Only then, and only with the gate open,
+  the driver switches the robot to the control mode that obeys it and starts stepping from
+  torque-controlled standing: a few tries each, never again in that episode.
+- The gate closes on a hold (sit_down, emergency_stop, stop_stepping; released by stand_up or
+  start_stepping), on a takeover (the robot leaves that control mode after it was seen in it;
+  the latch ends only when the robot reports that mode again) and while the robot reports an
+  emergency stop or fall. After it opens again, motion goes out only once cmd_vel has been zero
+  (one message) or quiet (cmd_timeout_sec): a stream that kept running never drives the robot
+  off. Nothing re-arms on a timer.
+- Zeros go out for stop_burst_sec after the last non-zero command or after the gate closed, then
+  nothing, even while zero Twists keep arriving.
+"""
 
 import math
 import threading
@@ -9,6 +26,10 @@ from x30_driver import protocol as p
 
 EPSILON = p.VELOCITY_EPSILON
 ZERO = (0.0, 0.0, 0.0)
+ZERO_AXES = (0, 0, 0)
+MODE_TRIES = 3          # control mode requests at the start of an episode
+MODE_TRY_SEC = 0.5      # between them
+STEPPING_TRIES = 3      # stepping toggles at the start of an episode (spaced by the ToggleGuard)
 
 
 @dataclass
@@ -39,33 +60,45 @@ def is_motion(cmd: Tuple[float, float, float]) -> bool:
     return any(abs(v) >= EPSILON for v in cmd)
 
 
+def mode_name(non_manual: bool) -> str:
+    """Return the readable name of a control mode."""
+    return 'non-manual' if non_manual else 'manual'
+
+
 class VelocityPolicy:
-    """Streams cmd_vel while it is fresh, then zeros for a moment, then nothing."""
+    """The last cmd_vel: clamped, how old, and the axis values it means in a gait."""
 
     def __init__(self, config: VelocityConfig):
-        """Start idle: nothing is sent before the first command."""
+        """No command yet."""
         self.config = config
         self._cmd = ZERO
         self._stamp = None  # type: Optional[float]
         self._last_motion = None  # type: Optional[float]
 
     def command(self, vx: float, vy: float, wz: float, now: float):
-        """Take a new cmd_vel (base_link, REP-103), clamped to the configured limits."""
+        """Take a cmd_vel (base_link, REP-103); a non-finite component makes it a stop."""
         c = self.config
+        if not all(math.isfinite(v) for v in (vx, vy, wz)):
+            vx = vy = wz = 0.0
         self._cmd = (clamp(vx, abs(c.max_vx)), clamp(vy, abs(c.max_vy)), clamp(wz, abs(c.max_wz)))
         self._stamp = now
         if is_motion(self._cmd):
             self._last_motion = now
 
-    def stop(self, now: float):
-        """Drop the current command; zeros are streamed until the stream runs out."""
-        self._cmd = ZERO
-        self._stamp = now
-
     @property
     def current(self) -> Tuple[float, float, float]:
         """Return the last command after clamping."""
         return self._cmd
+
+    @property
+    def stamp(self) -> Optional[float]:
+        """Return when the last command arrived, None before the first."""
+        return self._stamp
+
+    @property
+    def last_motion(self) -> Optional[float]:
+        """Return when the last non-zero command arrived."""
+        return self._last_motion
 
     def fresh(self, now: float) -> bool:
         """Return True while the last command is younger than the timeout."""
@@ -78,22 +111,6 @@ class VelocityPolicy:
     def recently_moved(self, now: float, window: float) -> bool:
         """Return True when a non-zero command arrived within the window."""
         return self._last_motion is not None and now - self._last_motion <= window
-
-    def sent_command(self, now: float) -> Tuple[float, float, float]:
-        """Return what the stream sends now: the command, or zeros."""
-        return self._cmd if self.fresh(now) else ZERO
-
-    def tick(self, now: float) -> Optional[Tuple[float, float, float]]:
-        """Return the velocity to send this period, or None for silence."""
-        c = self.config
-        if self._stamp is None:
-            return None
-        age = now - self._stamp
-        if age <= c.cmd_timeout_sec:
-            return self._cmd
-        if age <= c.cmd_timeout_sec + c.stop_burst_sec:
-            return ZERO
-        return None
 
     def limits(self, gait_state: Optional[int], crawl: bool = False) -> Optional[p.GaitLimits]:
         """Return a gait's speed limits, None when neither Appendix B nor gait_limits has it."""
@@ -114,113 +131,14 @@ class VelocityPolicy:
 
 @dataclass
 class AutoConfig:
-    """Mode and stepping switches made on the way into and out of motion."""
+    """Mode and stepping switches made at the start of an episode."""
 
     auto_control_mode: bool = True
     auto_stepping: bool = True
-    mode_refresh_sec: float = 2.0
-    stepping_retry_sec: float = 2.0
     idle_stop_stepping_sec: float = 0.0  # 0: never
     # the mode in which the robot obeys this driver: non-manual for the autonomous prefix 0x31,
     # manual for 0x21 (the driver then acts as the handheld)
     target_non_manual: bool = True
-    rearm_quiet_sec: float = 0.5         # disarmed until cmd_vel was quiet or zero this long
-
-
-def mode_name(non_manual: bool) -> str:
-    """Return the readable name of a control mode."""
-    return 'non-manual' if non_manual else 'manual'
-
-
-class AutoSwitch:
-    """
-    Decides the control mode and stepping commands around motion, and when to hold back.
-
-    Disarmed, it sends nothing and the velocity stream sends only zeros: after an operator
-    takeover (the robot leaves the target mode while cmd_vel moves it), after a stop requested
-    through a service (disarm()), and while the robot is in emergency stop or fall. It arms
-    again once cmd_vel has been quiet or zero for rearm_quiet_sec, or by arm().
-    """
-
-    def __init__(self, config: AutoConfig):
-        """Armed, nothing sent yet."""
-        self.config = config
-        self.armed = True
-        self.disarm_reason = ''
-        self._disarmed_at = None  # type: Optional[float]
-        self._target_seen = False
-        self._mode_sent = None  # type: Optional[float]
-        self._stepping_sent = None  # type: Optional[float]
-        self._last_motion = None  # type: Optional[float]
-        self._last_stepping_motion = None  # type: Optional[float]
-
-    @property
-    def mode_command(self) -> int:
-        """Return the command base that puts the robot in the target mode."""
-        return p.NON_MANUAL_MODE if self.config.target_non_manual else p.MANUAL_MODE
-
-    def disarm(self, now: float, reason: str):
-        """Hold back until cmd_vel has been quiet for rearm_quiet_sec (or arm())."""
-        self.armed = False
-        self.disarm_reason = reason
-        self._disarmed_at = now
-
-    def arm(self):
-        """Arm at once (an explicit request for the target mode)."""
-        self.armed = True
-        self.disarm_reason = ''
-
-    @staticmethod
-    def _due(sent: Optional[float], now: float, period: float) -> bool:
-        return sent is None or now - sent >= period
-
-    def decide(self, now: float, moving: bool, basic_state: Optional[int],
-               non_manual: Optional[bool]) -> List[int]:
-        """
-        Return the command bases to send now.
-
-        moving: a fresh non-zero cmd_vel. basic_state / non_manual: from fresh reports, None
-        when unknown. The target mode is asked for while the robot is not known to be in it;
-        the stepping toggle only goes out from torque-controlled standing (it is a toggle).
-        """
-        c = self.config
-        if moving:
-            self._last_motion = now
-        if basic_state == p.STATE_EMERGENCY:
-            self.disarm(now, 'emergency stop or fall')
-        in_target = None if non_manual is None else bool(non_manual) == c.target_non_manual
-        if in_target:
-            self._target_seen = True
-        elif in_target is False and self._target_seen:
-            self._target_seen = False
-            if moving and self.armed:
-                self.disarm(now, 'operator took over ({} mode)'.format(
-                    mode_name(not c.target_non_manual)))
-        if not self.armed:
-            quiet_since = max(self._disarmed_at, self._last_motion or self._disarmed_at)
-            if moving or basic_state == p.STATE_EMERGENCY or now - quiet_since < c.rearm_quiet_sec:
-                return []
-            self.arm()
-        out = []
-        if moving:
-            self._last_stepping_motion = now
-            if c.auto_control_mode and in_target is not True and self._due(
-                    self._mode_sent, now, c.mode_refresh_sec):
-                out.append(self.mode_command)
-                self._mode_sent = now
-            if c.auto_stepping and basic_state == p.STATE_TORQUE_STANDING and self._due(
-                    self._stepping_sent, now, c.stepping_retry_sec):
-                out.append(p.STEPPING)
-                self._stepping_sent = now
-            return out
-        if (c.idle_stop_stepping_sec > 0.0 and basic_state == p.STATE_STEPPING
-                and self._last_stepping_motion is not None
-                and now - self._last_stepping_motion >= c.idle_stop_stepping_sec
-                and self._due(self._stepping_sent, now, c.stepping_retry_sec)):
-            out.append(p.STEPPING)
-            self._stepping_sent = now
-            self._last_stepping_motion = None  # once per motion: stepping started by hand stays
-        return out
 
 
 class ToggleGuard:
@@ -288,40 +206,121 @@ class StreamStep:
 
 
 class VelocityStream:
-    """cmd_vel watchdog, automatic switches and gating together: one step per period."""
+    """cmd_vel watchdog, episode switches, gate and zero burst: one step per period."""
 
-    def __init__(self, velocity: VelocityConfig, auto: AutoConfig, mode: str = 'axis'):
+    def __init__(self, velocity: VelocityConfig, auto: AutoConfig, mode: str = 'axis',
+                 toggle_timeout_sec: float = 5.0):
         """mode: 'axis' (axis commands) or 'topic' (republish the velocity)."""
         self.policy = VelocityPolicy(velocity)
-        self.auto = AutoSwitch(auto)
+        self.config = velocity
+        self.auto = auto
         self.mode = mode
+        self.toggles = ToggleGuard(toggle_timeout_sec)
         self._lock = threading.Lock()
+        self._hold = None  # type: Optional[str]
+        self._latch = None  # type: Optional[str]
+        self._end_on_target = False
+        self._target_seen = False
+        self._disarm = None  # type: Optional[str]
+        self._armed = True
+        self._episode = False
+        self._episode_new = False
+        self._mode_phase = False
+        self._mode_tries = 0
+        self._mode_try_at = None  # type: Optional[float]
+        self._step_phase = False
+        self._step_tries = 0
+        self._drove = False
+        self._burst_until = None  # type: Optional[float]
+
+    # -------------------------------------------------------------- inputs
 
     def command(self, vx: float, vy: float, wz: float, now: float):
-        """Take a cmd_vel message."""
+        """Take a cmd_vel message (a non-finite component makes it a stop)."""
         with self._lock:
+            previous = self.policy.stamp
             self.policy.command(vx, vy, wz, now)
+            if not is_motion(self.policy.current):
+                if self._open():
+                    self._armed = True  # a zero after the release: what follows is no stale stream
+                return
+            c = self.config
+            if previous is None or now - previous > c.cmd_timeout_sec + c.stop_burst_sec:
+                self._end_episode()
+            if self._open() and self._armed and not self._episode:
+                self._episode = True
+                self._episode_new = True
 
-    def stop(self, now: float):
-        """Drop the current command (zeros, then silence)."""
+    def hold(self, now: float, service: str):
+        """Hold until release() (stand_up, start_stepping) and then a zero or quiet cmd_vel."""
         with self._lock:
-            self.policy.stop(now)
+            self._hold = service
+            self._close(now)
 
-    def disarm(self, now: float, reason: str):
-        """Hold back (see AutoSwitch) and drop the current command."""
+    def release(self) -> bool:
+        """End a hold; return True when there was one."""
         with self._lock:
-            self.auto.disarm(now, reason)
-            self.policy.stop(now)
+            held, self._hold = self._hold is not None, None
+            return held
 
-    def arm(self):
-        """Arm at once."""
+    def latch(self, now: float, reason: str):
+        """Take the robot out of the mode that obeys the driver: a takeover latch."""
         with self._lock:
-            self.auto.arm()
+            if self._latch is None:
+                self._latch = reason
+                self._end_on_target = False
+                self._close(now)
+
+    def request_handback(self):
+        """Note that the target mode was asked for: the latch ends once the robot reports it."""
+        with self._lock:
+            if self._latch is not None:
+                self._end_on_target = True
+
+    # -------------------------------------------------------------- state
+
+    def _open(self) -> bool:
+        return self._hold is None and self._latch is None and self._disarm is None
+
+    def _close(self, now: float):
+        self._armed = False
+        self._end_episode()
+        self._burst_until = now + self.config.stop_burst_sec
+
+    def _end_episode(self):
+        self._episode = self._episode_new = False
+        self._mode_phase = self._step_phase = False
+
+    def _gate(self, now: float) -> str:
+        if self._hold is not None:
+            return 'hold:' + self._hold
+        if self._latch is not None:
+            return 'takeover ({} mode)'.format(mode_name(not self.auto.target_non_manual))
+        if self._disarm is not None:
+            return 'disarmed:' + self._disarm
+        if not self._armed:
+            return 'waiting for zero or quiet cmd_vel'
+        return 'driving' if self.policy.moving(now) else 'idle'
+
+    def gate(self, now: float) -> str:
+        """
+        Return the gate as the state shows it.
+
+        driving, idle, hold:<service>, takeover (<mode> mode), disarmed:<reason> or waiting for
+        zero or quiet cmd_vel.
+        """
+        with self._lock:
+            return self._gate(now)
+
+    def held(self, now: float) -> bool:
+        """Return True while cmd_vel asks for motion and the gate holds it back."""
+        with self._lock:
+            return self.policy.moving(now) and not (self._open() and self._armed)
 
     @property
-    def armed(self) -> bool:
-        """Return True while motion commands may go out."""
-        return self.auto.armed
+    def latch_reason(self) -> Optional[str]:
+        """Return why the takeover latch is on, None when it is off."""
+        return self._latch
 
     def recently_moved(self, now: float, window: float) -> bool:
         """Return True when a non-zero cmd_vel arrived within the window."""
@@ -329,43 +328,128 @@ class VelocityStream:
             return self.policy.recently_moved(now, window)
 
     def sent_command(self, now: float) -> Tuple[float, float, float]:
-        """Return the velocity the stream is sending (zeros while disarmed)."""
+        """Return the velocity that goes out: the command while driving, zeros otherwise."""
         with self._lock:
-            return self.policy.sent_command(now) if self.auto.armed else ZERO
+            if self.policy.moving(now) and self._open() and self._armed:
+                return self.policy.current
+            return ZERO
+
+    # -------------------------------------------------------------- one period
 
     def step(self, now: float, view: RobotView) -> StreamStep:
         """Return the commands, axis values or twist of this period."""
         with self._lock:
+            c = self.config
+            target = self.auto.target_non_manual
+            in_target = None if view.non_manual is None else bool(view.non_manual) == target
+            if view.basic_state == p.STATE_EMERGENCY:
+                if self._disarm is None:
+                    self._disarm = 'emergency stop or fall'
+                    self._close(now)
+            elif view.basic_state is not None:
+                self._disarm = None  # the report left the emergency state
+            if in_target:
+                if self._latch is not None and self._end_on_target:
+                    self._latch = None  # handed back: the robot reports the target mode again
+                self._target_seen = True
+            elif in_target is False:
+                if self._latch is not None:
+                    self._end_on_target = True
+                elif self._target_seen:
+                    self._latch = 'operator took over ({} mode)'.format(mode_name(not target))
+                    self._end_on_target = True
+                    self._close(now)
+                self._target_seen = False
+            stamp = self.policy.stamp
+            if self._open() and not self._armed and not self.policy.fresh(now):
+                self._armed = True  # cmd_vel went quiet after the release
+            if self._episode and stamp is not None and (
+                    now - stamp > c.cmd_timeout_sec + c.stop_burst_sec):
+                self._end_episode()
             moving = self.policy.moving(now)
-            cmd = self.policy.tick(now)
-            step = StreamStep(self.auto.decide(now, moving, view.basic_state, view.non_manual))
-            if cmd is None:
-                return step
-            if not self.auto.armed:
-                cmd = ZERO
-                if moving:
-                    step.ignored = 'disarmed: {} (until cmd_vel is quiet for {:.1f} s)'.format(
-                        self.auto.disarm_reason, self.auto.config.rearm_quiet_sec)
-            if self.mode == 'topic':
-                step.twist = cmd
-                return step
-            if view.basic_state != p.STATE_STEPPING:
-                if moving and not step.ignored:
-                    step.ignored = ('no fresh motion state report' if view.basic_state is None
-                                    else 'not stepping ({})'.format(
-                                        p.name_of(p.BASIC_STATES, view.basic_state)))
-                return step
-            axes = self.policy.axes(cmd, view.gait_state, view.crawl)
-            if axes is None:
-                step.axes = (0, 0, 0)
-                if moving and not step.ignored:
-                    step.ignored = 'no speed limits for the {} gait (gait_limits)'.format(
-                        p.name_of(p.GAIT_STATES, view.gait_state))
-                return step
+            step = StreamStep(self._switches(now, view, in_target, moving))
+            self._emit(now, view, in_target, moving, step)
+            return step
+
+    def _switches(self, now: float, view: RobotView, in_target: Optional[bool],
+                  moving: bool) -> List[int]:
+        """Return the mode and stepping commands: at the start of an episode only."""
+        a = self.auto
+        out = []
+        if not (self._open() and self._armed):
+            return out
+        if self._episode:
+            if self._episode_new:
+                self._episode_new = False
+                # decided once: target mode only on a fresh report that the robot is not in it
+                self._mode_phase = a.auto_control_mode and in_target is False
+                self._mode_tries, self._mode_try_at = 0, None
+                self._step_phase = (a.auto_stepping
+                                    and view.basic_state == p.STATE_TORQUE_STANDING)
+                self._step_tries = 0
+            if self._mode_phase:
+                if in_target:
+                    self._mode_phase = False
+                elif in_target is False and (self._mode_try_at is None
+                                             or now - self._mode_try_at >= MODE_TRY_SEC):
+                    if self._mode_tries < MODE_TRIES:
+                        out.append(p.NON_MANUAL_MODE if a.target_non_manual else p.MANUAL_MODE)
+                        self._mode_tries += 1
+                        self._mode_try_at = now
+                    else:
+                        self._mode_phase = False  # gave up
+            if self._step_phase:
+                state = view.basic_state
+                if state == p.STATE_TORQUE_STANDING:
+                    if self._step_tries < STEPPING_TRIES:
+                        if self.toggles.request(now, p.STEPPING, state):
+                            out.append(p.STEPPING)
+                            self._step_tries += 1
+                    elif self.toggles.pending(now, state) is None:
+                        self._step_phase = False  # gave up
+                elif state is not None:
+                    self._step_phase = False  # stepping, or somewhere stepping cannot start
+        if (a.idle_stop_stepping_sec > 0.0 and self._drove and not moving
+                and view.basic_state == p.STATE_STEPPING
+                and self.policy.last_motion is not None
+                and now - self.policy.last_motion >= a.idle_stop_stepping_sec
+                and self.toggles.request(now, p.STEPPING, view.basic_state)):
+            out.append(p.STEPPING)
+            self._drove = False  # once per drive: stepping started by hand stays
+        return out
+
+    def _emit(self, now: float, view: RobotView, in_target: Optional[bool], moving: bool,
+              step: StreamStep):
+        """Fill in the axis values or the twist, and why cmd_vel does not move the robot."""
+        c = self.config
+        driving = moving and self._open() and self._armed
+        burst = self._burst_until is not None and now <= self._burst_until
+        if moving and not driving:
+            step.ignored = self._gate(now)
+        want = self.policy.current if driving else None
+        if self.mode == 'topic':
+            if want is not None:
+                step.twist = want
+                self._burst_until = now + c.stop_burst_sec
+            elif burst:
+                step.twist = ZERO
+            return
+        if view.basic_state != p.STATE_STEPPING:
+            if want is not None:
+                step.ignored = ('no fresh motion state report' if view.basic_state is None
+                                else 'not stepping ({})'.format(
+                                    p.name_of(p.BASIC_STATES, view.basic_state)))
+            return
+        axes = None if want is None else self.policy.axes(want, view.gait_state, view.crawl)
+        if want is not None and axes is None:
+            step.ignored = 'no speed limits for the {} gait (gait_limits)'.format(
+                p.name_of(p.GAIT_STATES, view.gait_state))
+        if axes is not None and axes != ZERO_AXES:
             step.axes = axes
-            target = self.auto.config.target_non_manual
-            if moving and not step.ignored and view.non_manual is not None and (
-                    bool(view.non_manual) != target):
+            self._burst_until = now + c.stop_burst_sec
+            self._drove = True
+            if in_target is False:
                 step.ignored = '{} mode: the robot obeys the {} side'.format(
                     mode_name(view.non_manual), 'perception' if view.non_manual else 'handheld')
-            return step
+        elif burst:
+            step.axes = ZERO_AXES

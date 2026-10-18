@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Velocity policy, automatic mode / stepping switches and the report conversions."""
+"""Velocity policy and stream (episodes, takeover latch, holds, zeros) and the conversions."""
 
 import math
 import os
@@ -11,7 +11,6 @@ from x30_driver import convert  # noqa: E402
 from x30_driver import protocol as p  # noqa: E402
 from x30_driver.motion import (  # noqa: E402
     AutoConfig,
-    AutoSwitch,
     RobotView,
     ToggleGuard,
     VelocityConfig,
@@ -20,47 +19,81 @@ from x30_driver.motion import (  # noqa: E402
     ZERO,
 )
 
+DT = 0.02  # cmd_rate_hz 50
+FORWARD = (0.3, 0.0, 0.0)
+STOP = (0.0, 0.0, 0.0)
+NO_AXES = (0, 0, 0)
+
+
+def view(state=p.STATE_STEPPING, non_manual=True, gait=p.GAIT_STATE_WALK):
+    """Return what fresh reports say (non_manual None: no fresh RcsData)."""
+    return RobotView(state, gait, non_manual, False)
+
+
+class Bench:
+    """The stream stepped at 50 Hz against a robot view the test sets."""
+
+    def __init__(self, robot, target_non_manual=True, mode='axis', **auto):
+        self.stream = VelocityStream(VelocityConfig(),
+                                     AutoConfig(target_non_manual=target_non_manual, **auto),
+                                     mode=mode)
+        self.view = robot
+        self.t = 0.0
+        self.steps = []  # (time, StreamStep)
+
+    def run(self, seconds, cmd=None):
+        """Step for this long; cmd: published every period, None: nothing published."""
+        end = self.t + seconds - 1e-9
+        while self.t < end:
+            self.t = round(self.t + DT, 6)
+            if cmd is not None:
+                self.stream.command(*cmd, self.t)
+            self.steps.append((self.t, self.stream.step(self.t, self.view)))
+        return self
+
+    def since(self, t):
+        return [step for when, step in self.steps if when > t]
+
+    def commands(self, t=-1.0):
+        return [c for step in self.since(t) for c in step.commands]
+
+    def axes(self, t=-1.0):
+        return [step.axes for step in self.since(t) if step.axes is not None]
+
+    def moving_axes(self, t=-1.0):
+        return [a for a in self.axes(t) if a != NO_AXES]
+
+    @property
+    def gate(self):
+        return self.stream.gate(self.t)
+
+    @property
+    def last(self):
+        return self.steps[-1][1]
+
 
 class TestVelocityPolicy(unittest.TestCase):
     def setUp(self):
         self.policy = VelocityPolicy(VelocityConfig(max_vx=1.0, max_vy=0.5, max_wz=1.0,
                                                     cmd_timeout_sec=0.5, stop_burst_sec=0.5))
 
-    def test_silent_before_the_first_command(self):
-        self.assertIsNone(self.policy.tick(0.0))
+    def test_fresh_and_moving(self):
         self.assertFalse(self.policy.moving(0.0))
-        self.assertEqual(self.policy.sent_command(0.0), ZERO)
-
-    def test_watchdog(self):
-        """The command while fresh, then zeros for stop_burst_sec, then nothing."""
         self.policy.command(0.3, 0.1, -0.2, now=10.0)
-        self.assertEqual(self.policy.tick(10.4), (0.3, 0.1, -0.2))
-        self.assertTrue(self.policy.moving(10.4))
-        self.assertEqual(self.policy.tick(10.6), ZERO)
+        self.assertTrue(self.policy.moving(10.5))
         self.assertFalse(self.policy.moving(10.6))
-        self.assertEqual(self.policy.sent_command(10.6), ZERO)
-        self.assertEqual(self.policy.tick(10.9), ZERO)
-        self.assertIsNone(self.policy.tick(11.1))
+        self.assertTrue(self.policy.recently_moved(10.6, 1.0))
+        self.policy.command(0.0, 0.0005, 0.0, now=11.0)  # below the epsilon: no motion
+        self.assertTrue(self.policy.fresh(11.1))
+        self.assertFalse(self.policy.moving(11.1))
 
-    def test_clamp_and_non_finite(self):
-        self.policy.command(3.0, -2.0, float('nan'), now=0.0)
-        self.assertEqual(self.policy.current, (1.0, -0.5, 0.0))
-        self.policy.command(float('inf'), 0.0, -9.0, now=0.0)
-        self.assertEqual(self.policy.current, (0.0, 0.0, -1.0))
-
-    def test_stop_streams_zeros(self):
-        self.policy.command(0.5, 0.0, 0.0, now=0.0)
-        self.policy.stop(now=0.1)
-        self.assertEqual(self.policy.tick(0.2), ZERO)
-        self.assertFalse(self.policy.moving(0.2))
-        self.assertTrue(self.policy.recently_moved(0.2, 1.0))
-        self.assertFalse(self.policy.recently_moved(1.5, 1.0))
-
-    def test_zero_command_is_not_motion(self):
-        self.policy.command(0.0, 0.0005, 0.0, now=0.0)
-        self.assertTrue(self.policy.fresh(0.1))
-        self.assertFalse(self.policy.moving(0.1))
-        self.assertFalse(self.policy.recently_moved(0.1, 1.0))
+    def test_clamp_and_non_finite_is_a_stop(self):
+        self.policy.command(3.0, -2.0, 0.4, now=0.0)
+        self.assertEqual(self.policy.current, (1.0, -0.5, 0.4))
+        self.policy.command(0.3, float('nan'), 0.4, now=0.1)
+        self.assertEqual(self.policy.current, ZERO)
+        self.policy.command(float('inf'), 0.0, 0.0, now=0.2)
+        self.assertEqual(self.policy.current, ZERO)
 
     def test_axes_follow_the_gait(self):
         """Scaled by the current gait's Appendix B speeds; crawl halves walk forward."""
@@ -92,117 +125,6 @@ class TestVelocityPolicy(unittest.TestCase):
         self.assertEqual(self.policy.axes((5e-4, -5e-4, 9e-4), p.GAIT_STATE_WALK), (0, 0, 0))
 
 
-class TestAutoSwitch(unittest.TestCase):
-    def setUp(self):
-        self.auto = AutoSwitch(AutoConfig(mode_refresh_sec=2.0, stepping_retry_sec=2.0))
-
-    def test_idle_sends_nothing(self):
-        self.assertEqual(self.auto.decide(0.0, False, p.STATE_TORQUE_STANDING, False), [])
-
-    def test_motion_from_torque_standing(self):
-        """Non-manual mode and the stepping toggle, each rate-limited."""
-        self.assertEqual(self.auto.decide(0.0, True, p.STATE_TORQUE_STANDING, False),
-                         [p.NON_MANUAL_MODE, p.STEPPING])
-        self.assertEqual(self.auto.decide(1.0, True, p.STATE_TORQUE_STANDING, False), [])
-        self.assertEqual(self.auto.decide(2.0, True, p.STATE_TORQUE_STANDING, False),
-                         [p.NON_MANUAL_MODE, p.STEPPING])
-
-    def test_no_toggle_outside_torque_standing(self):
-        """The stepping command is a toggle: never sent while stepping or sitting."""
-        for state in (p.STATE_STEPPING, p.STATE_SITTING, p.STATE_INITIAL_STANDING,
-                      p.STATE_EMERGENCY, None):
-            auto = AutoSwitch(AutoConfig())
-            self.assertNotIn(p.STEPPING, auto.decide(0.0, True, state, True), state)
-
-    def test_mode_only_while_not_reported(self):
-        self.assertEqual(self.auto.decide(0.0, True, p.STATE_STEPPING, True), [])
-        self.assertEqual(self.auto.decide(0.0, True, p.STATE_STEPPING, None),
-                         [p.NON_MANUAL_MODE])
-
-    def test_switches_can_be_disabled(self):
-        auto = AutoSwitch(AutoConfig(auto_control_mode=False, auto_stepping=False))
-        self.assertEqual(auto.decide(0.0, True, p.STATE_TORQUE_STANDING, False), [])
-
-    def test_operator_takeover_latches(self):
-        """Non-manual seen, then manual while moving: no mode command until cmd_vel rests."""
-        auto = self.auto
-        self.assertEqual(auto.decide(0.0, True, p.STATE_STEPPING, False), [p.NON_MANUAL_MODE])
-        self.assertEqual(auto.decide(0.1, True, p.STATE_STEPPING, True), [])
-        self.assertEqual(auto.decide(0.2, True, p.STATE_STEPPING, False), [])  # handheld
-        self.assertFalse(auto.armed)
-        self.assertIn('took over', auto.disarm_reason)
-        for t in (2.5, 5.0, 10.0):  # cmd_vel keeps coming: never reverted
-            self.assertEqual(auto.decide(t, True, p.STATE_STEPPING, False), [])
-        self.assertEqual(auto.decide(10.3, False, p.STATE_STEPPING, False), [])  # resting
-        self.assertFalse(auto.armed)
-        self.assertEqual(auto.decide(10.6, False, p.STATE_STEPPING, False), [])
-        self.assertTrue(auto.armed)  # quiet for rearm_quiet_sec
-        self.assertEqual(auto.decide(11.0, True, p.STATE_STEPPING, False), [p.NON_MANUAL_MODE])
-
-    def test_manual_at_start_is_not_a_takeover(self):
-        """Before the robot was seen in the target mode, manual is just where it starts."""
-        self.assertEqual(self.auto.decide(0.0, True, p.STATE_STEPPING, False),
-                         [p.NON_MANUAL_MODE])
-        self.assertEqual(self.auto.decide(0.5, True, p.STATE_STEPPING, False), [])
-        self.assertTrue(self.auto.armed)
-        # leaving the mode while idle does not latch either
-        self.auto.decide(1.0, False, p.STATE_STEPPING, True)
-        self.auto.decide(1.5, False, p.STATE_STEPPING, False)
-        self.assertTrue(self.auto.armed)
-
-    def test_disarm_holds_until_quiet(self):
-        """A service stop (disarm) is not undone by the next cmd_vel."""
-        auto = self.auto
-        auto.disarm(0.0, 'stop_stepping')
-        for t in (0.1, 0.4, 3.0):
-            self.assertEqual(auto.decide(t, True, p.STATE_TORQUE_STANDING, True), [])
-        self.assertEqual(auto.decide(3.3, False, p.STATE_TORQUE_STANDING, True), [])
-        self.assertEqual(auto.decide(3.6, False, p.STATE_TORQUE_STANDING, True), [])
-        self.assertTrue(auto.armed)
-        self.assertEqual(auto.decide(3.7, True, p.STATE_TORQUE_STANDING, True), [p.STEPPING])
-        quiet = AutoSwitch(AutoConfig())
-        quiet.disarm(0.0, 'sit_down')  # no cmd_vel at all: armed after the quiet time
-        self.assertEqual(quiet.decide(0.2, False, p.STATE_SITTING, None), [])
-        self.assertFalse(quiet.armed)
-        quiet.decide(0.6, False, p.STATE_SITTING, None)
-        self.assertTrue(quiet.armed)
-        quiet.disarm(1.0, 'manual_mode')
-        quiet.arm()
-        self.assertEqual((quiet.armed, quiet.disarm_reason), (True, ''))
-
-    def test_emergency_disarms(self):
-        auto = self.auto
-        for t in (0.0, 1.0, 5.0):
-            self.assertEqual(auto.decide(t, False, p.STATE_EMERGENCY, True), [])
-            self.assertFalse(auto.armed)
-        self.assertEqual(auto.decide(5.2, False, p.STATE_SITTING, True), [])
-        self.assertFalse(auto.armed)  # quiet time counts from the last emergency report
-        auto.decide(5.6, False, p.STATE_SITTING, True)
-        self.assertTrue(auto.armed)
-
-    def test_target_follows_the_prefix(self):
-        """With 0x21 (acting as the handheld) the robot obeys in manual mode."""
-        auto = AutoSwitch(AutoConfig(target_non_manual=False))
-        self.assertEqual(auto.mode_command, p.MANUAL_MODE)
-        self.assertEqual(auto.decide(0.0, True, p.STATE_STEPPING, True), [p.MANUAL_MODE])
-        self.assertEqual(auto.decide(0.1, True, p.STATE_STEPPING, False), [])
-        self.assertEqual(auto.decide(0.2, True, p.STATE_STEPPING, True), [])  # takeover
-        self.assertIn('non-manual', auto.disarm_reason)
-
-    def test_idle_stop_stepping(self):
-        """Off by default; with a delay, stepping stops once the robot stood idle that long."""
-        self.auto.decide(0.0, True, p.STATE_STEPPING, True)
-        self.assertEqual(self.auto.decide(60.0, False, p.STATE_STEPPING, True), [])
-        auto = AutoSwitch(AutoConfig(idle_stop_stepping_sec=5.0))
-        self.assertEqual(auto.decide(0.0, False, p.STATE_STEPPING, True), [])  # never moved
-        auto.decide(1.0, True, p.STATE_STEPPING, True)
-        self.assertEqual(auto.decide(4.0, False, p.STATE_STEPPING, True), [])
-        self.assertEqual(auto.decide(6.0, False, p.STATE_STEPPING, True), [p.STEPPING])
-        self.assertEqual(auto.decide(7.0, False, p.STATE_TORQUE_STANDING, True), [])
-        # stepping started again by hand (start_stepping) without motion is left alone
-        self.assertEqual(auto.decide(20.0, False, p.STATE_STEPPING, True), [])
-
-
 class TestToggleGuard(unittest.TestCase):
     def test_one_toggle_until_the_state_shows_it(self):
         guard = ToggleGuard(timeout_sec=5.0)
@@ -217,49 +139,233 @@ class TestToggleGuard(unittest.TestCase):
         self.assertIsNone(guard.pending(5.5, p.STATE_STEPPING))
 
 
-class TestVelocityStream(unittest.TestCase):
-    def setUp(self):
-        self.stream = VelocityStream(VelocityConfig(), AutoConfig())
-        self.stepping = RobotView(p.STATE_STEPPING, p.GAIT_STATE_WALK, True)
+class TestEpisodes(unittest.TestCase):
+    def test_switches_at_the_start_then_drives_at_once(self):
+        bench = Bench(view(p.STATE_TORQUE_STANDING, non_manual=False))
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.commands(), [p.NON_MANUAL_MODE, p.STEPPING])
+        bench.view = view()  # the robot switched and steps: the episode's command drives
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.last.axes[0], round(0.3 / 1.2 * 32767))
+        self.assertEqual(bench.gate, 'driving')
 
-    def test_axes_while_stepping(self):
-        self.stream.command(0.3, 0.0, 0.0, 0.0)
-        step = self.stream.step(0.02, self.stepping)
-        self.assertEqual((step.commands, step.axes[0], step.ignored),
-                         ([], round(0.3 / 1.2 * 32767), ''))
+    def test_mode_three_tries_on_fresh_reports_only(self):
+        bench = Bench(view(non_manual=False))  # the robot never takes the mode
+        bench.run(3.0, FORWARD)
+        tries = [t for t, step in bench.steps if p.NON_MANUAL_MODE in step.commands]
+        self.assertEqual(len(tries), 3)
+        self.assertAlmostEqual(tries[1] - tries[0], 0.5)
+        self.assertAlmostEqual(tries[2] - tries[1], 0.5)
+        blind = Bench(view(non_manual=None))  # no fresh RcsData: never sent blindly
+        blind.run(3.0, FORWARD)
+        self.assertEqual(blind.commands(), [])
 
-    def test_no_axes_without_a_fresh_motion_state(self):
-        self.stream.command(0.3, 0.0, 0.0, 0.0)
-        step = self.stream.step(0.02, RobotView(None, None, True))
-        self.assertIsNone(step.axes)
-        self.assertEqual(step.ignored, 'no fresh motion state report')
-        step = self.stream.step(0.04, RobotView(p.STATE_TORQUE_STANDING, 0, True))
-        self.assertIsNone(step.axes)  # torque standing: axes would change the pose
+    def test_stepping_three_tries_through_the_guard(self):
+        bench = Bench(view(p.STATE_TORQUE_STANDING))  # the robot never starts stepping
+        bench.run(20.0, FORWARD)
+        tries = [t for t, step in bench.steps if p.STEPPING in step.commands]
+        self.assertEqual(len(tries), 3)
+        self.assertGreaterEqual(tries[1] - tries[0], 5.0)  # transition_timeout_sec apart
 
-    def test_unknown_gait_streams_zeros(self):
-        self.stream.command(0.3, 0.0, 0.0, 0.0)
-        step = self.stream.step(0.02, RobotView(p.STATE_STEPPING, p.GAIT_STATE_SILENT, True))
-        self.assertEqual(step.axes, (0, 0, 0))
-        self.assertIn('silent', step.ignored)
+    def test_never_mid_episode(self):
+        """Stepping stopped on the handheld mid-episode is left alone; a new episode toggles."""
+        bench = Bench(view(p.STATE_TORQUE_STANDING))
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.commands(), [p.STEPPING])
+        bench.view = view()
+        bench.run(1.0, FORWARD)
+        bench.view = view(p.STATE_TORQUE_STANDING)
+        middle = bench.t
+        bench.run(5.0, FORWARD)
+        self.assertEqual(bench.commands(middle), [])
+        bench.run(1.2)  # quiet for cmd_timeout_sec + stop_burst_sec: the episode ends
+        later = bench.t
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.commands(later), [p.STEPPING])
 
-    def test_disarmed_streams_zeros(self):
-        self.stream.command(0.3, 0.0, 0.0, 0.0)
-        self.stream.disarm(0.01, 'stop_stepping')
-        self.stream.command(0.3, 0.0, 0.0, 0.02)
-        step = self.stream.step(0.03, self.stepping)
-        self.assertEqual((step.commands, step.axes), ([], (0, 0, 0)))
-        self.assertIn('stop_stepping', step.ignored)
-        self.assertEqual(self.stream.sent_command(0.03), ZERO)
-        self.assertIsNone(self.stream.step(2.0, self.stepping).axes)  # quiet: silence
-        self.stream.command(0.3, 0.0, 0.0, 2.1)
-        self.assertEqual(self.stream.step(2.12, self.stepping).axes[0], 8192)  # armed again
+    def test_zero_twists_keep_the_episode(self):
+        bench = Bench(view(p.STATE_TORQUE_STANDING))
+        bench.run(DT, FORWARD)
+        bench.view = view()
+        bench.run(0.5, FORWARD)
+        bench.run(3.0, STOP)  # zeros, not quiet
+        bench.view = view(p.STATE_TORQUE_STANDING)
+        resume = bench.t
+        bench.run(1.0, FORWARD)
+        self.assertEqual(bench.commands(resume), [])
+
+    def test_idle_stop_stepping(self):
+        bench = Bench(view(), idle_stop_stepping_sec=2.0)
+        bench.run(0.5, FORWARD)
+        bench.run(1.9)
+        self.assertEqual(bench.commands(), [])
+        bench.run(0.5)
+        self.assertEqual(bench.commands(), [p.STEPPING])
+        bench.run(5.0)
+        self.assertEqual(bench.commands().count(p.STEPPING), 1)
+
+
+class TestTakeover(unittest.TestCase):
+    def test_takeover_while_cmd_vel_is_zero_latches(self):
+        bench = Bench(view())
+        bench.run(1.0, STOP)
+        bench.view = view(non_manual=False)  # manual on the handheld, no motion asked
+        bench.run(DT, STOP)
+        self.assertEqual(bench.gate, 'takeover (manual mode)')
+        self.assertIn('took over', bench.stream.latch_reason)
+        start = bench.t
+        bench.run(2.0, FORWARD)
+        self.assertEqual(bench.commands(start), [])
+        self.assertEqual(bench.moving_axes(start), [])
+
+    def test_latch_survives_zeros_silence_and_motion(self):
+        bench = Bench(view())
+        bench.run(1.0, FORWARD)
+        bench.view = view(non_manual=False)
+        start = bench.t
+        bench.run(5.0, STOP)
+        bench.run(5.0)
+        bench.run(2.0, FORWARD)
+        self.assertEqual(bench.gate, 'takeover (manual mode)')
+        self.assertEqual(bench.commands(start), [])
+        self.assertEqual(bench.moving_axes(start), [])
+        self.assertIn('takeover', bench.last.ignored)
+
+    def test_latch_ends_on_the_target_mode_then_needs_zero_or_quiet(self):
+        bench = Bench(view())
+        bench.run(1.0, FORWARD)
+        bench.view = view(non_manual=False)
+        bench.run(1.0, FORWARD)
+        bench.view = view()  # handed back on the handheld; cmd_vel still streams
+        back = bench.t
+        bench.run(1.0, FORWARD)
+        self.assertEqual(bench.gate, 'waiting for zero or quiet cmd_vel')
+        self.assertEqual(bench.moving_axes(back), [])
+        bench.run(DT, STOP)
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.gate, 'driving')
+        self.assertEqual(bench.last.axes[0], round(0.3 / 1.2 * 32767))
+        quiet = Bench(view())
+        quiet.run(1.0, FORWARD)
+        quiet.view = view(non_manual=False)
+        quiet.run(1.0)
+        quiet.view = view()
+        quiet.run(DT)  # cmd_vel quiet already
+        self.assertEqual(quiet.gate, 'idle')
+
+    def test_mode_service_latch_and_handback(self):
+        """manual_mode latches even before the report; non_manual_mode ends it on the report."""
+        bench = Bench(view())
+        bench.run(0.5, FORWARD)
+        bench.stream.latch(bench.t, 'manual_mode service')
+        bench.run(2.0, FORWARD)  # the robot did not take it: still non-manual
+        self.assertEqual(bench.gate, 'takeover (manual mode)')
+        self.assertEqual(bench.stream.latch_reason, 'manual_mode service')
+        bench.stream.request_handback()
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.gate, 'waiting for zero or quiet cmd_vel')
+
+    def test_remote_prefix_targets_manual_mode(self):
+        bench = Bench(view(non_manual=True), target_non_manual=False)
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.commands(), [p.MANUAL_MODE])
+        bench.view = view(non_manual=False)
+        bench.run(0.5, FORWARD)
+        bench.view = view(non_manual=True)
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.gate, 'takeover (non-manual mode)')
+
+
+class TestHolds(unittest.TestCase):
+    def test_holds_need_a_release_then_zero_or_quiet(self):
+        for service in ('sit_down', 'emergency_stop', 'stop_stepping'):
+            with self.subTest(service=service):
+                bench = Bench(view())
+                bench.run(0.5, FORWARD)
+                bench.stream.hold(bench.t, service)
+                bench.run(5.0, STOP)
+                bench.run(5.0)
+                bench.run(1.0, FORWARD)
+                self.assertEqual(bench.gate, 'hold:' + service)
+                self.assertTrue(bench.stream.release())
+                bench.run(1.0, FORWARD)
+                self.assertEqual(bench.gate, 'waiting for zero or quiet cmd_vel')
+                bench.run(DT, STOP)
+                bench.run(DT, FORWARD)
+                self.assertEqual(bench.gate, 'driving')
+                self.assertFalse(bench.stream.release())
+
+    def test_zero_burst_after_a_hold(self):
+        bench = Bench(view())
+        bench.run(0.5, FORWARD)
+        bench.stream.hold(bench.t, 'stop_stepping')
+        start = bench.t
+        bench.run(2.0, FORWARD)
+        self.assertEqual(bench.axes(start), [NO_AXES] * 25)  # stop_burst_sec at 50 Hz
+
+    def test_emergency_report_disarms_until_it_clears(self):
+        bench = Bench(view())
+        bench.run(0.5, FORWARD)
+        bench.view = view(p.STATE_EMERGENCY)
+        bench.run(1.0, FORWARD)
+        self.assertEqual(bench.gate, 'disarmed:emergency stop or fall')
+        bench.view = view(p.STATE_SITTING)
+        bench.run(DT, FORWARD)
+        self.assertEqual(bench.gate, 'waiting for zero or quiet cmd_vel')
+        bench.run(DT, STOP)
+        self.assertEqual(bench.gate, 'idle')
+
+
+class TestZeros(unittest.TestCase):
+    def test_nan_in_a_field_is_a_stop(self):
+        bench = Bench(view())
+        bench.run(0.5, FORWARD)
+        start = bench.t
+        bench.run(1.0, (0.3, float('nan'), 0.0))
+        self.assertFalse(bench.stream.policy.moving(bench.t))
+        self.assertEqual(bench.moving_axes(start), [])
+
+    def test_zero_twists_send_only_the_burst(self):
+        bench = Bench(view())
+        bench.run(0.5, FORWARD)
+        start = bench.t
+        bench.run(4.0, STOP)
+        self.assertEqual(bench.axes(start), [NO_AXES] * 25)
+
+    def test_stale_command_then_the_burst(self):
+        bench = Bench(view())
+        bench.run(0.5, FORWARD)
+        start = bench.t
+        bench.run(2.0)  # nothing published: fresh for cmd_timeout_sec, then zeros, then silence
+        axes = bench.axes(start)
+        self.assertEqual(len(bench.moving_axes(start)), 25)
+        self.assertEqual(axes[25:], [NO_AXES] * 25)
+
+    def test_no_zeros_without_motion_before(self):
+        self.assertEqual(Bench(view()).run(3.0, STOP).axes(), [])
 
     def test_topic_mode(self):
-        stream = VelocityStream(VelocityConfig(), AutoConfig(), mode='topic')
-        stream.command(0.3, 0.1, -0.2, 0.0)
-        step = stream.step(0.02, RobotView(p.STATE_TORQUE_STANDING, 0, False))
-        self.assertEqual((step.twist, step.axes), ((0.3, 0.1, -0.2), None))
-        self.assertEqual(step.commands, [p.NON_MANUAL_MODE, p.STEPPING])
+        bench = Bench(view(p.STATE_TORQUE_STANDING, non_manual=False), mode='topic')
+        bench.run(DT, FORWARD)
+        self.assertEqual((bench.last.twist, bench.last.axes), (FORWARD, None))
+        self.assertEqual(bench.commands(), [p.NON_MANUAL_MODE, p.STEPPING])
+        start = bench.t
+        bench.run(4.0, STOP)
+        self.assertEqual([s.twist for s in bench.since(start) if s.twist is not None],
+                         [ZERO] * 25)
+
+    def test_gating(self):
+        bench = Bench(view(None))
+        bench.run(DT, FORWARD)
+        self.assertEqual((bench.last.axes, bench.last.ignored),
+                         (None, 'no fresh motion state report'))
+        bench.view = view(p.STATE_TORQUE_STANDING)
+        bench.run(DT, FORWARD)
+        self.assertIsNone(bench.last.axes)  # torque standing: axes would change the pose
+        bench.view = view(gait=p.GAIT_STATE_SILENT)
+        bench.run(DT, FORWARD)
+        self.assertIsNone(bench.last.axes)
+        self.assertIn('silent', bench.last.ignored)
 
 
 class TestConvert(unittest.TestCase):
