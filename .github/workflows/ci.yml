@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   noetic:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
       image: ros:noetic-ros-base
     defaults:
@@ -52,6 +52,10 @@ jobs:
           run build catkin_make
           run run_tests catkin_make run_tests
           run test_results catkin_test_results build/test_results --verbose
+          # every result file with its counts, as a notice readable through the API
+          msg=$(catkin_test_results build/test_results --all | grep -E 'tests|Summary' \
+            | sed -e 's|build/test_results/||' -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\n/%0A/g')
+          echo "::notice title=Tests::$msg"
 
       - name: URDF
         run: |
@@ -64,6 +68,7 @@ jobs:
             exit 1
           fi
           cat check_urdf.txt
+          echo "::notice title=check_urdf::$(grep -E 'robot name|root Link' check_urdf.txt | tr '\n' ' ')"
 
       - name: Node output of the tests
         if: failure()
