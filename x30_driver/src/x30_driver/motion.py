@@ -15,8 +15,10 @@ The rules (shared by the Deep Robotics drivers):
   emergency stop or fall. After it opens again, motion goes out only once cmd_vel has been zero
   (one message) or quiet (cmd_timeout_sec): a stream that kept running never drives the robot
   off. Nothing re-arms on a timer.
-- Zeros go out for stop_burst_sec after the last non-zero command or after the gate closed, then
-  nothing, even while zero Twists keep arriving.
+- After motion, zeros go out from the first period that sends none: for stop_burst_sec, and at
+  least once however late that period comes (axis zeros while the robot steps or its state is
+  unknown). The gate closing also sends zeros for stop_burst_sec. Then nothing, even while zero
+  Twists keep arriving.
 """
 
 import math
@@ -236,6 +238,8 @@ class VelocityStream:
         self._step_phase = False
         self._step_tries = 0
         self._drove = False
+        self._sent_motion = False  # the last period sent motion: the zero burst is due
+        self._zero_owed = False    # no zero went out since the burst started
         self._burst_until = None  # type: Optional[float]
 
     # -------------------------------------------------------------- inputs
@@ -434,35 +438,52 @@ class VelocityStream:
     def _emit(self, now: float, view: RobotView, in_target: Optional[bool], moving: bool,
               step: StreamStep):
         """Fill in the axis values or the twist, and why cmd_vel does not move the robot."""
-        c = self.config
         driving = moving and self._open() and self._armed
-        burst = self._burst_until is not None and now <= self._burst_until
         if moving and not driving:
             step.ignored = self._gate(now)
         want = self.policy.current if driving else None
         if self.mode == 'topic':
-            if want is not None:
-                step.twist = want
-                self._burst_until = now + c.stop_burst_sec
-            elif burst:
-                step.twist = ZERO
-            return
-        if view.basic_state != p.STATE_STEPPING:
+            step.twist = want
+        elif view.basic_state != p.STATE_STEPPING:
             if want is not None:
                 step.ignored = ('no fresh motion state report' if view.basic_state is None
                                 else 'not stepping ({})'.format(
                                     p.name_of(p.BASIC_STATES, view.basic_state)))
+        elif want is not None:
+            axes = self.policy.axes(want, view.gait_state, view.crawl)
+            if axes is None:
+                step.ignored = 'no speed limits for the {} gait (gait_limits)'.format(
+                    p.name_of(p.GAIT_STATES, view.gait_state))
+            elif axes != ZERO_AXES:
+                step.axes = axes
+                self._drove = True
+                if in_target is False:
+                    step.ignored = '{} mode: the robot obeys the {} side'.format(
+                        mode_name(view.non_manual),
+                        'perception' if view.non_manual else 'handheld')
+        if step.twist is not None or step.axes is not None:
+            self._sent_motion, self._zero_owed, self._burst_until = True, False, None
+        else:
+            self._zeros(now, view, step)
+
+    def _zeros(self, now: float, view: RobotView, step: StreamStep):
+        """
+        Fill in the zero burst of a period that sends no motion.
+
+        It starts at the first such period after motion, however late that comes, and sends at
+        least one zero: axis zeros while the robot steps or its state is unknown.
+        """
+        if self._sent_motion:
+            self._sent_motion = False
+            self._burst_until = now + self.config.stop_burst_sec
+            self._zero_owed = True
+        if self._burst_until is None:
             return
-        axes = None if want is None else self.policy.axes(want, view.gait_state, view.crawl)
-        if want is not None and axes is None:
-            step.ignored = 'no speed limits for the {} gait (gait_limits)'.format(
-                p.name_of(p.GAIT_STATES, view.gait_state))
-        if axes is not None and axes != ZERO_AXES:
-            step.axes = axes
-            self._burst_until = now + c.stop_burst_sec
-            self._drove = True
-            if in_target is False:
-                step.ignored = '{} mode: the robot obeys the {} side'.format(
-                    mode_name(view.non_manual), 'perception' if view.non_manual else 'handheld')
-        elif burst:
+        if now >= self._burst_until and not self._zero_owed:
+            self._burst_until = None
+        elif self.mode == 'topic':
+            step.twist = ZERO
+            self._zero_owed = False
+        elif view.basic_state in (p.STATE_STEPPING, None):
             step.axes = ZERO_AXES
+            self._zero_owed = False

@@ -59,6 +59,10 @@ class Loop:
         """Return the axis values the robot received since t, one tuple per period."""
         return [s for s in self.axes_log if s[0] >= t]
 
+    def stall(self, seconds):
+        """Stall the timer (load): no period for this long."""
+        self.t = round(self.t + seconds, 6)
+
     def run(self, seconds, cmd=None):
         """Run the loop; cmd: (vx, vy, wz) published every period, None: nothing published."""
         end = self.t + seconds - 1e-9
@@ -216,6 +220,15 @@ class TestClosedLoop(unittest.TestCase):
         sent = run.axis_datagrams(start + DT)
         self.assertEqual([axes for _, axes in sent], [(0, 0, 0)] * 25)
         self.assertLessEqual(sent[-1][0], start + 0.5 + 1e-6)
+
+    def test_late_period_still_stops_the_robot(self):
+        """cmd_vel stops and the next period runs 0.7 s late: its zeros stop the robot."""
+        run = Loop(FakeX30(basic_state=p.STATE_STEPPING, non_manual=True))
+        run.run(0.5, FORWARD)
+        run.stall(0.68)
+        robot = run.run(DT)
+        robot.advance(run.t + 0.2)  # the robot would walk until its own 1 s axis timeout
+        self.assertEqual(robot.velocity, (0.0, 0.0, 0.0))
 
 
 class TestEpisodeEndsOnlyOnQuiet(unittest.TestCase):

@@ -33,8 +33,8 @@ def view(state=p.STATE_STEPPING, non_manual=True, gait=p.GAIT_STATE_WALK):
 class Bench:
     """The stream stepped at 50 Hz against a robot view the test sets."""
 
-    def __init__(self, robot, target_non_manual=True, mode='axis', **auto):
-        self.stream = VelocityStream(VelocityConfig(),
+    def __init__(self, robot, target_non_manual=True, mode='axis', velocity=None, **auto):
+        self.stream = VelocityStream(velocity or VelocityConfig(),
                                      AutoConfig(target_non_manual=target_non_manual, **auto),
                                      mode=mode)
         self.view = robot
@@ -49,6 +49,11 @@ class Bench:
             if cmd is not None:
                 self.stream.command(*cmd, self.t)
             self.steps.append((self.t, self.stream.step(self.t, self.view)))
+        return self
+
+    def stall(self, seconds):
+        """Stall the timer (load): no period and no cmd_vel for this long."""
+        self.t = round(self.t + seconds, 6)
         return self
 
     def since(self, t):
@@ -421,6 +426,44 @@ class TestZeros(unittest.TestCase):
 
     def test_no_zeros_without_motion_before(self):
         self.assertEqual(Bench(view()).run(3.0, STOP).axes(), [])
+
+    def test_late_period_still_sends_the_burst(self):
+        """The first period after the stop runs 0.6 s late (load): the burst starts there."""
+        for mode in ('axis', 'topic'):
+            with self.subTest(mode=mode):
+                bench = Bench(view(), mode=mode)
+                bench.run(0.5, FORWARD)
+                bench.stall(0.6)
+                start = bench.t
+                bench.run(2.0)
+                if mode == 'axis':
+                    self.assertEqual(bench.axes(start), [NO_AXES] * 25)
+                else:
+                    self.assertEqual([s.twist for s in bench.since(start)
+                                      if s.twist is not None], [ZERO] * 25)
+
+    def test_one_zero_with_a_burst_shorter_than_a_period(self):
+        bench = Bench(view(), velocity=VelocityConfig(stop_burst_sec=0.01))
+        bench.run(0.5, FORWARD)
+        start = bench.t
+        bench.run(2.0, STOP)
+        self.assertEqual(bench.axes(start), [NO_AXES])
+
+    def test_zeros_while_the_motion_report_is_stale(self):
+        """Unknown state at the stop, or while driving: the zeros go out anyway."""
+        bench = Bench(view())
+        bench.run(0.5, FORWARD)
+        bench.view = view(None)
+        start = bench.t
+        bench.run(2.0, STOP)
+        self.assertEqual(bench.axes(start), [NO_AXES] * 25)
+        bench = Bench(view())
+        bench.run(0.5, FORWARD)
+        bench.view = view(None)
+        start = bench.t
+        bench.run(2.0, FORWARD)
+        self.assertEqual(bench.axes(start), [NO_AXES] * 25)
+        self.assertEqual(bench.last.ignored, 'no fresh motion state report')
 
     def test_topic_mode(self):
         bench = Bench(view(p.STATE_TORQUE_STANDING, non_manual=False), mode='topic')
