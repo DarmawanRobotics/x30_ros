@@ -1,0 +1,74 @@
+# x30_driver: the Jueying X30 motion host over UDP (X30 API Documentation V1.0.5-0).
+# Private parameters of the node (driver.launch loads this file into ~).
+
+# --- Network ---------------------------------------------------------------------------------
+# Commands go to the motion host's port 43893 (1.2). Its reports (1.3: state, IMU and joints at
+# 200 Hz) only reach this computer when its IP and local_port are listed in the motion host's
+# network.toml (X30 Application Manual 4.3.2; README "Network").
+motion_host_ip: 192.168.1.103
+motion_host_port: 43893
+local_ip: 0.0.0.0                  # address the report socket binds to
+local_port: 43897                  # the port listed in network.toml
+heartbeat_hz: 5.0                  # 1.2.1: at least 2 Hz or the motion host drops the link
+connect_retry_sec: 5.0             # resend the connect command this often while no reports come
+
+# Source of the commands (1.2 note): 0x31 an autonomous module (navigation), 0x21 a remote
+# control terminal (the handheld). Every command code is prefix << 24 | code.
+command_prefix: 0x31
+# 1.2.7 save data, a full code without prefix: 0x010C01 for jy_exe >= v2.2.45, 18 before.
+save_data_code: 0x010C01
+
+# Perception host (1.4 autonomous charging, 1.5 elevation map). Empty: no perception services.
+perception_host_ip: 192.168.1.105
+elevation_map_port: 43899          # 1.5: commands and the 10 Hz mode feedback
+charge_port: 3333                  # 1.4: request / response
+elevation_query_sec: 5.0           # restart the elevation map feedback this often when it stops
+charge_query_sec: 2.0              # ask for the charging state this often (0: never)
+feedback_timeout_sec: 2.0          # how long a service waits for the robot to report the change
+
+# --- Velocity --------------------------------------------------------------------------------
+# axis: cmd_vel (base_link, REP-103) -> axis commands at cmd_rate_hz (1.2.3.2), only in the
+#       stepping state. value = v / vmax(gait) * 32767 with the gait's maximum speeds from
+#       Appendix B; lateral and yaw go out negated (the robot: + right, + turn right).
+# topic: cmd_vel republished to velocity_topic, for a driver on the X30's own ROS master (the
+#       motion program runs /cmd_vel_corrected in non-manual mode, 2.3).
+velocity_mode: axis
+velocity_topic: /cmd_vel_corrected
+cmd_rate_hz: 50.0                  # 1.2.3: 50 Hz; the robot drops an axis after 1 s
+cmd_timeout_sec: 0.5               # cmd_vel older than this: zeros
+stop_burst_sec: 0.5                # zeros streamed after the timeout, then silence
+max_vx: 1.0                        # m/s, clamp of cmd_vel; the gait's own maximum applies too
+max_vy: 0.5                        # m/s
+max_wz: 1.0                        # rad/s
+axis_dead_zone: 655                # 1.2.3.2: |value| < 655 is 0; smaller commands go out as 656
+invert_vy: false                   # true if +linear.y moves the robot RIGHT (README checklist)
+invert_wz: false                   # true if +angular.z turns the robot RIGHT (README checklist)
+
+# Mode and stepping switches made for cmd_vel. The robot walks in the stepping state only, and
+# obeys the autonomous side's velocity in non-manual mode only (1.2.4).
+auto_non_manual_mode: true         # send non-manual mode when cmd_vel moves and it is not set
+mode_refresh_sec: 2.0              # and again this often while it is still not reported
+auto_stepping: true                # send start stepping when cmd_vel moves in torque standing
+stepping_retry_sec: 2.0            # at most this often (the command is a toggle)
+idle_stop_stepping_sec: 0.0        # stop stepping after this long without motion (0: never)
+
+# --- Posture services ------------------------------------------------------------------------
+auto_torque_control: true          # stand_up continues from initial standing to torque control
+stand_timeout_sec: 10.0            # stand_up / sit_down wait this long for the robot
+transition_timeout_sec: 5.0        # torque control and stepping toggles wait this long
+
+# --- Outputs ---------------------------------------------------------------------------------
+odom_frame: odom
+base_frame: base_link
+imu_frame: imu_link
+publish_tf: false                  # odom -> base_link on /tf (off: FAST-LIO or a localizer owns it)
+odom_hz: 50.0                      # one odom per new motion state report, at most this rate
+imu_hz: 100.0                      # one imu per new sensor report, at most this rate
+joint_state_hz: 50.0
+state_hz: 10.0                     # state (diagnostic_msgs/DiagnosticStatus)
+battery_hz: 1.0                    # the robot reports its battery at 0.5 Hz
+state_timeout_sec: 1.0             # no report for this long: disconnected
+low_battery: 0.2                   # 0-1, the state warns below
+# 1.3.5: voltage in V; current in A before Deeprcs 1.10.19, in 10 mA from 1.10.19.
+battery_voltage_scale: 0.0         # V per unit; 0: V, or mV / 10 mV recognised by size
+battery_current_scale: 0.01        # A per unit: 0.01 (10 mA, Deeprcs >= 1.10.19) or 1.0

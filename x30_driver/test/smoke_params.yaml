@@ -1,0 +1,8 @@
+# smoke.test: the driver against fake_robot.py on loopback, on ports of their own.
+motion_host_ip: 127.0.0.1
+motion_host_port: 47893
+local_ip: 127.0.0.1
+local_port: 47897
+perception_host_ip: 127.0.0.1
+elevation_map_port: 47899
+charge_port: 47333

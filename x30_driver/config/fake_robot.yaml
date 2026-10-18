@@ -1,0 +1,6 @@
+# Overrides of driver_params.yaml to try the driver against test/fake_robot.py on this computer:
+#   rosrun x30_driver fake_robot.py
+#   roslaunch x30_driver driver.launch overrides_file:=$(rospack find x30_driver)/config/fake_robot.yaml
+motion_host_ip: 127.0.0.1
+local_ip: 127.0.0.1
+perception_host_ip: 127.0.0.1

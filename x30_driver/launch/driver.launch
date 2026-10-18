@@ -1,0 +1,21 @@
+<launch>
+  <!--
+    x30_driver in the robot's namespace.
+      params_file:    every parameter (config/driver_params.yaml)
+      overrides_file: a few more on top, e.g. config/fake_robot.yaml (empty: none)
+  -->
+  <arg name="namespace" default="x30"/>
+  <arg name="params_file" default="$(find x30_driver)/config/driver_params.yaml"/>
+  <arg name="overrides_file" default=""/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <group ns="$(arg namespace)">
+    <node pkg="x30_driver" type="driver_node" name="x30_driver" output="$(arg output)"
+          respawn="$(arg respawn)" respawn_delay="2">
+      <rosparam command="load" file="$(arg params_file)"/>
+      <rosparam if="$(eval arg('overrides_file') != '')" command="load"
+                file="$(arg overrides_file)"/>
+    </node>
+  </group>
+</launch>
