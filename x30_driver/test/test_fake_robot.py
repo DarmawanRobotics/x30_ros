@@ -144,12 +144,15 @@ class TestFakePerception(unittest.TestCase):
             return reply.code, p.signed(reply.value)
 
         host.handle(p.simple(p.ELEVATION_MODE, 20), 'elevation')
-        self.assertEqual(host.elevation_mode, 18)  # odometry off: stuck preparing
+        self.assertEqual(host.elevation_mode, 18)  # odometry off: waits in preparation
         host.advance(5.0)
         self.assertEqual(host.elevation_mode, 18)
-        self.assertEqual(lio(p.LIO_ON), (p.LIO, 0))
-        host.handle(p.simple(p.ELEVATION_MODE, 20), 'elevation')
+        self.assertEqual(lio(p.LIO_ON), (p.LIO, 0))  # the map goes on once it runs
         host.advance(6.0)
+        self.assertEqual(host.elevation_mode, 20)
+        host.handle(p.simple(p.ELEVATION_MODE, 3), 'elevation')
+        host.handle(p.simple(p.ELEVATION_MODE, 20), 'elevation')  # odometry on: straight on
+        host.advance(7.0)
         self.assertEqual(host.elevation_mode, 20)
         self.assertEqual(lio(p.LIO_OFF), (p.LIO, -1))  # still in multi-frame
         host.handle(p.simple(p.ELEVATION_MODE, 3), 'elevation')

@@ -225,8 +225,8 @@ class FakePerception:
     The perception host: elevation map, LiDAR-inertial odometry, autonomous charging.
 
     The elevation map sends its modes as 10 Hz feedback to every client. Multi-frame mode (20)
-    needs the LiDAR-inertial odometry on (1.5.2.4): without it the map stays in the preparation
-    state (18). The odometry only turns off once the map has left the multi-frame modes
+    needs the LiDAR-inertial odometry on (1.5.2.4): the map waits in the preparation state (18)
+    until it runs. The odometry only turns off once the map has left the multi-frame modes
     (1.5.2.5), otherwise the reply is -1.
     """
 
@@ -275,6 +275,8 @@ class FakePerception:
                 return []
             if value == p.LIO_ON:
                 self.lio_on = True
+                if self.elevation_mode == p.ELEVATION_MULTI_FRAME_PREPARING:
+                    self._mode_pending = (self.now + self.TRANSITION_SEC, p.ELEVATION_MULTI_FRAME)
                 return [p.simple(p.LIO, 0)]
             if self.elevation_mode in p.MULTI_FRAME_MODES:
                 return [p.simple(p.LIO, -1)]

@@ -222,8 +222,13 @@ class TestDriver(unittest.TestCase):
         self.assertCall('velocity_source_navigation', contains='navigation')
         # multi-frame mode from outside the driver (1.5.2.4), then leave it through the driver
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(2.0)
         try:
             sock.sendto(p.simple(p.LIO, p.LIO_ON), ('127.0.0.1', LIO_PORT))
+            reply = None
+            while reply is None or reply.code != p.LIO:  # step 2: wait for the odometry
+                reply = p.parse_datagram(sock.recvfrom(1024)[0])
+            self.assertEqual(p.signed(reply.value), 0)
             sock.sendto(p.simple(p.ELEVATION_MODE, p.ELEVATION_MULTI_FRAME),
                         ('127.0.0.1', VMAP_PORT))
             state = wait_state(lambda v: v.get('elevation_mode') == 'multi_frame', 10.0)
