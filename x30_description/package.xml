@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_description</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>URDF (xacro) of the Deep Robotics Jueying X30 from Deep Robotics' official model with its meshes: legs with the official joint names, base_link, imu_link and the four LiDAR frames.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

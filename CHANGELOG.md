@@ -3,6 +3,43 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [0.2.0] - 2026-10-18
+
+### Fixed (safety)
+- `x30_driver`: an operator takeover is no longer reverted. When the robot leaves the control
+  mode that obeys the driver while `cmd_vel` moves it (manual on the handheld, or the
+  `manual_mode` service), the driver stops switching and sends only zeros until `cmd_vel` has
+  been quiet or zero for `stop_burst_sec`.
+- `x30_driver`: `stop_stepping`, `sit_down` and `emergency_stop` are no longer undone by the
+  next `cmd_vel` (the automatic stepping toggle would start stepping again): the velocity stream
+  holds until `cmd_vel` rests, and holds during an emergency stop or fall.
+- `x30_driver`: `height_normal` / `height_crawl` fail when the body height report still shows
+  the old height (they succeed only without any height report); crawl needs a fresh motion state.
+
+### Changed
+- `x30_driver`: the automatic mode switch follows `command_prefix`: non-manual mode for `0x31`,
+  manual mode for `0x21` (the robot obeys the handheld's source there). `auto_non_manual_mode` is
+  now `auto_control_mode`. The simulated robot obeys `0x31` axes in non-manual and `0x21` axes in
+  manual mode only.
+- `x30_driver`: Run, Silent and unknown gaits get zeros instead of Walk's scaling, unless the new
+  `gait_limits` parameter gives their speeds (it can also replace Appendix B gaits).
+- `x30_driver`: velocities below 0.001 m/s (rad/s) are zero: noise no longer goes out as the ±656
+  dead zone step.
+- `x30_driver`: stand/sit and stepping toggles, from services and the automatic switch, go out
+  only once the reported state shows the previous one; posture services run one at a time.
+- `x30_driver`: `emergency_stop` sends the soft emergency stop three times and succeeds once the
+  robot reports emergency stop or fall.
+- `x30_driver`: `save_data` only while sitting or after an emergency stop, and with the source
+  prefix (`0x31010C01`); `18` still goes out as it is.
+- `x30_driver`: axis commands need a fresh `0x1009` motion state report.
+- `x30_driver`: the elevation services leave multi-frame mode as 1.5.2.5 says (new mode, then
+  the LiDAR-inertial odometry off, `lio_port`); the velocity source services set non-manual mode
+  first (1.5.1.1); the obstacle height code is a parameter (`obstacle_height_code`).
+- `x30_driver`: `command_prefix` other than `0x21` / `0x31` stops the node; `heartbeat_hz` is at
+  least 2 Hz; shutdown stops the stream before sending zero axes three times.
+- `x30_driver`: `state` shows `armed`, `disarmed_by`, `obeyed_in`; tests run the velocity stream
+  in a closed loop with the simulated robot and the node with rospy stand-ins.
+
 ## [0.1.0] - 2026-10-18
 
 ### Added
