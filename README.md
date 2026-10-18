@@ -48,7 +48,7 @@ From the API documentation (sections 1.2 to 1.5):
 | perception host | `192.168.1.105`: elevation map on UDP **43899** (10 Hz feedback once it got any message), autonomous charging on UDP **3333** (request / response) |
 | heartbeat | `0x31040001` at 5 Hz (at least 2 Hz), and `0x31020001` once to confirm the connection |
 | command source | the first byte of every code: `0x31` an autonomous module (default, `command_prefix`), `0x21` a remote control terminal (the handheld) |
-| velocity | axis commands `0x31010130` (+ forward), `0x31010131` (+ right), `0x31010135` (+ turn right) at 50 Hz, obeyed in the **stepping** state and **non-manual** mode |
+| velocity | axis commands `0x31010130` (+ forward), `0x31010131` (+ right), `0x31010135` (+ turn right) at 50 Hz, obeyed in the **stepping** state and **non-manual** mode (`0x21` codes: manual mode) |
 
 **This computer must be in the motion host's `network.toml`** (its IP and port 43897, as the
 Application Manual 4.3.2 describes; restart the motion program afterwards). Otherwise the robot
@@ -98,28 +98,38 @@ Under the namespace (`/x30/` by default). Details in [x30_driver](x30_driver/REA
 | pub | `imu` | `sensor_msgs/Imu` | attitude (reported in degrees), rates, acceleration; frame `imu_link` |
 | pub | `joint_states` | `sensor_msgs/JointState` | `FL_HipX_joint` ... `HR_Knee_joint`: position, velocity, effort (torque) |
 | pub | `battery` | `sensor_msgs/BatteryState` | `percentage` 0–1, voltage, current, capacity |
-| pub | `state` | `diagnostic_msgs/DiagnosticStatus` | `connected`, basic state, gait, control mode, errors, body height, temperatures, elevation map and charging state, ... as key / values |
+| pub | `state` | `diagnostic_msgs/DiagnosticStatus` | `connected`, basic state, gait, control mode, `armed` / `disarmed_by`, `cmd_vel_ignored`, errors, body height, temperatures, elevation map and charging state, ... as key / values |
 | pub | `diagnostics` | `diagnostic_msgs/DiagnosticArray` | the same, plus link counters |
 
-**Services** (`std_srvs/Trigger`; each waits until the robot reports the change):
+**Services** (`std_srvs/Trigger`; each checks the robot's state first and succeeds only when the
+robot reports the change):
 
 | | |
 |---|---|
-| posture | `stand_up` (then torque control), `sit_down` (leaves stepping first), `torque_control`, `start_stepping`, `stop_stepping` |
+| posture (one at a time) | `stand_up` (then torque control), `sit_down` (leaves stepping first), `torque_control`, `start_stepping`, `stop_stepping` |
 | modes, height | `non_manual_mode`, `manual_mode`, `height_normal`, `height_crawl` |
 | gaits (stepping state) | `gait_walk`, `gait_slope`, `gait_off_road`, `gait_stair`, `gait_stair_multi_frame`, `gait_stair_45`, `gait_l_walk`, `gait_mountain`, `gait_silent` |
-| elevation map | `elevation_solid_ground`, `elevation_grid_ground`, `elevation_stairs_no_risers`, `obstacle_decelerate`, `obstacle_detour`, `velocity_source_joystick`, `velocity_source_navigation`, `obstacle_height_8cm`, `obstacle_height_28cm` |
+| elevation map | `elevation_solid_ground`, `elevation_grid_ground`, `elevation_stairs_no_risers` (from multi-frame mode: then the LiDAR-inertial odometry off, 1.5.2.5), `obstacle_decelerate`, `obstacle_detour`, `velocity_source_joystick`, `velocity_source_navigation` (non-manual mode first, 1.5.1.1), `obstacle_height_8cm`, `obstacle_height_28cm` |
 | charging | `charge_start`, `charge_stop`, `charge_clear` |
-| other | `emergency_stop` (soft emergency stop), `save_data` |
+| other | `emergency_stop` (soft emergency stop, sent 3 times, confirmed by the state), `save_data` (sitting or after an emergency stop only) |
 
 **Velocity.** `cmd_vel` goes out as axis values `v / vmax × 32767`, where `vmax` is the current
 gait's maximum speed from Appendix B (forward, backward, lateral, yaw; half the forward speed for
-walk and slope at crawl height). A non-zero command smaller than the dead zone (655) goes out as
-656. Lateral and yaw are negated (the robot: + right, + turn right). Axis commands go out only in
-the stepping state: in torque-controlled standing they would change the body's pose. The driver
-switches to non-manual mode and starts stepping from torque-controlled standing when `cmd_vel`
-asks for motion (`auto_non_manual_mode`, `auto_stepping`). `velocity_mode: topic` republishes
-`cmd_vel` to `/cmd_vel_corrected` instead, for a driver on the X30's own ROS master (2.3).
+walk and slope at crawl height). Run and Silent are not in the table: in them the driver sends
+zeros unless `gait_limits` gives their speeds. Below 0.001 m/s (rad/s) a velocity is zero; a
+larger one that falls inside the dead zone (655) goes out as 656. Lateral and yaw are negated
+(the robot: + right, + turn right). Axis commands go out only in the stepping state and while the
+motion state report is fresh: in torque-controlled standing they would change the body's pose.
+
+The robot obeys the driver's source in one control mode: `0x31` (default) in non-manual mode,
+`0x21` (the driver acting as the handheld) in manual mode. When `cmd_vel` asks for motion the
+driver switches to that mode (`auto_control_mode`) and starts stepping from torque-controlled
+standing (`auto_stepping`). It **holds back**, sending only zeros and no switches, after an
+operator takeover (the robot leaves that mode while `cmd_vel` moves it, e.g. manual on the
+handheld), after `stop_stepping`, `sit_down`, `emergency_stop` or a mode service that leaves that
+mode, and during an emergency stop or fall; it resumes once `cmd_vel` has been quiet or zero for
+`stop_burst_sec` (`state`: `armed`, `disarmed_by`). `velocity_mode: topic` republishes `cmd_vel`
+to `/cmd_vel_corrected` instead, for a driver on the X30's own ROS master (2.3).
 
 ## Verify on the real robot
 
@@ -131,7 +141,8 @@ On a new robot, in an open area, with someone at the handheld:
    `report 0x... of N bytes: unknown layout` means the motion program packs a struct
    differently: report it with N.
 3. **Command source:** with `command_prefix: 0x31` the robot obeys the services below and
-   `errors` stays without `heartbeat_timeout`. If it ignores them, try `0x21` (as the handheld).
+   `errors` stays without `heartbeat_timeout`. If it ignores them, try `0x21` (as the handheld:
+   the robot then obeys in manual mode, and the driver switches to manual instead).
 4. **Stand and step:** `rosservice call /x30/stand_up` ends in `torque_standing`,
    `/x30/start_stepping` in `stepping`; `sit_down` brings it back down.
 5. **Forward:** `rostopic pub -r 20 /x30/cmd_vel geometry_msgs/Twist '{linear: {x: 0.2}}'`
@@ -142,30 +153,47 @@ On a new robot, in an open area, with someone at the handheld:
    it **left**, else `invert_vy: true` (in your copy of
    [driver_params.yaml](x30_driver/config/driver_params.yaml), `params_file:=`).
 7. **Speed scale:** in each gait you use, compare the `odom` twist with the command (Appendix B
-   maximums; run and silent are not in the table and are scaled like walk).
-8. **Battery:** `battery` voltage and current against the handheld app. The current is in 10 mA
+   maximums). Run and silent are not in the table: measure their maximum speeds and give them
+   in `gait_limits`, or the driver does not move the robot in them.
+8. **Takeover:** while `cmd_vel` drives the robot, switch to manual on the handheld: the robot
+   follows the handheld, `armed` turns `False` and the driver does not switch back until
+   `cmd_vel` has rested for `stop_burst_sec`.
+9. **Battery:** `battery` voltage and current against the handheld app. The current is in 10 mA
    from Deeprcs 1.10.19 (`battery_current_scale: 0.01`), in A before (`1.0`);
    `battery_voltage_scale` if the voltage is off.
-9. **Joints and frames:** `roslaunch x30_bringup bringup.launch rviz:=true`: the legs in RViz
-   follow the real ones. `imu_link` sits at `base_link` (the document gives no IMU position);
-   compare the LiDAR frames with the perception host's point cloud frames.
-10. **Perception host:** `elevation_grid_ground` and back to `elevation_solid_ground` answer
-    with the new mode; charging only with a dock in front of the robot.
-11. **save_data:** set `save_data_code` to `18` for jy_exe older than v2.2.45 (it exits the
-    motion program: try it last).
+10. **Joints and frames:** `roslaunch x30_bringup bringup.launch rviz:=true`: the legs in RViz
+    follow the real ones. `imu_link` sits at `base_link` (the document gives no IMU position);
+    compare the LiDAR frames with the perception host's point cloud frames.
+11. **Perception host:** `elevation_grid_ground` and back to `elevation_solid_ground` answer
+    with the new mode; charging only with a dock in front of the robot. After
+    `obstacle_height_28cm`, `/step_z_max_state` on the perception host must change; if not, set
+    `obstacle_height_code: 0x3101EE04` (the document prints `0x3100EE04`, a feedback-like code).
+    Multi-frame mode is entered by hand (1.5.2.4: robot still, `0xBAA0001` value 1 to port 60000,
+    then mode 20); the elevation services leave it as 1.5.2.5 says.
+12. **save_data:** sitting or after an emergency stop only; `0x31010C01` (prefix + `0x010C01`),
+    or `save_data_code: 18` for jy_exe older than v2.2.45. It exits the motion program: last.
 
 ## Safety
 
 - The driver stops on its own: no `cmd_vel` for 0.5 s gives zeros for 0.5 s, then nothing; the
-  robot drops an axis command after 1 s. Only one node should publish `/x30/cmd_vel`.
-- `emergency_stop` is the soft emergency stop: the robot lies down at once and protects its
-  joints. The handheld and the robot's own stop button always work too.
-- With `auto_non_manual_mode` the driver puts the robot in non-manual mode when motion starts:
-  the handheld drives again only after `manual_mode` (or switching on the handheld).
-- Axis commands only go out in the stepping state; `sit_down` refuses while the robot walks.
-- Crawl height allows walk and slope only; L-Walk, Mountain and Silent allow no height change;
-  the stair gaits need the matching elevation map mode. The services refuse otherwise.
-- `save_data` makes the robot save its last 5 minutes of data and **exit its motion program**.
+  robot drops an axis command after 1 s. Only one node should publish `/x30/cmd_vel`. On
+  shutdown the stream stops and zero axes go out three times.
+- `emergency_stop` is the soft emergency stop, sent three times; it answers once the robot
+  reports emergency stop or fall. The handheld and the robot's own stop button always work too.
+- With `auto_control_mode` the driver switches the robot to the mode that obeys it when motion
+  starts, but never back after the operator left it (manual on the handheld, or `manual_mode`)
+  while it was moving, and never right after `stop_stepping`, `sit_down` or `emergency_stop`:
+  `cmd_vel` has to rest for `stop_burst_sec` first.
+- Axis commands only go out in the stepping state, with a fresh motion state report, in a gait
+  with known speeds; `sit_down` refuses while the robot walks. Stand/sit and stepping are
+  toggles: a second one is refused until the state shows the first.
+- Crawl height allows walk and slope only (and needs a fresh motion state report); L-Walk,
+  Mountain and Silent allow no height change; the stair gaits need the matching elevation map
+  mode. The services refuse otherwise.
+- `save_data` makes the robot save its last 5 minutes of data and **exit its motion program**:
+  only while sitting or after an emergency stop.
+- `command_prefix` other than `0x21` / `0x31` stops the node at start; `heartbeat_hz` below
+  2 Hz is raised to 2 Hz.
 
 ## Develop
 
@@ -176,11 +204,13 @@ python3 -m pytest x30_driver/test x30_description/test   # the ROS-free tests, w
 
 The codec is tested against the document: its worked example (Appendix A), every command code it
 prints, the struct sizes and field offsets of every layout, the gait speeds of Appendix B and the
-velocity formulas of 1.2.3.2. The velocity policy, the UDP link and the simulated robot have
-their own tests; a rostest runs the driver against the simulated robot through its ROS
-interface (reports, posture, `cmd_vel` signs, gaits, height, elevation map, charging,
-emergency stop). The URDF test checks the official model's numbers and that the joints are the
-driver's. CI runs all of it in a `ros:noetic-ros-base` container, plus `check_urdf`.
+velocity formulas of 1.2.3.2. The velocity stream runs in a closed loop with the simulated robot
+in simulated time (takeover, holds after a stop, toggles, unknown gaits, control mode per
+prefix); the node runs against the simulated robot over UDP with stand-ins for rospy (every
+service), and a rostest runs it through its real ROS interface (reports, posture, `cmd_vel`
+signs, takeover, gaits, height, elevation map with the multi-frame exit, charging, emergency
+stop). The URDF test checks the official model's numbers and that the joints are the driver's.
+CI runs all of it in a `ros:noetic-ros-base` container, plus `check_urdf`.
 
 The URDF and its meshes are Deep Robotics' model
 ([DeepRoboticsLab/deep_robotics_model](https://github.com/DeepRoboticsLab/deep_robotics_model),

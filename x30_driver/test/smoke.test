@@ -2,10 +2,10 @@
   <!-- the simulated X30 (motion and perception hosts) on loopback -->
   <node pkg="x30_driver" type="fake_robot.py" name="fake_x30" output="screen"
         args="--motion-port 47893 --report-to 127.0.0.1:47897 --vmap-port 47899
-              --charge-port 47333 --rate 100"/>
+              --charge-port 47333 --lio-port 47600 --rate 100"/>
   <include file="$(find x30_driver)/launch/driver.launch">
     <arg name="overrides_file" value="$(find x30_driver)/test/smoke_params.yaml"/>
     <arg name="respawn" value="false"/>
   </include>
-  <test test-name="smoke" pkg="x30_driver" type="smoke_check.py" time-limit="120"/>
+  <test test-name="smoke" pkg="x30_driver" type="smoke_check.py" time-limit="180"/>
 </launch>
