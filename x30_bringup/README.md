@@ -3,8 +3,11 @@
 The Jueying X30 in one launch: [x30_driver](../x30_driver/README.md) and
 `robot_state_publisher` with the URDF of [x30_description](../x30_description/README.md) in one
 namespace, the robot profile every node of the stack reads, and optionally the control mux
-([x30_control](../x30_control/README.md)) and the LiDAR sector scans
-([x30_perception](../x30_perception/README.md)).
+([x30_control](../x30_control/README.md)), the LiDAR sector scans
+([x30_perception](../x30_perception/README.md)), FAST-LIO and its monitor
+([x30_odometry](../x30_odometry/README.md)), the localization
+([x30_localization](../x30_localization/README.md)) and the site maps
+([x30_mapping](../x30_mapping/README.md)).
 
 ## Usage
 
@@ -12,6 +15,8 @@ namespace, the robot profile every node of the stack reads, and optionally the c
 roslaunch x30_bringup bringup.launch                                  # namespace x30
 roslaunch x30_bringup bringup.launch params_file:=$HOME/x30_driver_params.yaml rviz:=true
 roslaunch x30_bringup bringup.launch control:=true perception:=true leg_odom_tf:=true
+roslaunch x30_bringup bringup.launch control:=true perception:=true \
+    odometry:=true localization:=true mapping:=true site:=gardu-a
 ```
 
 With `control:=true` the control mux is the only publisher of `/x30/cmd_vel`: navigation
@@ -30,7 +35,10 @@ else may publish the driver's `cmd_vel` any more.
 | `robot_params` | [`config/robot.yaml`](config/robot.yaml) | the robot profile, loaded as `/robot` |
 | `control` | `false` | the control mux (x30_control), publishing `/<namespace>/cmd_vel` |
 | `perception` | `false` | `lidar_sector_node` (x30_perception) and the LiDAR mount TF |
-| `leg_odom_tf` | `false` | the driver publishes `odom` → `base_link` (leg odometry, roll and pitch from the IMU): the scans' leveling, while no other odometry owns that transform |
+| `leg_odom_tf` | `false` | the driver publishes `odom` → `base_link` (leg odometry, roll and pitch from the IMU): the scans' leveling, while no other odometry owns that transform; refused together with `localization` |
+| `odometry`, `odometry_method` | `false`, `fast_lio` | FAST-LIO behind its start gate and the odometry monitor (x30_odometry); `external` for a simulator |
+| `localization` | `false` | `map` → `odom` and the bridge of FAST-LIO into `odom` → `base_link` (x30_localization) |
+| `mapping`, `site` | `false`, empty | the site maps, mapping sessions and routes (x30_mapping); the site at start |
 | `lidar_frame`, `lidar_pose` | `livox_frame`, `0 0 0 0 0 0` | `base_link` → the frame of `/livox/lidar` (`x y z yaw pitch roll`, m and rad) |
 | `rviz` | `false` | RViz with the robot model |
 
@@ -42,10 +50,15 @@ else may publish the driver's `cmd_vel` any more.
 | `robot_state_publisher` | `x30` | TF `base_link` → `TORSO` → legs, `imu_link`, `LIDAR_*` from `joint_states` |
 | `control_mux_node` (`control:=true`) | `/` | `control/*` in, `/<namespace>/cmd_vel` out |
 | `lidar_sector_node`, `lidar_mount` (`perception:=true`) | `/` | `/livox/lidar` in, `perception/sector_scan`, `perception/safety_scan` out |
+| `fast_lio` (in `fast_lio/`), `odometry_monitor_node` (`odometry:=true`) | `/` | `/livox/lidar`, `/imu/data` in; `/Odometry`, `camera_init` → `body`, `odometry/*` out |
+| `localization_node` (`localization:=true`) | `/` | `map` → `odom`, `odom` → `camera_init`, `body` → `base_link`; `localization/*` |
+| `grid_mapper_node`, `site_manager_node`, `route_recorder_node` (`mapping:=true`) | `/` | `/map`, `mapping/*`, `site/*`, `route/*` |
 | `rviz` (`rviz:=true`) | `x30` | |
 
 The driver publishes no TF by default (`publish_tf: false`): `odom` → `base_link` belongs to
-the odometry or localization in use; `leg_odom_tf:=true` hands it to the driver.
+the odometry or localization in use; `leg_odom_tf:=true` hands it to the driver. With
+`localization:=true` the tree is `map` → `odom` → `camera_init` → `body` → `base_link`, and the
+launch refuses `leg_odom_tf:=true` (`base_link` would have two parents).
 
 ## Robot profile
 
@@ -76,3 +89,7 @@ catkin_make run_tests_x30_bringup && catkin_test_results build/test_results/x30_
 (`x30_driver/test/fake_robot.py`): bringup with the driver, the control mux and the sector scans;
 Livox scans in, `control/nav_cmd_vel` walks the robot, a wall ahead stops it through the
 protective field, the e-stop holds it until a release and a re-arm.
+
+`test_launch.py` checks the layers behind their arguments (`roslaunch --nodes`, `--dump-params`):
+the robot alone by default, every layer when asked, the leg odometry topic following the
+namespace, and `leg_odom_tf` with `localization` refused.
