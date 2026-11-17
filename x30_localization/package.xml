@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>x30_localization</name>
+  <version>0.4.0</version>
+  <description>Where the X30 is on its site map (the ROS Noetic port of dharma_localization): map -> odom from an SE(2) EKF on top of FAST-LIO, corrected by fiducials in view, operator pose estimates and optional scan matching through a chi-square gate that grows with the uncertainty, and the bridge of FAST-LIO's frames into a gravity-aligned odom -> base_link.</description>
+  <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
+  <license>Apache-2.0</license>
+  <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
+
+  <build_depend>x30_utils</build_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>x30_msgs</exec_depend>
+  <exec_depend>x30_utils</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+  <test_depend>roslaunch</test_depend>
+</package>
