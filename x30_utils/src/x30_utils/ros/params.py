@@ -143,7 +143,12 @@ class ParamBinder:
         )
         if frozen:
             return f'ignored, read-only until restart: {", ".join(frozen)}'
-        merged = {e.name: values.get(e.name, e.default) for e in section.items}
+        # read-only fields keep their running value: one refused earlier stays on the server
+        current = values_of(section.config.value, section.config._prefix)
+        merged = {
+            e.name: values.get(e.name, e.default) if section.is_live(e) else current[e.name]
+            for e in section.items
+        }
         try:
             new = build(section.config._cls, merged, section.config._prefix)
         except ConfigError as error:

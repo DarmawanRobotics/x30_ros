@@ -185,6 +185,19 @@ def test_timer_errors_are_logged_or_handed_over_and_the_timer_goes_on(ns):
         node.destroy_node()
 
 
+def test_a_refused_read_only_value_never_comes_in_with_a_later_change(ns):
+    node = make(ns)
+    try:
+        config = node.declare_config(Cfg)
+        rospy.set_param(f'{ns}/rate', 20.0)  # read-only
+        assert wait_for(lambda: noted(node, 'ignored, read-only'), 3.0)
+        rospy.set_param(f'{ns}/gains/kp', 3.0)  # live, while rate=20 stays on the server
+        assert wait_for(lambda: noted(node, 'applied'), 3.0)
+        assert config.gains.kp == 3.0 and config.rate == 5.0
+    finally:
+        node.destroy_node()
+
+
 def test_the_effective_values_go_back_to_the_server(ns):
     """rosparam get shows what the node runs with: defaults and overrides included."""
     rospy.set_param(f'{ns}/rate', 25)
