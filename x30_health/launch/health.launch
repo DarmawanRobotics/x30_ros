@@ -1,0 +1,20 @@
+<launch>
+  <!--
+    health_monitor_node: one typed health signal (health/status) and diagnostics for the X30.
+      params_file:  overrides of config/health.yaml (empty: none)
+      robot_params: the robot profile, loaded as robot/ here (empty: already on the server)
+  -->
+  <arg name="params_file" default=""/>
+  <arg name="robot_params" default=""/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
+            file="$(arg robot_params)"/>
+
+  <node pkg="x30_health" type="health_monitor_node" name="health_monitor_node"
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="2">
+    <rosparam command="load" file="$(find x30_health)/config/health.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+  </node>
+</launch>
