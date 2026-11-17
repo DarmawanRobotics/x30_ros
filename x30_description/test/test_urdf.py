@@ -87,7 +87,7 @@ class TestUrdf(unittest.TestCase):
         self.assertAlmostEqual(sum(masses), 30.7 + 4 * (1.43 + 4.0809 + 0.71386 + 0.06) + 4e-5)
 
     def test_lidar_and_imu_frames(self):
-        """The four LiDARs of the official model on TORSO; imu_link at base_link."""
+        """The four LiDARs of the official model on TORSO; imu_link at the body IMU."""
         r = self.root
         self.assertEqual(numbers(joint(r, 'LIDAR_FRONT_UP_joint')), (0.44367, 0.0, 0.05415))
         self.assertEqual(numbers(joint(r, 'LIDAR_FRONT_DOWN_joint'), 'origin', 'rpy'),
@@ -97,7 +97,8 @@ class TestUrdf(unittest.TestCase):
                          (0.0, -0.8029, 0.0))
         for name in ('LIDAR_FRONT_UP', 'LIDAR_FRONT_DOWN', 'LIDAR_REAR_UP', 'LIDAR_REAR_DOWN'):
             self.assertEqual(parent_of(r, name), 'TORSO')
-        self.assertEqual(numbers(joint(r, 'imu_joint')), (0.0, 0.0, 0.0))
+        self.assertEqual(numbers(joint(r, 'imu_joint')), (0.13045, -0.001, 0.0149))
+        self.assertEqual(numbers(joint(r, 'imu_joint'), 'origin', 'rpy'), (0.0, 0.0, 0.0))
         self.assertEqual(parent_of(r, 'imu_link'), 'base_link')
 
     def test_meshes_are_in_the_package(self):
