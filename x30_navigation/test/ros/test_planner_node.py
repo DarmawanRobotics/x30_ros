@@ -175,8 +175,8 @@ def test_cancel_is_not_blocked_by_a_slow_send(rig):
     assert call(Trigger, 'planner/cancel').success
     assert time.monotonic() - began < 1.0
     thread.join(5.0)
-    assert answer and not answer[0].success
-    assert 'start' not in r.follower.calls and r.last() == P.CANCELLED
+    assert answer and not answer[0].success and 'start' not in r.follower.calls
+    assert r.status.wait_until(lambda m: m.state == P.CANCELLED, 2.0), r.last()
 
 
 def test_go_to_waits_for_the_robot_pose(rig):
@@ -191,7 +191,9 @@ def test_go_to_waits_for_the_robot_pose(rig):
     r.world.hidden = False
     thread.join(5.0)
     assert answer and answer[0].success, answer
-    assert r.follower.calls == ['start'] and r.last() == P.FOLLOWING
+    assert r.follower.calls == ['start']
+    # the status is a topic of its own: it may come after the answer
+    assert r.status.wait_until(lambda m: m.state == P.FOLLOWING, 2.0), r.last()
 
 
 def test_plan_refused_after_the_pose_wait_and_cancel_ends_the_wait(rig):
@@ -209,6 +211,6 @@ def test_plan_refused_after_the_pose_wait_and_cancel_ends_the_wait(rig):
     began = time.monotonic()
     assert call(Trigger, 'planner/cancel').success
     thread.join(2.0)
-    assert answer and not answer[0].success
-    assert time.monotonic() - began < 2.0 and r.last() == P.CANCELLED
+    assert answer and not answer[0].success and time.monotonic() - began < 2.0
+    assert r.status.wait_until(lambda m: m.state == P.CANCELLED, 2.0), r.last()
     assert not r.follower.paths and 'start' not in r.follower.calls

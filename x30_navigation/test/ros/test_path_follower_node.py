@@ -82,7 +82,7 @@ def test_follow_pause_estop_resume_and_shutdown(rig):
     assert wait_for(lambda: r.follower.pose_input() is not None, 5.0)
     assert call(Trigger, 'navigation/start').success
     assert wait_for(lambda: moving(cmds), 5.0), status.last
-    assert status.last.state == S.FOLLOWING
+    assert status.wait_until(lambda m: m.state == S.FOLLOWING, 2.0), status.last
     assert call(Trigger, 'navigation/pause').success
     assert wait_for(lambda: zero(cmds) and status.last.state == S.PAUSED, 2.0)
     assert call(Trigger, 'navigation/resume').success
