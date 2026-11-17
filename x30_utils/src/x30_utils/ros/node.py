@@ -147,6 +147,13 @@ class X30Node:
         self._handles.append(sub)
         return sub
 
+    def destroy_subscription(self, subscription):
+        """Unregister a subscription of this node: no callbacks from it once this returns."""
+        with self._lock:  # a delivery in flight finishes first
+            with contextlib.suppress(ValueError):
+                self._handles.remove(subscription)
+            subscription.unregister()
+
     def create_service(self, srv_type, name: str, callback, *, concurrent: bool = False):
         """Serve callback(request, response) -> response; an exception fails the call."""
         # concurrent: the callback runs beside the other callbacks instead of after them, for a

@@ -203,6 +203,25 @@ def test_services_answer_and_errors_fail_the_call(ns):
         node.destroy_node()
 
 
+def test_a_destroyed_subscription_delivers_nothing_more(ns):
+    node = make(ns)
+    got = []
+    pub = rospy.Publisher(f'{ns}/data', Int32, queue_size=10)
+    try:
+        sub = node.create_subscription(Int32, f'{ns}/data', lambda m: got.append(m.data), 10)
+        assert connected(pub)
+        pub.publish(Int32(1))
+        assert wait_for(lambda: got == [1])
+        node.destroy_subscription(sub)
+        assert wait_for(lambda: pub.get_num_connections() == 0)
+        pub.publish(Int32(2))
+        time.sleep(0.3)
+        assert got == [1]
+    finally:
+        pub.unregister()
+        node.destroy_node()
+
+
 def test_a_concurrent_service_can_wait_for_the_timers(ns):
     """A service that waits for the timers (a recording they finish) runs beside them."""
     node = make(ns)
