@@ -97,9 +97,10 @@ def test_person_beside_the_route_is_passed_on_the_field_point_model():
 def test_sweep_is_the_same_in_both_packages():
     """core/sweep.py is shared with x30_control (until it moves to x30_utils.safety)."""
     package = Path(__file__).resolve().parents[2]
-    ours = package / 'x30_navigation' / 'core' / 'sweep.py'
-    theirs = package.parent / 'x30_control' / 'x30_control' / 'core' / 'sweep.py'
-    if not theirs.is_file():
+    ours = package / 'src' / 'x30_navigation' / 'core' / 'sweep.py'
+    theirs = package.parent / 'x30_control' / 'src' / 'x30_control' / 'core' / 'sweep.py'
+    assert ours.is_file(), ours
+    if not theirs.is_file():  # a workspace with this package alone
         pytest.skip('x30_control is not next to this package')
     assert ours.read_text() == theirs.read_text()
 
