@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
+import threading
 
 import numpy as np
 import rospy
@@ -96,6 +97,12 @@ class TfCache:
             self.listener.unregister()
 
 
+# rospy latches one message per topic and process: every TfPublisher of the process sends the
+# static sets of all of them, or a second node in the process would replace the first's
+_STATIC_LOCK = threading.Lock()
+_STATIC_SETS: dict[int, list] = {}
+
+
 class TfPublisher:
     """Broadcast dynamic and static transforms from numpy matrices."""
 
@@ -110,6 +117,15 @@ class TfPublisher:
         self._dynamic.sendTransform(transform_stamped(matrix, parent, child, when))
 
     def send_static(self, transforms: list[tuple[np.ndarray, str, str]]):
-        """Latch static transforms (all of them in one message: a new call replaces them)."""
+        """Latch static transforms (a new call replaces this publisher's set)."""
         stamp = self.node.stamp()
-        self._static.sendTransform([transform_stamped(m, p, c, stamp) for m, p, c in transforms])
+        mine = [transform_stamped(m, p, c, stamp) for m, p, c in transforms]
+        with _STATIC_LOCK:
+            _STATIC_SETS[id(self)] = mine
+            self._static.sendTransform([t for s in _STATIC_SETS.values() for t in s])
+
+    def close(self):
+        """Withdraw this publisher's static set (the others stay latched)."""
+        with _STATIC_LOCK:
+            if _STATIC_SETS.pop(id(self), None) is not None:
+                self._static.sendTransform([t for s in _STATIC_SETS.values() for t in s])

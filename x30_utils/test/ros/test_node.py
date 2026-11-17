@@ -260,6 +260,23 @@ def test_shutdown_hooks_run_once_and_survive_failures(ns):
     assert calls == [1, 2]
 
 
+def test_static_transforms_of_nodes_in_one_process_all_stay_latched(ns):
+    """rospy latches one /tf_static message per process: it carries every node's set."""
+    first, second = make(ns), X30Node('test_node_2', param_ns=f'{ns}_2')
+    late = None
+    try:
+        first.tf_out.send_static([(make_transform((1.0, 0.0, 0.0)), 'base_link', f'{ns[1:]}_a')])
+        second.tf_out.send_static([(make_transform((0.0, 2.0, 0.0)), 'base_link', f'{ns[1:]}_b')])
+        late = X30Node('test_node_late', param_ns=f'{ns}_late')  # listens after both sent
+        assert wait_for(lambda: late.tf.static('base_link', f'{ns[1:]}_a') is not None, 5.0)
+        assert wait_for(lambda: late.tf.static('base_link', f'{ns[1:]}_b') is not None, 5.0)
+        assert late.tf.static('base_link', f'{ns[1:]}_b')[1, 3] == pytest.approx(2.0)
+    finally:
+        for node in (first, second, late):
+            if node is not None:
+                node.destroy_node()
+
+
 def test_tf_static_and_dynamic_roundtrip(ns):
     node = make(ns)
     try:

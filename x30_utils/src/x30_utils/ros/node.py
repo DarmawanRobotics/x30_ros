@@ -223,6 +223,8 @@ class X30Node:
                 handle.shutdown() if isinstance(handle, rospy.Service) else handle.unregister()
         if self._tf_cache is not None:
             self._tf_cache.close()
+        if self._tf_publisher is not None:
+            self._tf_publisher.close()
         self._handles.clear()
 
     def _callback(self, callback, what: str, on_error=None):
