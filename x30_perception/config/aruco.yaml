@@ -1,0 +1,7 @@
+# aruco_detector_node: ArUco markers on the throttled camera (perception/fiducials/*), as TF
+# frames under the camera frame (localization and docking use the frames).
+dictionary: DICT_4X4_50 # cv2.aruco predefined dictionary of the printed markers
+ids: [4]
+frames: [charging_dock]
+sizes: [0.15] # m, black square edge length
+max_distance: 6.0 # m, farther poses are dropped

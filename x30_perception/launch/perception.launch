@@ -1,0 +1,41 @@
+<launch>
+  <!--
+    lidar_sector_node and, optionally, ArUco fiducials on a throttled camera.
+      params_file:   overrides of config/lidar.yaml (empty: none)
+      robot_params:  the robot profile, loaded as robot/ here (empty: already on the server)
+      fiducials:     a camera throttled to fiducials_rate for aruco_detector_node
+      camera_image / camera_info: the (rectified) camera for the fiducials
+  -->
+  <arg name="params_file" default=""/>
+  <arg name="robot_params" default=""/>
+  <arg name="fiducials" default="false"/>
+  <arg name="fiducials_rate" default="5.0"/>
+  <arg name="fiducials_params" default="$(find x30_perception)/config/aruco.yaml"/>
+  <arg name="camera_image" default="/camera/color/image_raw"/>
+  <arg name="camera_info" default="/camera/color/camera_info"/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
+            file="$(arg robot_params)"/>
+
+  <node pkg="x30_perception" type="lidar_sector_node" name="lidar_sector_node"
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="1">
+    <rosparam command="load" file="$(find x30_perception)/config/lidar.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+  </node>
+
+  <group if="$(arg fiducials)">
+    <!-- the detector sees the camera at fiducials_rate only (a few poses per second) -->
+    <node pkg="topic_tools" type="throttle" name="fiducials_throttle" respawn="true"
+          args="messages $(arg camera_image) $(arg fiducials_rate) perception/fiducials/image"/>
+    <node pkg="topic_tools" type="relay" name="fiducials_info_relay" respawn="true"
+          args="$(arg camera_info) perception/fiducials/camera_info"/>
+    <node pkg="x30_perception" type="aruco_detector_node" name="aruco_detector_node"
+          output="$(arg output)" respawn="$(arg respawn)" respawn_delay="1">
+      <rosparam command="load" file="$(arg fiducials_params)"/>
+      <remap from="image" to="perception/fiducials/image"/>
+      <remap from="camera_info" to="perception/fiducials/camera_info"/>
+    </node>
+  </group>
+</launch>
