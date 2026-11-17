@@ -16,6 +16,7 @@
   <exec_depend>x30_driver</exec_depend>
   <exec_depend>x30_localization</exec_depend>
   <exec_depend>x30_mapping</exec_depend>
+  <exec_depend>x30_navigation</exec_depend>
   <exec_depend>x30_odometry</exec_depend>
   <exec_depend>x30_perception</exec_depend>
 

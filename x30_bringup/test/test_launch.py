@@ -8,7 +8,13 @@ import subprocess
 import yaml
 
 LAUNCH = Path(__file__).resolve().parents[1] / 'launch' / 'bringup.launch'
-LAYERS = ('odometry:=true', 'odometry_method:=external', 'localization:=true', 'mapping:=true')
+LAYERS = (
+    'odometry:=true',
+    'odometry_method:=external',
+    'localization:=true',
+    'mapping:=true',
+    'navigation:=true',
+)
 
 
 def roslaunch(*args: str) -> str:
@@ -31,6 +37,11 @@ def test_every_layer_behind_its_argument():
         '/grid_mapper_node',
         '/site_manager_node',
         '/route_recorder_node',
+        '/planner_node',
+        '/path_loader_node',
+        '/path_follower_node',
+        '/obstacle_avoidance_node',
+        '/docking_node',
     ):
         assert node in nodes
 
@@ -40,6 +51,8 @@ def test_the_layers_follow_the_namespace_and_the_site():
     params = yaml.safe_load(out)
     assert params['/odometry_monitor_node/leg_odom_topic'] == '/dog/odom'
     assert params['/site_manager_node/site'] == 'gardu'
+    follower = roslaunch('--args', '/path_follower_node', str(LAUNCH), *LAYERS, 'namespace:=dog')
+    assert 'battery:=/dog/battery' in follower and 'odom:=/dog/odom' in follower
 
 
 def test_leg_odom_tf_and_localization_together_are_refused():
