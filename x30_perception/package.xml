@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>x30_perception</name>
+  <version>0.4.0</version>
+  <description>What the X30 sees around it (the ROS Noetic port of dharma_perception): LiDAR obstacle sectors for avoidance and a fail-safe 360 degree safety scan for the protective field, from the X30's Livox CustomMsg bytes or any PointCloud2, an optional depth camera, and ArUco fiducials on a throttled camera.</description>
+  <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
+  <license>Apache-2.0</license>
+  <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
+
+  <build_depend>x30_utils</build_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>topic_tools</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>x30_msgs</exec_depend>
+  <exec_depend>x30_utils</exec_depend>
+
+  <test_depend>genpy</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>roslaunch</test_depend>
+</package>
