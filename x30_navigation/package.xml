@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_navigation</name>
-  <version>0.6.0</version>
+  <version>0.7.0</version>
   <description>Where the X30 walks to (the ROS Noetic port of dharma_navigation): a planner on the site map with a footprint costmap and replanning, routes loaded from the active site, a path follower with pluggable controllers (holonomic, pure pursuit, Stanley, LQR, MPPI, PID), path shifting around obstacles, reactive avoidance policies and stop point inspections, and tag-based docking; every command goes to the control mux (control/nav_cmd_vel), never to the robot.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

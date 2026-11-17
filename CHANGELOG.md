@@ -3,6 +3,21 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.7.0)
+
+### Added
+- `x30_health`: `health_monitor_node`, one health signal (`health/status`, latched, with a
+  speed scale for the control mux) and diagnostics: sensor rates and header ages read from the
+  raw ROS 1 bytes of any type (the header found in the connection's message definition), the
+  expected nodes from the master, the stack's typed states, the safety scan, the TF edges and
+  the odom chain, the clock, the computer.
+- `x30_bringup`: `health` (told the nodes, sensors and states of the layers it starts), and
+  `hikmicro` / `hertzino` with their hosts and passwords for the inspection cameras.
+- `x30.repos`: FAST-LIO (ROS 1), the Livox message package it is built with, hikmicro_driver
+  and hertzino_driver (`vcs import --recursive`).
+- `x30_utils`: `create_any_subscription()`, raw bytes of any type with rospy's connection
+  header.
+
 ## [Unreleased] (0.6.0)
 
 ### Added
