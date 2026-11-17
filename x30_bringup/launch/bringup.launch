@@ -15,6 +15,8 @@
                     (x30_localization)
       mapping:      the site maps, mapping sessions and routes (x30_mapping); site: the site at
                     start (empty: the last run's)
+      navigation:   the planner, route loader, path follower, avoidance and docking
+                    (x30_navigation), commanding the control mux
       lidar_frame / lidar_pose: base_link -> the frame of /livox/lidar ("x y z yaw pitch roll",
                     m and rad): check it on the robot (x30_perception README) before relying
                     on the scans
@@ -32,6 +34,7 @@
   <arg name="localization" default="false"/>
   <arg name="mapping" default="false"/>
   <arg name="site" default=""/>
+  <arg name="navigation" default="false"/>
   <arg name="lidar_frame" default="livox_frame"/>
   <arg name="lidar_pose" default="0 0 0 0 0 0"/>
   <arg name="rviz" default="false"/>
@@ -67,6 +70,11 @@
 
   <include if="$(arg mapping)" file="$(find x30_mapping)/launch/mapping.launch">
     <arg name="site" value="$(arg site)"/>
+  </include>
+
+  <include if="$(arg navigation)" file="$(find x30_navigation)/launch/navigation.launch">
+    <arg name="battery_topic" value="/$(arg namespace)/battery"/>
+    <arg name="odom_topic" value="/$(arg namespace)/odom"/>
   </include>
 
   <group if="$(arg perception)">
