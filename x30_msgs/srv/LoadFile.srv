@@ -1,0 +1,6 @@
+# Switch a node to another file inside the sites directory. create: start an empty one.
+string path
+bool create
+---
+bool success
+string message

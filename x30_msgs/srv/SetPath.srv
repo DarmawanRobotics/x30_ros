@@ -1,0 +1,7 @@
+# Give the follower a path (map frame); it starts over on it.
+Waypoint[] waypoints
+bool process              # resample and smooth it like a taught route
+string source             # who sent it, for the log
+---
+bool success
+string message

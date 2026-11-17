@@ -1,0 +1,6 @@
+# Choose who drives: "auto" (navigation) or "remote" (an operator source).
+string mode
+string source             # remote source, e.g. handheld; empty: the first configured one
+---
+bool success
+string message

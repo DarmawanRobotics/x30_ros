@@ -1,0 +1,5 @@
+# Load a taught route (CSV) inside the sites directory into the follower.
+string path
+---
+bool success
+string message

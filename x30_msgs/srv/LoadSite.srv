@@ -1,0 +1,5 @@
+# Make a site active: its map, fiducials and routes.
+string site
+---
+bool success
+string message

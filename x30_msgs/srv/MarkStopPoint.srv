@@ -1,0 +1,5 @@
+# Mark the current pose of the route being recorded as a stop point.
+float32 dwell_sec
+---
+bool success
+string message
