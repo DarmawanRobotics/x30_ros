@@ -1,14 +1,11 @@
-"""Blocking service calls from a node's callbacks, with a timeout (rospy has none per call)."""
+"""Blocking service calls from a node's callbacks, with a timeout (x30_utils' ServiceClient)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import threading
 from typing import Any
 
-import rospy
-
-READY_CHECK_SEC = 0.05
+from x30_utils.ros.services import ServiceClient
 
 
 @dataclass(frozen=True)
@@ -30,26 +27,6 @@ class CallResult:
         return self.error or str(getattr(self.response, 'message', ''))
 
 
-class Client:
-    """A service of another node, by its resolved name."""
-
-    def __init__(self, srv_type, name: str):
-        self.proxy = rospy.ServiceProxy(name, srv_type)
-        self.name = self.proxy.resolved_name
-
-    def wait(self, timeout_sec: float) -> bool:
-        """Wait at most timeout_sec for the server; True once it is there."""
-        try:
-            self.proxy.wait_for_service(timeout=timeout_sec)
-        except rospy.ROSException:  # timed out, or shutting down
-            return False
-        return True
-
-    def ready(self) -> bool:
-        """Return True when the server is there now."""
-        return self.wait(READY_CHECK_SEC)
-
-
 class Caller:
     """Service clients of one node, called with a timeout."""
 
@@ -57,27 +34,14 @@ class Caller:
         self.node = node
         self.timeout_sec = timeout_sec
 
-    def client(self, srv_type, name: str) -> Client:
+    def client(self, srv_type, name: str) -> ServiceClient:
         """Return a client of the service name (resolved in the node's namespace)."""
-        return Client(srv_type, name)
+        return ServiceClient(srv_type, name)
 
-    def call(self, client: Client, request, timeout_sec: float | None = None) -> CallResult:
+    def call(self, client: ServiceClient, request, timeout_sec: float | None = None) -> CallResult:
         """Call and wait for the answer at most the timeout (the call itself is not cancelled)."""
         timeout = self.timeout_sec if timeout_sec is None else timeout_sec
         if not client.wait(min(timeout, 2.0)):
             return CallResult(error=f'{client.name} not available', unavailable=True)
-        answer: list[CallResult] = []
-        done = threading.Event()
-
-        def run():
-            try:
-                answer.append(CallResult(client.proxy.call(request)))
-            except Exception as error:  # a failed call is an answer too
-                answer.append(CallResult(error=f'{client.name} failed: {error}'))
-            finally:
-                done.set()
-
-        threading.Thread(target=run, name=f'call {client.name}', daemon=True).start()
-        if not done.wait(timeout):
-            return CallResult(error=f'{client.name} timed out after {timeout:.1f} s')
-        return answer[0]
+        response, error = client.call(request, timeout)
+        return CallResult(error=error) if error else CallResult(response)
