@@ -236,6 +236,24 @@ def test_services_answer_and_errors_fail_the_call(ns):
         node.destroy_node()
 
 
+def test_any_subscription_passes_bytes_and_the_definition(ns):
+    node = make(ns)
+    got = []
+    pub = rospy.Publisher(f'{ns}/any', String, queue_size=10)
+    try:
+        node.create_any_subscription(f'{ns}/any', lambda data, c: got.append((data, c)))
+        assert connected(pub)
+        pub.publish(String('hi'))
+        assert wait_for(lambda: got)
+        data, connection = got[0]
+        assert data == b'\x02\x00\x00\x00hi'  # uint32 length, then the bytes
+        assert connection['type'] == 'std_msgs/String'
+        assert 'string data' in connection['message_definition']
+    finally:
+        pub.unregister()
+        node.destroy_node()
+
+
 def test_a_destroyed_subscription_delivers_nothing_more(ns):
     node = make(ns)
     got = []

@@ -14,6 +14,7 @@ from x30_utils.ros.handles import (
     GuardedPublisher,
     SteadyTimer,
     raw_bytes,
+    raw_message,
     type_names,
     wait_until,
 )
@@ -148,6 +149,16 @@ class X30Node:
             queue_size=p.queue_size or None,
             buff_size=p.buff_size,
             tcp_nodelay=p.tcp_nodelay,
+        )
+        self._handles.append(sub)
+        return sub
+
+    def create_any_subscription(self, topic: str, callback, qos=SENSOR):
+        """Subscribe to any type: callback(data bytes, connection header: type, definition...)."""
+        p = profile(qos)
+        handler = raw_message(self._callback(callback, f'{topic} callback failed'))
+        sub = rospy.Subscriber(
+            topic, rospy.AnyMsg, handler, queue_size=p.queue_size or None, buff_size=p.buff_size
         )
         self._handles.append(sub)
         return sub

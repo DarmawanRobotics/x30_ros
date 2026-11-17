@@ -108,6 +108,15 @@ def type_names(msg_type) -> tuple[str, ...]:
     return (msg_type._type,)
 
 
+def raw_message(handler):
+    """Wrap handler(bytes, connection header) as a rospy.AnyMsg callback (any type)."""
+
+    def receive(msg: rospy.AnyMsg):
+        handler(msg._buff, getattr(msg, '_connection_header', None) or {})
+
+    return receive
+
+
 def raw_bytes(handler, accepted: tuple[str, ...] = (), on_wrong_type=None):
     """Wrap handler(bytes) as a rospy.AnyMsg callback; other types go to on_wrong_type(type)."""
 
