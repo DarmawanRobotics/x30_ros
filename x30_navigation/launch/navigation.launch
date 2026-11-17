@@ -1,0 +1,46 @@
+<launch>
+  <!--
+    The navigation of the X30: planner_node, path_loader_node, path_follower_node,
+    obstacle_avoidance_node and docking_node. They command the control mux
+    (control/nav_cmd_vel), never the robot's cmd_vel.
+      params_file:   overrides of config/navigation.yaml, the same layout: one section per node
+      robot_params:  the robot profile, loaded as robot/ here (empty: already on the server)
+      battery_topic: the robot's sensor_msgs/BatteryState (x30_driver)
+      odom_topic:    the robot's nav_msgs/Odometry with the body twist (x30_driver)
+      sites_dir, route: path_loader_node's, when set
+      docking:       start docking_node
+  -->
+  <arg name="params_file" default=""/>
+  <arg name="robot_params" default=""/>
+  <arg name="battery_topic" default="/x30/battery"/>
+  <arg name="odom_topic" default="/x30/odom"/>
+  <arg name="sites_dir" default=""/>
+  <arg name="route" default=""/>
+  <arg name="docking" default="true"/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
+            file="$(arg robot_params)"/>
+  <rosparam command="load" file="$(find x30_navigation)/config/navigation.yaml"/>
+  <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+  <param if="$(eval arg('sites_dir') != '')" name="path_loader_node/sites_dir"
+         value="$(arg sites_dir)"/>
+  <param if="$(eval arg('route') != '')" name="path_loader_node/route" value="$(arg route)"/>
+
+  <node pkg="x30_navigation" type="planner_node" name="planner_node"
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="2"/>
+  <node pkg="x30_navigation" type="path_loader_node" name="path_loader_node"
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="2"/>
+  <node pkg="x30_navigation" type="path_follower_node" name="path_follower_node"
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="1">
+    <remap from="battery" to="$(arg battery_topic)"/>
+    <remap from="odom" to="$(arg odom_topic)"/>
+  </node>
+  <node pkg="x30_navigation" type="obstacle_avoidance_node" name="obstacle_avoidance_node"
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="1"/>
+  <node if="$(arg docking)" pkg="x30_navigation" type="docking_node" name="docking_node"
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="1">
+    <remap from="battery" to="$(arg battery_topic)"/>
+  </node>
+</launch>

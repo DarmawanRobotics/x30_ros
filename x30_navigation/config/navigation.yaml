@@ -1,0 +1,49 @@
+# x30_navigation defaults on the X30, one section per node: loaded at the launch namespace (a
+# params_file has the same layout). Every parameter: README.md. The robot (frames, footprint,
+# limits) comes from the robot profile (robot/); every command goes to the control mux.
+planner_node:
+  costmap:
+    margin: 0.1                 # m
+    inflation_radius: 0.8       # m, paths keep away from walls up to here
+  monitor:
+    replan_after_sec: 3.0       # s of follower BLOCKED before planning around it
+    max_replans: 5
+
+path_loader_node:
+  sites_dir: ~/x30/map          # routes are loaded from inside this directory only
+  route: ""                     # route CSV loaded at start ("": the remembered one)
+
+path_follower_node:
+  controller: holonomic         # the X30 strafes (robot/kinematics: omni)
+  avoidance_mode: path_shift
+  loop_route: false             # true: patrol a closed route
+  speed:
+    cruise: 0.4                 # m/s, never above robot/limits/max_vx (0.75)
+  safety:
+    blocked_timeout_sec: 10.0   # s standing still (measured): BLOCKED (the planner replans)
+    lateral_margin: 0.10        # m, at least the control mux's field/lateral_margin
+    human_speed: 0.5            # m/s, at least the control mux's field/human_speed
+  inspection:
+    reverse_distance_m: 0.0     # m
+    reverse_speed: 0.1          # m/s
+
+obstacle_avoidance_node:
+  policy: vfh                   # braitenberg | vfh | potential_field | follow_gap
+  shared:
+    safe_distance: 1.5          # m from base_link
+    emergency_distance: 0.75    # m, obstacle in the frontal cone: emergency stop
+    body_margin: 0.15           # m beside the body on a chosen heading (vfh, follow_gap)
+    window_deg: 180.0
+
+docking_node:
+  tag:
+    frame: charging_dock
+  goal:
+    # base_link from the dock tag where the robot stops: measure it for the X30's dock (its
+    # front is 0.50 m from base_link); farther is safe, nearer can touch the dock
+    distance: 1.0
+    direction: forward
+  approach:
+    speed: 0.12                 # m/s
+  charge:
+    confirm_timeout_sec: 0.0    # x30_driver's battery has no charging status yet: off
