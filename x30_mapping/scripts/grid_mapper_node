@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""grid_mapper_node: see x30_mapping.grid_mapper_node."""
+
+from x30_mapping.grid_mapper_node import main
+
+if __name__ == '__main__':
+    main()
