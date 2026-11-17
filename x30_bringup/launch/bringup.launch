@@ -8,6 +8,13 @@
       perception:   the LiDAR sector scans for the protective field (x30_perception)
       leg_odom_tf:  the driver publishes odom -> base_link (leg odometry, roll and pitch from the
                     IMU), for the scans' leveling when no other odometry owns that transform
+                    (not with localization: its bridge owns it)
+      odometry:     FAST-LIO behind its start gate, and the odometry monitor (x30_odometry);
+                    odometry_method: fast_lio, or external for a simulator
+      localization: map -> odom and the bridge of FAST-LIO into odom -> base_link
+                    (x30_localization)
+      mapping:      the site maps, mapping sessions and routes (x30_mapping); site: the site at
+                    start (empty: the last run's)
       lidar_frame / lidar_pose: base_link -> the frame of /livox/lidar ("x y z yaw pitch roll",
                     m and rad): check it on the robot (x30_perception README) before relying
                     on the scans
@@ -20,9 +27,18 @@
   <arg name="control" default="false"/>
   <arg name="perception" default="false"/>
   <arg name="leg_odom_tf" default="false"/>
+  <arg name="odometry" default="false"/>
+  <arg name="odometry_method" default="fast_lio"/>
+  <arg name="localization" default="false"/>
+  <arg name="mapping" default="false"/>
+  <arg name="site" default=""/>
   <arg name="lidar_frame" default="livox_frame"/>
   <arg name="lidar_pose" default="0 0 0 0 0 0"/>
   <arg name="rviz" default="false"/>
+
+  <!-- base_link has one parent: the driver's leg odometry or the localization bridge -->
+  <arg if="$(eval arg('leg_odom_tf') and arg('localization'))" name="one_parent_for_base_link"
+       value="$(eval {}['leg_odom_tf and localization both publish odom -> base_link'])"/>
 
   <rosparam command="load" ns="robot" file="$(arg robot_params)"/>
 
@@ -40,6 +56,17 @@
 
   <include if="$(arg control)" file="$(find x30_control)/launch/control.launch">
     <arg name="cmd_vel_topic" value="/$(arg namespace)/cmd_vel"/>
+  </include>
+
+  <include if="$(arg odometry)" file="$(find x30_odometry)/launch/odometry.launch">
+    <arg name="method" value="$(arg odometry_method)"/>
+    <arg name="leg_odom_topic" value="/$(arg namespace)/odom"/>
+  </include>
+
+  <include if="$(arg localization)" file="$(find x30_localization)/launch/localization.launch"/>
+
+  <include if="$(arg mapping)" file="$(find x30_mapping)/launch/mapping.launch">
+    <arg name="site" value="$(arg site)"/>
   </include>
 
   <group if="$(arg perception)">
