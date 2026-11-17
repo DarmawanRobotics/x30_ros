@@ -40,4 +40,12 @@ add_service_files(
 
 generate_messages(DEPENDENCIES std_msgs)
 
+# generate_messages() creates the devel space's Python directory at configure time. Under
+# catkin_make the environment cache of the build targets (the tests) was taken before it existed,
+# and catkin_python_setup() of a later package refreshes the cache only when it creates that
+# directory itself: refresh it here, or no test finds a Python package of the workspace.
+if(GENERATE_ENVIRONMENT_CACHE_COMMAND)
+  safe_execute_process(COMMAND ${GENERATE_ENVIRONMENT_CACHE_COMMAND})
+endif()
+
 catkin_package(CATKIN_DEPENDS message_runtime std_msgs)
