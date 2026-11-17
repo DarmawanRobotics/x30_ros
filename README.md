@@ -15,6 +15,7 @@ node shares.**
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 [Packages](#packages) · [Stack](#stack) · [Network](#network) · [Quick start](#quick-start) ·
+[Dependencies](#dependencies) ·
 [Interface](#interface) · [Verify on the real robot](#verify-on-the-real-robot) ·
 [Safety](#safety) · [Develop](#develop)
 
@@ -33,7 +34,8 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 [x30_msgs](x30_msgs/README.md) · [x30_control](x30_control/README.md) ·
 [x30_perception](x30_perception/README.md) · [x30_odometry](x30_odometry/README.md) ·
 [x30_localization](x30_localization/README.md) · [x30_mapping](x30_mapping/README.md) ·
-[x30_navigation](x30_navigation/README.md) · [CHANGELOG](CHANGELOG.md)
+[x30_navigation](x30_navigation/README.md) · [x30_health](x30_health/README.md) ·
+[CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -50,6 +52,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 | [`x30_localization`](x30_localization/README.md) | `map` → `odom` from an EKF corrected by fiducials, pose estimates and scan matching through a chi-square gate; the gravity-aligned bridge of FAST-LIO into `odom` → `base_link` |
 | [`x30_mapping`](x30_mapping/README.md) | sites (map, fiducials, routes), the occupancy grid from FAST-LIO's scans, `/map`, mapping sessions and route teaching with stop points |
 | [`x30_navigation`](x30_navigation/README.md) | a planner on the site map with replanning, routes from the active site, a path follower with pluggable controllers, path shifting and stop point inspections, reactive avoidance and tag docking; every command to the control mux |
+| [`x30_health`](x30_health/README.md) | one health signal: sensor rates and header ages (raw, any type), the expected nodes, the stack's states, the safety scan, TF, the clock and the computer; `health/status` with a speed scale for the mux, and diagnostics |
 
 ## Stack
 
@@ -61,6 +64,7 @@ robot's own perception and navigation software: the stack drives the robot throu
 and reads the X30's sensor topics.
 
 ```
+ watching     health/status, diagnostics, speed scale  ◄ x30_health
  navigation   planner · route loader · path follower · avoidance · docking  ◄ x30_navigation
  world        occupancy grid · sites (map, fiducials, routes)        ◄ x30_mapping
  estimation   localization (EKF) · FAST-LIO odometry · sector scans
@@ -103,6 +107,7 @@ Ubuntu 20.04, ROS Noetic. Connect the computer to the robot's network and add it
 mkdir -p ~/catkin_ws/src && cd ~/catkin_ws/src
 git clone https://github.com/DarmawanRobotics/x30_ros.git
 cd ~/catkin_ws
+vcs import --recursive src < src/x30_ros/x30.repos   # FAST-LIO, Livox msgs, the cameras
 rosdep install --from-paths src --ignore-src -y
 catkin_make && source devel/setup.bash
 
@@ -287,6 +292,21 @@ On a new robot, in an open area, with someone at the handheld:
   only while sitting or after an emergency stop.
 - `command_prefix` other than `0x21` / `0x31` stops the node at start; `heartbeat_hz` below
   2 Hz is raised to 2 Hz.
+
+## Dependencies
+
+[x30.repos](x30.repos) brings the stack's source dependencies next to x30_ros
+(`vcs import --recursive`, `python3-vcstool`):
+
+| | |
+|---|---|
+| `FAST_LIO` (hku-mars, ROS 1) | the LiDAR-inertial odometry of x30_odometry; `--recursive` for its ikd-Tree |
+| `livox_ros_driver` | the Livox `CustomMsg` FAST-LIO is built with (the same md5 as the X30's `livox_ros_driver2`); it needs the [Livox SDK](https://github.com/Livox-SDK/Livox-SDK) installed first: `git clone https://github.com/Livox-SDK/Livox-SDK.git && cd Livox-SDK/build && cmake .. && make && sudo make install` |
+| `hikmicro_driver` | the HIKMICRO thermal + visible PTZ camera (`hikmicro:=true`) |
+| `hertzino_driver` | the Hertzino acoustic camera (`hertzino:=true`) |
+
+Everything else comes from rosdep. Without them the stack still builds and runs: odometry with
+`odometry_method:=external`, the cameras off.
 
 ## Develop
 
