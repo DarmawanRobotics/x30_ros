@@ -23,6 +23,29 @@ TAG_FIELDS = {'adhesion': 0, 'particle': 2, 'other': 4}
 TYPES = ('livox_ros_driver2/CustomMsg', 'livox_ros_driver/CustomMsg')
 """The message types the bytes may come from (the publisher's connection header)."""
 
+DEFINITION = """std_msgs/Header header
+uint64 timebase
+uint32 point_num
+uint8 lidar_id
+uint8[3] rsvd
+CustomPoint[] points
+================================================================================
+MSG: std_msgs/Header
+uint32 seq
+time stamp
+string frame_id
+================================================================================
+MSG: livox_ros_driver2/CustomPoint
+uint32 offset_time
+float32 x
+float32 y
+float32 z
+uint8 reflectivity
+uint8 tag
+uint8 line
+"""
+"""livox_ros_driver2's CustomMsg with its dependencies (genpy.dynamic: tests, tools)."""
+
 
 class LivoxError(ValueError):
     """The bytes are not a usable serialized CustomMsg."""

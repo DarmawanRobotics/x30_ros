@@ -9,7 +9,13 @@ from livox_pack import pack
 import numpy as np
 import pytest
 
-from x30_perception.core.livox import LivoxError, LivoxScan, noise_mask, parse_custom_msg
+from x30_perception.core.livox import (
+    DEFINITION,
+    LivoxError,
+    LivoxScan,
+    noise_mask,
+    parse_custom_msg,
+)
 from x30_utils.math import default_rng
 
 POINTS = np.array(
@@ -130,35 +136,12 @@ def test_noise_mask_selects_fields_and_levels():
     assert not noise_mask(tags, ()).any()
 
 
-CUSTOM_MSG = """std_msgs/Header header
-uint64 timebase
-uint32 point_num
-uint8 lidar_id
-uint8[3] rsvd
-CustomPoint[] points
-================================================================================
-MSG: std_msgs/Header
-uint32 seq
-time stamp
-string frame_id
-================================================================================
-MSG: livox_ros_driver2/CustomPoint
-uint32 offset_time
-float32 x
-float32 y
-float32 z
-uint8 reflectivity
-uint8 tag
-uint8 line
-"""
-
-
 def test_matches_the_genpy_serializer():
     """Parity with ROS 1's own serializer, on the driver's message definition."""
     genpy = pytest.importorskip('genpy')
     from genpy.dynamic import generate_dynamic
 
-    types = generate_dynamic('livox_ros_driver2/CustomMsg', CUSTOM_MSG)
+    types = generate_dynamic('livox_ros_driver2/CustomMsg', DEFINITION)
     custom_point = types['livox_ros_driver2/CustomPoint']
     msg = types['livox_ros_driver2/CustomMsg'](timebase=42, lidar_id=1, rsvd=[0, 0, 0])
     msg.header.stamp = genpy.Time(1700000000, 999)

@@ -15,6 +15,7 @@ from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Header, String
 
 from x30_msgs.msg import SectorScan
+from x30_perception.core.livox import DEFINITION
 from x30_perception.lidar_sector_node import LidarSectorNode
 from x30_utils.config import ConfigError
 from x30_utils.math import make_transform, quat_from_rpy
@@ -27,27 +28,6 @@ BASE_HEIGHT = 0.35
 CAMERA = l1w_mount()  # base_link -> camera_depth_optical_frame
 LOW_BOX = (1.2, 1.5, -0.15, 0.15, 0.15)  # below the LiDAR, seen by the camera only
 NAMES = itertools.count()
-CUSTOM_MSG = """std_msgs/Header header
-uint64 timebase
-uint32 point_num
-uint8 lidar_id
-uint8[3] rsvd
-CustomPoint[] points
-================================================================================
-MSG: std_msgs/Header
-uint32 seq
-time stamp
-string frame_id
-================================================================================
-MSG: livox_ros_driver2/CustomPoint
-uint32 offset_time
-float32 x
-float32 y
-float32 z
-uint8 reflectivity
-uint8 tag
-uint8 line
-"""
 
 
 def room(n: int = 720, radius: float = 3.0, height: float = 0.3) -> np.ndarray:
@@ -186,7 +166,7 @@ def test_livox_raw_bytes_give_front_and_safety_scans(rig):
 
 def test_livox_topic_takes_the_drivers_type_and_drops_others(rig):
     """Over the topic: livox_ros_driver2/CustomMsg is read, another type is dropped."""
-    custom = generate_dynamic('livox_ros_driver2/CustomMsg', CUSTOM_MSG)
+    custom = generate_dynamic('livox_ros_driver2/CustomMsg', DEFINITION)
     msg_type = custom['livox_ros_driver2/CustomMsg']
     livox = rospy.Publisher('livox/lidar', msg_type, queue_size=1)
     try:
