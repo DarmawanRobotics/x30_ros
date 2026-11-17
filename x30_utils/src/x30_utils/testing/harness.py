@@ -8,11 +8,13 @@ import socket
 import subprocess
 import threading
 import time
+import xmlrpc.client
 
-import rosgraph
 import rospy
 
 MASTER_START_SEC = 15.0
+MASTER_ATTEMPTS = 5  # ports to try: another process may take a free port before rosmaster binds it
+PROBE_SEC = 1.0  # one XML-RPC probe of a port
 
 
 def wait_for(predicate, timeout: float = 5.0, period: float = 0.01) -> bool:
@@ -33,35 +35,67 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def _online(uri: str) -> bool:
+class _ProbeTransport(xmlrpc.client.Transport):
+    def make_connection(self, host):
+        connection = super().make_connection(host)
+        connection.timeout = PROBE_SEC  # whatever listens there may never answer
+        return connection
+
+
+def pid_at(uri: str) -> int | None:
+    """Return the pid of the master or node answering at uri, None when none does."""
+    proxy = xmlrpc.client.ServerProxy(uri, transport=_ProbeTransport())
     try:
-        return rosgraph.Master('/x30_test_probe', master_uri=uri).is_online()
-    except Exception:
-        return False
+        code, _message, pid = proxy.getPid('/x30_test_probe')
+    except Exception:  # nobody listens, or not the ROS XML-RPC API
+        return None
+    return pid if code == 1 else None
 
 
-@contextlib.contextmanager
-def ros_master(port: int | None = None):
-    """Run a private rosmaster for the tests and point ROS_MASTER_URI at it."""
-    port = port or free_port()
+def _stop(process: subprocess.Popen):
+    process.terminate()
+    try:
+        process.wait(5.0)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def _start_master(port: int) -> subprocess.Popen | None:
+    """Start rosmaster on port; None when another process answers there."""
     uri = f'http://localhost:{port}'
-    previous = os.environ.get('ROS_MASTER_URI')
-    os.environ['ROS_MASTER_URI'] = uri
     master = subprocess.Popen(
         ['rosmaster', '--core', '-p', str(port)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    # rosmaster waits forever when its port is taken, and whoever has it answers for it: the
+    # master is ours only when the pid answering is its own
+    wait_for(lambda: master.poll() is not None or pid_at(uri) is not None, MASTER_START_SEC, 0.1)
+    if master.poll() is None and pid_at(uri) == master.pid:
+        return master
+    _stop(master)
+    return None
+
+
+@contextlib.contextmanager
+def ros_master(port: int | None = None):
+    """Run a private rosmaster for the tests and point ROS_MASTER_URI at it."""
+    # a free port is only free now: parallel test runs (catkin_make -j) bind ports meanwhile
+    for _ in range(1 if port else MASTER_ATTEMPTS):
+        chosen = port or free_port()
+        master = _start_master(chosen)
+        if master is not None:
+            break
+    else:
+        raise RuntimeError(f'rosmaster did not start (last port {chosen})')
+    uri = f'http://localhost:{chosen}'
+    previous = os.environ.get('ROS_MASTER_URI')
+    os.environ['ROS_MASTER_URI'] = uri
     try:
-        if not wait_for(lambda: _online(uri), MASTER_START_SEC, 0.1):
-            raise RuntimeError(f'rosmaster did not start on {uri}')
         yield uri
     finally:
-        master.terminate()
-        try:
-            master.wait(5.0)
-        except subprocess.TimeoutExpired:
-            master.kill()
+        _stop(master)
         if previous is None:
             os.environ.pop('ROS_MASTER_URI', None)
         else:
