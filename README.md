@@ -4,8 +4,8 @@
 
 **ROS Noetic robot package and autonomy stack for the Deep Robotics Jueying X30: the motion
 host's UDP protocol as a driver, Deep Robotics' own URDF as xacro, and the X30 stack, the ROS
-Noetic port of Dharma: a control mux with a protective field, LiDAR sector scans, and the
-building blocks every node shares.**
+Noetic port of Dharma: a control mux with a protective field, LiDAR sector scans, FAST-LIO
+odometry, localization on site maps and the building blocks every node shares.**
 
 [![CI](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-22314E?logo=ros&logoColor=white)](http://wiki.ros.org/noetic)
@@ -30,7 +30,9 @@ or on the robot's own computers.
 Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/README.md) ·
 [x30_bringup](x30_bringup/README.md) · [x30_utils](x30_utils/README.md) ·
 [x30_msgs](x30_msgs/README.md) · [x30_control](x30_control/README.md) ·
-[x30_perception](x30_perception/README.md) · [CHANGELOG](CHANGELOG.md)
+[x30_perception](x30_perception/README.md) · [x30_odometry](x30_odometry/README.md) ·
+[x30_localization](x30_localization/README.md) · [x30_mapping](x30_mapping/README.md) ·
+[CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -43,6 +45,9 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 | [`x30_msgs`](x30_msgs/README.md) | the stack's messages and services: status of every subsystem, sector scans, paths, sites |
 | [`x30_control`](x30_control/README.md) | the control mux: the only publisher of `/x30/cmd_vel`; AUTO or REMOTE, speed envelope, protective field on the 360° safety scan, latched e-stop with re-arm |
 | [`x30_perception`](x30_perception/README.md) | LiDAR sector scans from the X30's `/livox/lidar` (raw bytes, no Livox package needed) or any PointCloud2: front for avoidance, 360° fail-safe for the protective field; optional depth camera; ArUco fiducials |
+| [`x30_odometry`](x30_odometry/README.md) | FAST-LIO2 on the merged `/livox/lidar` and the body IMU behind a start gate that waits for a still and level IMU; the odometry monitor (stale, jumps, restarts, z drift, tilt, a speed mismatch with the leg odometry) and the trip |
+| [`x30_localization`](x30_localization/README.md) | `map` → `odom` from an EKF corrected by fiducials, pose estimates and scan matching through a chi-square gate; the gravity-aligned bridge of FAST-LIO into `odom` → `base_link` |
+| [`x30_mapping`](x30_mapping/README.md) | sites (map, fiducials, routes), the occupancy grid from FAST-LIO's scans, `/map`, mapping sessions and route teaching with stop points |
 
 ## Stack
 
@@ -55,8 +60,9 @@ and reads the X30's sensor topics.
 
 ```
  navigation   planner · route loader · path follower · obstacle avoidance        (next)
- world        occupancy grid · sites (map, fiducials, routes)                    (next)
- estimation   FAST-LIO odometry · localization (EKF) · sector scans  ◄ x30_perception
+ world        occupancy grid · sites (map, fiducials, routes)        ◄ x30_mapping
+ estimation   localization (EKF) · FAST-LIO odometry · sector scans
+              ◄ x30_localization · x30_odometry · x30_perception
  control      control mux: the only /x30/cmd_vel, e-stop, protective field  ◄ x30_control
  robot        x30_driver (UDP) · x30_description (URDF)
  base         x30_utils (robot profile, config, math, X30Node) · x30_msgs
@@ -126,6 +132,19 @@ roslaunch x30_bringup bringup.launch control:=true perception:=true leg_odom_tf:
 rostopic echo -n 1 /control/status                  # armed, field CLEAR
 rostopic pub -r 20 /control/nav_cmd_vel geometry_msgs/Twist '{linear: {x: 0.2}}'
 rosservice call /control/estop/engage               # stops at once, until released
+```
+
+With FAST-LIO (built from source, see [x30_odometry](x30_odometry/README.md)), the localization
+and the site maps; check the LiDAR frame and the IMU mount first
+([x30_odometry](x30_odometry/README.md#check-on-the-robot)):
+
+```bash
+roslaunch x30_bringup bringup.launch control:=true perception:=true \
+    odometry:=true localization:=true mapping:=true
+rostopic echo -n 1 /odometry/status                 # OK once FAST-LIO runs
+rosservice call /mapping/start "{site: gardu-a, reset: false}"   # walk the site, then
+rosservice call /mapping/save && rosservice call /mapping/stop
+rosservice call /localization/record_tags           # a tag in view anchors the site
 ```
 
 ## Interface
