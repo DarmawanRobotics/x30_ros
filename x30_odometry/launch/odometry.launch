@@ -1,0 +1,55 @@
+<launch>
+  <!--
+    The LiDAR-inertial odometry of the X30 and its monitor.
+      method:               fast_lio (FAST-LIO2, ROS 1), or external: a simulator or another
+                            estimator publishes /Odometry and camera_init -> body
+      wait_still:           hold the estimator, and every respawn, until the IMU is still and level
+      save_map:             FAST-LIO keeps its map and writes a PCD at shutdown (RAM grows)
+      params_file:          overrides of config/monitor.yaml (empty: none)
+      gate_params_file:     overrides of config/gate.yaml, the start gate (empty: none)
+      fast_lio_params_file: the FAST-LIO parameters (default: config/fast_lio.yaml, the X30)
+      leg_odom_topic:       the robot's leg odometry for the speed test (empty: config/monitor.yaml)
+      robot_params:         the robot profile, loaded as robot/ here (empty: already on the server)
+  -->
+  <arg name="method" default="fast_lio"/>
+  <arg name="wait_still" default="true"/>
+  <arg name="save_map" default="false"/>
+  <arg name="params_file" default=""/>
+  <arg name="gate_params_file" default=""/>
+  <arg name="fast_lio_params_file" default="$(find x30_odometry)/config/fast_lio.yaml"/>
+  <arg name="leg_odom_topic" default=""/>
+  <arg name="robot_params" default=""/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <!-- an unknown method fails here (KeyError) instead of starting no estimator -->
+  <arg name="known_method" value="$(eval {'fast_lio': 1, 'external': 1}[arg('method')])"/>
+
+  <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
+            file="$(arg robot_params)"/>
+
+  <!-- FAST-LIO reads its parameters from its namespace, not its private one: keep them in
+       fast_lio/. Its topics (/Odometry, /cloud_registered_body) are absolute. -->
+  <group if="$(eval arg('method') == 'fast_lio')" ns="fast_lio">
+    <rosparam command="load" file="$(arg fast_lio_params_file)"/>
+    <param name="pcd_save/pcd_save_en" value="$(arg save_map)"/>
+
+    <!-- the gate is the launch prefix: it holds the first start and every respawn -->
+    <rosparam command="load" ns="odometry_gate" file="$(find x30_odometry)/config/gate.yaml"/>
+    <rosparam if="$(eval arg('gate_params_file') != '')" command="load" ns="odometry_gate"
+              file="$(arg gate_params_file)"/>
+    <node if="$(arg wait_still)" pkg="fast_lio" type="fastlio_mapping" name="fast_lio"
+          output="$(arg output)" respawn="$(arg respawn)" respawn_delay="3"
+          launch-prefix="rosrun x30_odometry wait_still --"/>
+    <node unless="$(arg wait_still)" pkg="fast_lio" type="fastlio_mapping" name="fast_lio"
+          output="$(arg output)" respawn="$(arg respawn)" respawn_delay="3"/>
+  </group>
+
+  <node pkg="x30_odometry" type="odometry_monitor_node" name="odometry_monitor_node"
+        output="$(arg output)" respawn="true" respawn_delay="1">
+    <rosparam command="load" file="$(find x30_odometry)/config/monitor.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+    <param if="$(eval arg('leg_odom_topic') != '')" name="leg_odom_topic"
+           value="$(arg leg_odom_topic)"/>
+  </node>
+</launch>

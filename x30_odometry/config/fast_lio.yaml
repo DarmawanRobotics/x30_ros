@@ -1,0 +1,55 @@
+# FAST-LIO2 (hku-mars, ROS 1) on the X30: the merged /livox/lidar of its four Mid-360 and the
+# body IMU /imu/data. FAST-LIO reads these from its namespace (odometry.launch: fast_lio/).
+#
+# Check on the robot (README.md, "Check on the robot"): the points of /livox/lidar are taken to
+# be in the body frame (the driver merges the four LiDARs with their mounts), so the LiDAR frame
+# is base_link and its pose in the IMU frame is minus the IMU mount below.
+feature_extract_enable: false
+point_filter_num: 3
+max_iteration: 3
+filter_size_corner: 0.5
+filter_size_surf: 0.5
+filter_size_map: 0.5
+cube_side_length: 1000.0
+runtime_pos_log_enable: false
+map_file_path: ""
+
+common:
+  lid_topic: /livox/lidar
+  imu_topic: /imu/data          # 200 Hz, axes of the body (Application Manual 6.2)
+  time_sync_en: false
+  time_offset_lidar_to_imu: 0.0
+
+preprocess:
+  lidar_type: 1                 # Livox CustomMsg (the same md5 for livox_ros_driver and _driver2)
+  scan_line: 4
+  blind: 0.7                    # m from base_link: the body (0.5 m to the front) and the legs
+  timestamp_unit: 3
+  scan_rate: 10
+
+mapping:
+  acc_cov: 0.1
+  gyr_cov: 0.1
+  b_acc_cov: 0.0001
+  b_gyr_cov: 0.0001
+  fov_degree: 360.0
+  det_range: 100.0
+  # the mounts are fixed and known: estimating the extrinsic online only lets it drift in
+  # degenerate scenes
+  extrinsic_est_en: false
+  # base_link in the IMU frame: the IMU is at (130.45, -1, 14.9) mm in the body frame with the
+  # body's axes (Application Manual 6.2)
+  extrinsic_T: [-0.13045, 0.001, -0.0149]
+  extrinsic_R: [1.0, 0.0, 0.0,
+                0.0, 1.0, 0.0,
+                0.0, 0.0, 1.0]
+
+publish:
+  path_en: false                # FAST-LIO appends to /path forever (RAM and bandwidth grow)
+  scan_publish_en: true         # /cloud_registered_body: the registered scan for the mapping
+  dense_publish_en: false
+  scan_bodyframe_pub_en: true
+
+pcd_save:
+  pcd_save_en: false            # odometry.launch sets it from save_map
+  interval: -1
