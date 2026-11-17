@@ -6,8 +6,9 @@ namespace, the robot profile every node of the stack reads, and optionally the c
 ([x30_control](../x30_control/README.md)), the LiDAR sector scans
 ([x30_perception](../x30_perception/README.md)), FAST-LIO and its monitor
 ([x30_odometry](../x30_odometry/README.md)), the localization
-([x30_localization](../x30_localization/README.md)) and the site maps
-([x30_mapping](../x30_mapping/README.md)).
+([x30_localization](../x30_localization/README.md)), the site maps
+([x30_mapping](../x30_mapping/README.md)) and the navigation
+([x30_navigation](../x30_navigation/README.md)).
 
 ## Usage
 
@@ -16,7 +17,7 @@ roslaunch x30_bringup bringup.launch                                  # namespac
 roslaunch x30_bringup bringup.launch params_file:=$HOME/x30_driver_params.yaml rviz:=true
 roslaunch x30_bringup bringup.launch control:=true perception:=true leg_odom_tf:=true
 roslaunch x30_bringup bringup.launch control:=true perception:=true \
-    odometry:=true localization:=true mapping:=true site:=gardu-a
+    odometry:=true localization:=true mapping:=true site:=gardu-a navigation:=true
 ```
 
 With `control:=true` the control mux is the only publisher of `/x30/cmd_vel`: navigation
@@ -39,6 +40,7 @@ else may publish the driver's `cmd_vel` any more.
 | `odometry`, `odometry_method` | `false`, `fast_lio` | FAST-LIO behind its start gate and the odometry monitor (x30_odometry); `external` for a simulator |
 | `localization` | `false` | `map` → `odom` and the bridge of FAST-LIO into `odom` → `base_link` (x30_localization) |
 | `mapping`, `site` | `false`, empty | the site maps, mapping sessions and routes (x30_mapping); the site at start |
+| `navigation` | `false` | the planner, route loader, path follower, avoidance and docking (x30_navigation), commanding the control mux; the robot's battery and odometry under `namespace` |
 | `lidar_frame`, `lidar_pose` | `livox_frame`, `0 0 0 0 0 0` | `base_link` → the frame of `/livox/lidar` (`x y z yaw pitch roll`, m and rad) |
 | `rviz` | `false` | RViz with the robot model |
 
@@ -53,6 +55,7 @@ else may publish the driver's `cmd_vel` any more.
 | `fast_lio` (in `fast_lio/`), `odometry_monitor_node` (`odometry:=true`) | `/` | `/livox/lidar`, `/imu/data` in; `/Odometry`, `camera_init` → `body`, `odometry/*` out |
 | `localization_node` (`localization:=true`) | `/` | `map` → `odom`, `odom` → `camera_init`, `body` → `base_link`; `localization/*` |
 | `grid_mapper_node`, `site_manager_node`, `route_recorder_node` (`mapping:=true`) | `/` | `/map`, `mapping/*`, `site/*`, `route/*` |
+| `planner_node`, `path_loader_node`, `path_follower_node`, `obstacle_avoidance_node`, `docking_node` (`navigation:=true`) | `/` | `planner/*`, `navigation/*`, `docking/*`; `control/nav_cmd_vel` out |
 | `rviz` (`rviz:=true`) | `x30` | |
 
 The driver publishes no TF by default (`publish_tf: false`): `odom` → `base_link` belongs to
@@ -89,6 +92,11 @@ catkin_make run_tests_x30_bringup && catkin_test_results build/test_results/x30_
 (`x30_driver/test/fake_robot.py`): bringup with the driver, the control mux and the sector scans;
 Livox scans in, `control/nav_cmd_vel` walks the robot, a wall ahead stops it through the
 protective field, the e-stop holds it until a release and a re-arm.
+
+`stack_navigation.test` walks the simulated X30 along a route: bringup with the driver (leg
+odometry on TF), the mux, the scans and the navigation, `map` -> `odom` fixed; `navigation/set_path`
+and `navigation/start` take the robot through the follower, the mux and the driver to the end of a
+1.2 m route.
 
 `test_launch.py` checks the layers behind their arguments (`roslaunch --nodes`, `--dump-params`):
 the robot alone by default, every layer when asked, the leg odometry topic following the
