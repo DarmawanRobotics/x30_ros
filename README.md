@@ -2,9 +2,10 @@
 
 # x30_ros
 
-**ROS Noetic robot package for the Deep Robotics Jueying X30: the motion host's UDP protocol as
-a driver, the perception host's elevation map and autonomous charging as services, and Deep
-Robotics' own URDF as xacro.**
+**ROS Noetic robot package and autonomy stack for the Deep Robotics Jueying X30: the motion
+host's UDP protocol as a driver, Deep Robotics' own URDF as xacro, and the X30 stack, the ROS
+Noetic port of Dharma: a control mux with a protective field, LiDAR sector scans, and the
+building blocks every node shares.**
 
 [![CI](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-22314E?logo=ros&logoColor=white)](http://wiki.ros.org/noetic)
@@ -12,7 +13,7 @@ Robotics' own URDF as xacro.**
 ![Python](https://img.shields.io/badge/Python-3.8-3776AB?logo=python&logoColor=white)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-[Packages](#packages) · [Network](#network) · [Quick start](#quick-start) ·
+[Packages](#packages) · [Stack](#stack) · [Network](#network) · [Quick start](#quick-start) ·
 [Interface](#interface) · [Verify on the real robot](#verify-on-the-real-robot) ·
 [Safety](#safety) · [Develop](#develop)
 
@@ -27,7 +28,9 @@ it into ROS Noetic topics and `std_srvs/Trigger` services, on a computer on the 
 or on the robot's own computers.
 
 Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/README.md) ·
-[x30_bringup](x30_bringup/README.md) · [CHANGELOG](CHANGELOG.md)
+[x30_bringup](x30_bringup/README.md) · [x30_utils](x30_utils/README.md) ·
+[x30_msgs](x30_msgs/README.md) · [x30_control](x30_control/README.md) ·
+[x30_perception](x30_perception/README.md) · [CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -35,7 +38,34 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 |---|---|
 | [`x30_driver`](x30_driver/README.md) | the UDP driver: `cmd_vel` → axis commands scaled by the current gait; reports → `odom`, `imu`, `joint_states`, `battery`, `state`, `diagnostics`; every robot command, elevation map mode and charging command as a Trigger service; a simulated robot for tests and trials |
 | [`x30_description`](x30_description/README.md) | URDF: Deep Robotics' X30 model with its meshes (legs, four LiDAR frames), `base_link`, `imu_link`; `description.launch`, `display.launch` |
-| [`x30_bringup`](x30_bringup/README.md) | one launch for the driver and the URDF |
+| [`x30_bringup`](x30_bringup/README.md) | one launch for the driver, the URDF and the stack; the X30's robot profile |
+| [`x30_utils`](x30_utils/README.md) | the stack's toolbox: math, typed configuration, the robot profile, the braking model, logging, `X30Node` (rospy: validated parameters, callbacks one at a time, steady timers, TF, clean shutdown) |
+| [`x30_msgs`](x30_msgs/README.md) | the stack's messages and services: status of every subsystem, sector scans, paths, sites |
+| [`x30_control`](x30_control/README.md) | the control mux: the only publisher of `/x30/cmd_vel`; AUTO or REMOTE, speed envelope, protective field on the 360° safety scan, latched e-stop with re-arm |
+| [`x30_perception`](x30_perception/README.md) | LiDAR sector scans from the X30's `/livox/lidar` (raw bytes, no Livox package needed) or any PointCloud2: front for avoidance, 360° fail-safe for the protective field; optional depth camera; ArUco fiducials |
+
+## Stack
+
+The X30 stack is [Dharma](https://github.com/DarmawanRobotics/Dharma), the robot-agnostic
+autonomy stack of the other robots, ported to ROS Noetic in this one repository (the X30 is the
+only robot on Noetic). The algorithms are Dharma's, unchanged and tested without ROS; the ROS
+layer is rospy (`X30Node`), the launch files XML, the messages `x30_msgs`. It does not need the
+robot's own perception and navigation software: the stack drives the robot through x30_driver
+and reads the X30's sensor topics.
+
+```
+ navigation   planner · route loader · path follower · obstacle avoidance        (next)
+ world        occupancy grid · sites (map, fiducials, routes)                    (next)
+ estimation   FAST-LIO odometry · localization (EKF) · sector scans  ◄ x30_perception
+ control      control mux: the only /x30/cmd_vel, e-stop, protective field  ◄ x30_control
+ robot        x30_driver (UDP) · x30_description (URDF)
+ base         x30_utils (robot profile, config, math, X30Node) · x30_msgs
+```
+
+Navigation never publishes the robot's `cmd_vel`: it publishes `control/nav_cmd_vel`, and the
+control mux arbitrates it against the operator sources, applies the protective field on the 360°
+safety scan and is the only publisher of `/x30/cmd_vel`. Every node reads the same robot profile
+(`/robot`, [x30_bringup/config/robot.yaml](x30_bringup/config/robot.yaml)).
 
 ## Network
 
@@ -86,6 +116,17 @@ roslaunch x30_bringup bringup.launch rviz:=true \
 
 Then work through [Verify on the real robot](#verify-on-the-real-robot), including the `cmd_vel`
 signs (step 6), before any autonomy drives the robot.
+
+With the stack's control mux and sector scans (the mux is then the only publisher of
+`/x30/cmd_vel`; check the robot profile and the LiDAR mount first, see
+[x30_bringup](x30_bringup/README.md#robot-profile)):
+
+```bash
+roslaunch x30_bringup bringup.launch control:=true perception:=true leg_odom_tf:=true
+rostopic echo -n 1 /control/status                  # armed, field CLEAR
+rostopic pub -r 20 /control/nav_cmd_vel geometry_msgs/Twist '{linear: {x: 0.2}}'
+rosservice call /control/estop/engage               # stops at once, until released
+```
 
 ## Interface
 
@@ -219,6 +260,11 @@ On a new robot, in an open area, with someone at the handheld:
   2 Hz is raised to 2 Hz.
 
 ## Develop
+
+Every Python package of the stack is linted and formatted with ruff ([ruff.toml](ruff.toml),
+Python 3.8 target), and its `test_style.py` checks the conventions: modules under 300 lines,
+ROS-free `core/`, one-line docstrings, nothing Python 3.8 cannot run. Their tests run with pytest
+under `catkin_make run_tests` (`x30_add_pytests`), the ROS ones against a private `rosmaster`.
 
 ```bash
 catkin_make run_tests && catkin_test_results build/test_results --verbose
