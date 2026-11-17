@@ -94,6 +94,22 @@ def test_robot_profile_is_searched_up_from_the_node(ns):
         delete_params('/robot')
 
 
+def test_robot_profile_is_read_only_and_the_nearest_one_wins(ns):
+    rospy.set_param('/robot', {'name': 'far'})
+    rospy.set_param(f'{ns}/robot', {'name': 'near', 'limits': {'max_vx': 0.6}})
+    node = make(ns)
+    try:
+        robot = node.declare_robot()
+        assert robot.name == 'near' and robot.limits.max_vx == 0.6
+        rospy.set_param(f'{ns}/robot/limits/max_vx', 2.0)
+        notes = node._binder.poll()
+        assert notes == ['ignored, read-only until restart: robot.limits.max_vx']
+        assert robot.limits.max_vx == 0.6
+    finally:
+        node.destroy_node()
+        delete_params('/robot')
+
+
 def test_unknown_parameters_are_reported(ns):
     rospy.set_param(ns, {'rate': 5.0, 'raet': 1.0})
     node = make(ns)
