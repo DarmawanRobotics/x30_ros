@@ -191,6 +191,11 @@ class X30Node:
         self._timers.append(timer)
         return timer
 
+    def guard(self, callback, what: str = ''):
+        """Return callback run like the node's own: one at a time with them, errors logged."""
+        name = getattr(callback, '__name__', 'callback')
+        return self._callback(callback, what or f'{name} failed')
+
     def add_shutdown_hook(self, hook):
         """Run hook() when the node stops (e.g. publish a zero command)."""
         self._hooks.append(hook)
