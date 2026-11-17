@@ -18,6 +18,12 @@ versions follow [SemVer](https://semver.org).
 - `x30_utils`: `create_any_subscription()`, raw bytes of any type with rospy's connection
   header.
 
+### Fixed
+- Tests: the private master is taken only on a port no other process answers on (a port found
+  free can be bound by a parallel test run before rosmaster binds it), and one master serves the
+  process whichever conftest asks for it; status topics are waited for after a service answers
+  instead of read at once.
+
 ## [Unreleased] (0.6.0)
 
 ### Added
