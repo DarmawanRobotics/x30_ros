@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any, Callable, Generic, TypeVar
 
 import rospy
 
-from x30_utils.config import ConfigError, Entry, build, entries, flatten
+from x30_utils.config import ConfigError, Entry, build, entries, flatten, values_of
 
 T = TypeVar('T')
 
@@ -78,9 +79,21 @@ class ParamBinder:
         values = self._values(namespace, prefix, items)
         config = LiveConfig(cls, prefix, build(cls, values, prefix))
         section = _Section(config, items, namespace, frozen)
-        section.seen = values
+        # the node's own values go back to the server: rosparam get shows what it runs with
+        section.seen = values if frozen else self._publish(namespace, config)
         self.sections.append(section)
         return config
+
+    def _publish(self, namespace: str, config: LiveConfig) -> dict[str, Any]:
+        """Write the effective values of a section to the server; return them as it keeps them."""
+        effective = {k: _plain(v) for k, v in values_of(config.value, config._prefix).items()}
+        for name, value in effective.items():
+            if value is None:
+                continue  # XML-RPC has no None
+            # no server (tests without ROS), or a value it cannot keep: only the view is missing
+            with contextlib.suppress(rospy.ROSException, OSError, TypeError, OverflowError):
+                rospy.set_param(server_name(namespace, name), value)
+        return effective
 
     def find_robot(self) -> str | None:
         """Return the namespace holding robot/, searched up from the node's, or None."""
@@ -136,9 +149,17 @@ class ParamBinder:
         root = prefix.split('.', 1)[0] if prefix else ''
         tree = self._fetch(server_name(namespace, root) if root else namespace)
         flat = flatten(tree, f'{root}.' if root else '')
-        values = {e.name: flat[e.name] for e in items if e.name in flat}
-        values.update({k: v for k, v in self.overrides.items() if k in {e.name for e in items}})
+        values = {e.name: _plain(flat[e.name]) for e in items if e.name in flat}
+        names = {e.name for e in items}
+        values.update({k: _plain(v) for k, v in self.overrides.items() if k in names})
         return values
+
+
+def _plain(value: Any) -> Any:
+    """Return value as the parameter server keeps it (lists, not tuples)."""
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    return value
 
 
 def _has_param(name: str) -> bool:

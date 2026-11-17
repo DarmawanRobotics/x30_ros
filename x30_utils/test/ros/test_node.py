@@ -180,6 +180,20 @@ def test_timer_errors_are_logged_or_handed_over_and_the_timer_goes_on(ns):
         node.destroy_node()
 
 
+def test_the_effective_values_go_back_to_the_server(ns):
+    """rosparam get shows what the node runs with: defaults and overrides included."""
+    rospy.set_param(f'{ns}/rate', 25)
+    node = make(ns, label='y')
+    try:
+        node.declare_config(Cfg)
+        assert rospy.get_param(f'{ns}/rate') == 25
+        assert rospy.get_param(f'{ns}/label') == 'y'
+        assert rospy.get_param(f'{ns}/gains/names') == list(Cfg().gains.names)
+        assert node._binder.poll() == []  # nothing changed by writing them back
+    finally:
+        node.destroy_node()
+
+
 def test_services_answer_and_errors_fail_the_call(ns):
     node = make(ns)
 
