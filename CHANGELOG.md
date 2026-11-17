@@ -3,6 +3,30 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.6.0)
+
+### Added
+- `x30_navigation`: `planner_node` (A* on the site map with a footprint costmap, replanning
+  around blockages, a cancel that never waits for a plan), `path_loader_node` (routes from the
+  active site), `path_follower_node` (holonomic, pure pursuit, Stanley, LQR, MPPI and PID
+  controllers; path shifting, backtracking, stop points with inspection hooks; pause reasons),
+  `obstacle_avoidance_node` (VFH, Braitenberg, potential field, follow the gap) and
+  `docking_node` (tag approach and the robot's hooks); every command goes to the control mux.
+- `x30_bringup`: `navigation` argument; `stack_navigation.test` walks the simulated X30 along a
+  route through the follower, the mux and the driver.
+- `x30_utils`: every node writes the values it runs with back to the parameter server
+  (`rosparam get` shows them, and other nodes can read them); `ServiceClient` (readiness, a
+  timeout per call) and `AsyncCall` (answers come back as the node's callbacks); `guard()`;
+  `param_notes`, the newest notes of the parameter polls.
+
+### Changed
+- `x30_mapping`: service calls through x30_utils' `ServiceClient`.
+
+### Fixed
+- `x30_utils`: a read-only value refused on the server came in with the next live change of
+  its section; it now stays at its running value until the restart. A change is noted once even
+  when a test polls beside the node's own poll.
+
 ## [Unreleased] (0.5.0)
 
 ### Added
