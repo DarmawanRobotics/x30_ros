@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_mapping</name>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
   <description>The site maps of the X30 (the ROS Noetic port of dharma_mapping): an occupancy grid built from FAST-LIO's registered scans along the localized pose, saved per site with its fiducials and routes; a site manager that owns the active site, publishes /map and runs mapping sessions with x30_localization; and a route recorder for the patrol routes and their stop points.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

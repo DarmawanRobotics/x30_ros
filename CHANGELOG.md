@@ -3,6 +3,34 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.5.0)
+
+### Added
+- `x30_odometry`: FAST-LIO2 (ROS 1) on the X30's merged `/livox/lidar` and the body IMU
+  `/imu/data` (`config/fast_lio.yaml`: the IMU mount of the Application Manual, the extrinsic
+  fixed), its parameters kept in `fast_lio/`; `wait_still`, the launch prefix that holds its
+  start and every respawn until the IMU is still and level; `odometry_monitor_node` (INITIALIZING,
+  OK, DEGRADED, LOST; restarts, jumps, z drift, a tilted start, the speed test against the leg
+  odometry) and the trip; `method:=external` for a simulator, an unknown method fails the launch.
+- `x30_localization`: `localization_node`, `map -> odom` from an SE(2) EKF corrected by
+  fiducials, pose estimates and scan matching through a chi-square gate, and the gravity-aligned
+  bridge of FAST-LIO into `odom -> base_link`; `record_tags` runs beside the timers so
+  `map -> odom` keeps flowing while it records.
+- `x30_mapping`: `grid_mapper_node`, `site_manager_node`, `route_recorder_node`: sites in
+  `~/x30/map` (map, fiducials, routes), mapping sessions with x30_localization, route teaching
+  with stop points; service calls between them with a timeout.
+- `x30_bringup`: `odometry`, `odometry_method`, `localization`, `mapping` and `site` arguments;
+  `leg_odom_tf` together with `localization` is refused (two parents for `base_link`).
+- `x30_utils`: `create_service(..., concurrent=True)` for a service that waits for the node's
+  other callbacks, and `destroy_subscription()`.
+
+### Fixed
+- `x30_utils`: rospy latches one `/tf_static` message per process, so a second node in the
+  process replaced the static transforms of the first for late listeners; every node's set now
+  stays in the latched message.
+- `x30_description`: `imu_link` is the body IMU at (130.45, −1, 14.9) mm from the body centre
+  (Application Manual V2.0.4, 6.2); it was at `base_link`.
+
 ## [Unreleased] (0.4.0)
 
 ### Added
