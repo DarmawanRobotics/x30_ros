@@ -156,3 +156,13 @@ def values_of(config, prefix: str = '') -> dict[str, Any]:
             value = getattr(value, part)
         out[entry.name] = value
     return out
+
+
+def flatten(tree: Any, prefix: str = '') -> dict[str, Any]:
+    """Return {dotted name: value} of a nested dictionary (a YAML file, the parameter server)."""
+    if not isinstance(tree, dict):
+        return {prefix.rstrip('.'): tree} if prefix else {}
+    out = {}
+    for key, value in tree.items():
+        out.update(flatten(value, f'{prefix}{key}.'))
+    return out

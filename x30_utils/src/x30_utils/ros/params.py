@@ -6,7 +6,7 @@ from typing import Any, Callable, Generic, TypeVar
 
 import rospy
 
-from x30_utils.config import ConfigError, Entry, build, entries
+from x30_utils.config import ConfigError, Entry, build, entries, flatten
 
 T = TypeVar('T')
 
@@ -39,16 +39,6 @@ class LiveConfig(Generic[T]):
         old, self._value = self._value, value
         for callback in self._callbacks:
             callback(old, value)
-
-
-def flatten(tree: Any, prefix: str = '') -> dict[str, Any]:
-    """Return {dotted name: value} of a nested parameter dictionary."""
-    if not isinstance(tree, dict):
-        return {prefix.rstrip('.'): tree} if prefix else {}
-    out = {}
-    for key, value in tree.items():
-        out.update(flatten(value, f'{prefix}{key}.'))
-    return out
 
 
 def server_name(namespace: str, dotted: str) -> str:

@@ -5,8 +5,7 @@ from pathlib import Path
 import yaml
 
 from x30_control.core.config import FieldConfig, MuxConfig
-from x30_utils.config import build, entries
-from x30_utils.ros.params import flatten
+from x30_utils.config import build, entries, flatten
 
 CONFIG = Path(__file__).resolve().parents[2] / 'config' / 'control.yaml'
 

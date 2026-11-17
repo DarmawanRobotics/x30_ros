@@ -82,3 +82,14 @@ class Parent:
 def test_nested_validate_runs_with_prefix():
     with pytest.raises(ConfigError, match=r'p\.band\.low must be below high'):
         build(Parent, {'p.band.low': 3.0}, 'p.')
+
+
+def test_flatten_gives_dotted_names():
+    from x30_utils.config import flatten
+
+    assert flatten({'a': 1, 'b': {'c': [1, 2], 'd': {'e': 'x'}}}) == {
+        'a': 1,
+        'b.c': [1, 2],
+        'b.d.e': 'x',
+    }
+    assert flatten({}) == {} and flatten(3) == {}
