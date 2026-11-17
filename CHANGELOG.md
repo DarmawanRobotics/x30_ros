@@ -3,6 +3,34 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.4.0)
+
+### Added
+- The X30 stack, the ROS Noetic port of Dharma, in this repository: every package is Dharma's
+  algorithms (unchanged, tested without ROS) on a rospy layer.
+- `x30_utils`: math, typed configuration, the robot profile, the braking model, file IO, grids,
+  logging, and `X30Node`, the rospy base of every node: parameters validated at start (a bad
+  value stops the node, exit code 2), live fields polled from the parameter server and
+  read-only ones refused with a warning, the robot profile searched up from the node and
+  read-only, callbacks one at a time, steady timers, raw subscriptions with a type check, TF,
+  and a shutdown that runs the hooks while the topics are open and waits until their messages
+  are written. `x30_add_pytests` runs pytest under `catkin_make run_tests`; ROS tests use a
+  private `rosmaster`.
+- `x30_msgs`: the stack's messages and services (Dharma's interfaces; `TripStatus.since` is a
+  ROS 1 `time`).
+- `x30_control`: the control mux, the only publisher of `/x30/cmd_vel`: AUTO or REMOTE, speed
+  envelope, protective field on the 360° safety scan (translation, rotation, combined arc,
+  stale and blind scans), latched e-stop with a hardware input and re-arm, fail-safe on any
+  callback error, zeros on shutdown.
+- `x30_perception`: `lidar_sector_node` reads the X30's `/livox/lidar` as ROS 1 CustomMsg bytes
+  (no Livox package needed, the publisher's type checked) or any PointCloud2, and publishes the
+  front and the fail-safe 360° sector scans; optional depth camera; `aruco_detector_node` with
+  a `topic_tools` throttle.
+- `x30_bringup`: the X30's robot profile (`config/robot.yaml`, loaded as `/robot`), and
+  `control`, `perception`, `leg_odom_tf`, `lidar_frame` / `lidar_pose` arguments;
+  `stack_base.test` drives the simulated X30 through the mux and the scans.
+- `ruff.toml`: lint and format of the stack packages (Python 3.8 target).
+
 ## [0.3.1] - 2026-10-18
 
 ### Fixed (safety)
