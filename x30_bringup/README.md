@@ -41,6 +41,9 @@ else may publish the driver's `cmd_vel` any more.
 | `localization` | `false` | `map` → `odom` and the bridge of FAST-LIO into `odom` → `base_link` (x30_localization) |
 | `mapping`, `site` | `false`, empty | the site maps, mapping sessions and routes (x30_mapping); the site at start |
 | `navigation` | `false` | the planner, route loader, path follower, avoidance and docking (x30_navigation), commanding the control mux; the robot's battery and odometry under `namespace` |
+| `health` | `false` | `health_monitor_node` (x30_health), told the nodes, sensors and states of the layers started here; a missing node is an error (speed scale 0), so the cameras are not among them |
+| `hikmicro`, `hikmicro_host`, `hikmicro_password` | `false`, `192.168.1.64`, empty | the HIKMICRO thermal PTZ camera (hikmicro_driver, from x30.repos) |
+| `hertzino`, `hertzino_host`, `hertzino_password` | `false`, `192.168.2.204`, empty | the Hertzino acoustic camera (hertzino_driver, from x30.repos) |
 | `lidar_frame`, `lidar_pose` | `livox_frame`, `0 0 0 0 0 0` | `base_link` → the frame of `/livox/lidar` (`x y z yaw pitch roll`, m and rad) |
 | `rviz` | `false` | RViz with the robot model |
 
@@ -56,6 +59,8 @@ else may publish the driver's `cmd_vel` any more.
 | `localization_node` (`localization:=true`) | `/` | `map` → `odom`, `odom` → `camera_init`, `body` → `base_link`; `localization/*` |
 | `grid_mapper_node`, `site_manager_node`, `route_recorder_node` (`mapping:=true`) | `/` | `/map`, `mapping/*`, `site/*`, `route/*` |
 | `planner_node`, `path_loader_node`, `path_follower_node`, `obstacle_avoidance_node`, `docking_node` (`navigation:=true`) | `/` | `planner/*`, `navigation/*`, `docking/*`; `control/nav_cmd_vel` out |
+| `health_monitor_node` (`health:=true`) | `/` | `health/status`, `diagnostics` |
+| the camera drivers (`hikmicro:=true`, `hertzino:=true`) | `hikmicro`, `hertzino` | see their READMEs |
 | `rviz` (`rviz:=true`) | `x30` | |
 
 The driver publishes no TF by default (`publish_tf: false`): `odom` → `base_link` belongs to
