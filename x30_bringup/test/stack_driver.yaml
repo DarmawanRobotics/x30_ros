@@ -1,0 +1,9 @@
+# stack_base.test: the driver against fake_robot.py on loopback, on ports of their own.
+motion_host_ip: 127.0.0.1
+motion_host_port: 48893
+local_ip: 127.0.0.1
+local_port: 48897
+perception_host_ip: 127.0.0.1
+elevation_map_port: 48899
+charge_port: 48333
+lio_port: 48600

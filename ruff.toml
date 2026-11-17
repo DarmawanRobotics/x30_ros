@@ -57,4 +57,5 @@ required-imports = ["from __future__ import annotations"]
 
 [lint.per-file-ignores]
 "**/test/**" = ["D", "N802", "PLR0915", "PLR2004", "PT011", "PT012", "PT018"]
+"**/test/*_check.py" = ["PT009", "PT027"]  # rostest nodes are unittest test cases
 "**/setup.py" = ["D"]
