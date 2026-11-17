@@ -72,8 +72,8 @@ def test_status_is_typed_and_restart_needs_gap_and_origin(ros):
         assert rig.status.wait_until(lambda m: m.state == OdometryStatus.OK)
         last = rig.status.last
         assert last.message == '' and 0.3 < last.speed < 0.7
-        rospy.sleep(1.0)  # the estimator is down (respawn): stale
-        assert rig.status.last.state == OdometryStatus.LOST
+        # the estimator is down (respawn): stale
+        assert rig.status.wait_until(lambda m: m.state == OdometryStatus.LOST, 2.0)
         rig.odom(x=0.0, dt=4.0)  # back at the origin after the gap
         assert rig.restarts.wait(1, timeout=2.0)
         assert rig.status.wait_until(lambda m: m.message.startswith('restarted'))
