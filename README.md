@@ -5,7 +5,8 @@
 **ROS Noetic robot package and autonomy stack for the Deep Robotics Jueying X30: the motion
 host's UDP protocol as a driver, Deep Robotics' own URDF as xacro, and the X30 stack, the ROS
 Noetic port of Dharma: a control mux with a protective field, LiDAR sector scans, FAST-LIO
-odometry, localization on site maps and the building blocks every node shares.**
+odometry, localization on site maps, route and goal navigation, and the building blocks every
+node shares.**
 
 [![CI](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-22314E?logo=ros&logoColor=white)](http://wiki.ros.org/noetic)
@@ -32,7 +33,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 [x30_msgs](x30_msgs/README.md) · [x30_control](x30_control/README.md) ·
 [x30_perception](x30_perception/README.md) · [x30_odometry](x30_odometry/README.md) ·
 [x30_localization](x30_localization/README.md) · [x30_mapping](x30_mapping/README.md) ·
-[CHANGELOG](CHANGELOG.md)
+[x30_navigation](x30_navigation/README.md) · [CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -48,6 +49,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 | [`x30_odometry`](x30_odometry/README.md) | FAST-LIO2 on the merged `/livox/lidar` and the body IMU behind a start gate that waits for a still and level IMU; the odometry monitor (stale, jumps, restarts, z drift, tilt, a speed mismatch with the leg odometry) and the trip |
 | [`x30_localization`](x30_localization/README.md) | `map` → `odom` from an EKF corrected by fiducials, pose estimates and scan matching through a chi-square gate; the gravity-aligned bridge of FAST-LIO into `odom` → `base_link` |
 | [`x30_mapping`](x30_mapping/README.md) | sites (map, fiducials, routes), the occupancy grid from FAST-LIO's scans, `/map`, mapping sessions and route teaching with stop points |
+| [`x30_navigation`](x30_navigation/README.md) | a planner on the site map with replanning, routes from the active site, a path follower with pluggable controllers, path shifting and stop point inspections, reactive avoidance and tag docking; every command to the control mux |
 
 ## Stack
 
@@ -59,7 +61,7 @@ robot's own perception and navigation software: the stack drives the robot throu
 and reads the X30's sensor topics.
 
 ```
- navigation   planner · route loader · path follower · obstacle avoidance        (next)
+ navigation   planner · route loader · path follower · avoidance · docking  ◄ x30_navigation
  world        occupancy grid · sites (map, fiducials, routes)        ◄ x30_mapping
  estimation   localization (EKF) · FAST-LIO odometry · sector scans
               ◄ x30_localization · x30_odometry · x30_perception
@@ -145,6 +147,14 @@ rostopic echo -n 1 /odometry/status                 # OK once FAST-LIO runs
 rosservice call /mapping/start "{site: gardu-a, reset: false}"   # walk the site, then
 rosservice call /mapping/save && rosservice call /mapping/stop
 rosservice call /localization/record_tags           # a tag in view anchors the site
+```
+
+And walking on it (add `navigation:=true`): a taught route, or a goal on the map:
+
+```bash
+rosservice call /navigation/load_path "{path: gardu-a/routes/patrol.csv}"
+rosservice call /navigation/start
+rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
 ```
 
 ## Interface
