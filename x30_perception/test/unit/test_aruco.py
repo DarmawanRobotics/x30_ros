@@ -8,6 +8,8 @@ import pytest
 from x30_perception.core.aruco import ArucoConfig, ArucoDetector, to_gray
 
 cv2 = pytest.importorskip('cv2')
+if not hasattr(cv2, 'aruco'):
+    pytest.skip('OpenCV without the aruco module', allow_module_level=True)
 
 from aruco_scene import K, render, yaw_rotation  # noqa: E402
 
