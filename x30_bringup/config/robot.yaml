@@ -1,0 +1,23 @@
+# The X30's robot profile, loaded as robot/ (global) and read by every node of the stack:
+# footprint, base height, motion limits, kinematics, frames (x30_utils RobotProfile). It is
+# read-only at runtime. Sizes from the X30 Pro user manual (standing: 1000 x 470 x 715 mm),
+# base_link at the geometric centre of the body (application manual 6.1).
+name: x30
+kinematics: omni # legged: forward, sideways and turning (vx, vy, wz)
+base_height: 0.48 # m, base_link above the floor when standing: measure it (see README)
+footprint: # around base_link (x forward, y left), the legs included
+  front: 0.50 # m
+  rear: 0.50 # m
+  half_width: 0.235 # m
+limits: # what the stack may command: every gait the stack walks in must reach these
+  max_vx: 0.75 # m/s, forward and backward (Walk: 1.2 forward, 0.75 backward; L-Walk: 1.0)
+  max_vy: 0.15 # m/s, sideways (Walk: 0.15; L-Walk: 0.5)
+  max_wz: 0.45 # rad/s (Walk: 0.45; L-Walk: 1.2)
+  max_accel: 0.5 # m/s^2
+  max_decel: 0.6 # m/s^2, braking: measure it on the robot (floor, payload, battery)
+  max_yaw_accel: 1.5 # rad/s^2, yaw braking: measure it too
+  reaction_time: 0.3 # s, command to braking: 10 Hz LiDAR, scan, mux, 50 Hz axis stream
+frames:
+  map: map
+  odom: odom
+  base: base_link
