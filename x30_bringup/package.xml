@@ -2,15 +2,28 @@
 <package format="3">
   <name>x30_bringup</name>
   <version>0.3.1</version>
-  <description>One launch for the Deep Robotics Jueying X30: x30_driver and the URDF with robot_state_publisher.</description>
+  <description>One launch for the Deep Robotics Jueying X30: x30_driver and the URDF with robot_state_publisher, the robot profile of the stack, and optionally the control mux and the LiDAR sector scans.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>
   <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>
 
   <buildtool_depend>catkin</buildtool_depend>
 
+  <build_depend>x30_utils</build_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>x30_control</exec_depend>
   <exec_depend>x30_description</exec_depend>
   <exec_depend>x30_driver</exec_depend>
+  <exec_depend>x30_perception</exec_depend>
 
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+  <test_depend>genpy</test_depend>
+  <test_depend>nav_msgs</test_depend>
+  <test_depend>rosgraph</test_depend>
   <test_depend>roslaunch</test_depend>
+  <test_depend>rostest</test_depend>
+  <test_depend>std_srvs</test_depend>
+  <test_depend>x30_msgs</test_depend>
+  <test_depend>x30_utils</test_depend>
 </package>
