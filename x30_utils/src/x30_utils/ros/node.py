@@ -69,19 +69,19 @@ class X30Node:
         """Where this node's parameters are on the server (the private namespace)."""
         return self._binder.namespace
 
-    def declare_config(self, cls: type[T], prefix: str = '') -> LiveConfig[T]:
+    def declare_config(self, cls: type[T], prefix: str = '', *, frozen=False) -> LiveConfig[T]:
         """Read a configuration dataclass from the parameters; live fields follow changes."""
-        config = self._binder.declare(cls, prefix)
-        if self._binder.sections[-1].live and not self._polling:
+        config = self._binder.declare(cls, prefix, frozen)
+        if not self._polling:
             self._polling = True
             self.every(PARAM_POLL_SEC, self._poll_params, steady=True)
         return config
 
     def declare_robot(self) -> LiveConfig[RobotProfile]:
-        """Read the shared robot profile (robot/ searched up from the node, read-only)."""
-        if rospy.search_param(ROBOT) is None:
+        """Read the shared robot profile (robot/ searched up from the node), read-only."""
+        if self._binder.find_robot() is None:
             self.log.warning('no robot/ parameters found: robot profile defaults in use')
-        return self.declare_config(RobotProfile, f'{ROBOT}.')
+        return self.declare_config(RobotProfile, f'{ROBOT}.', frozen=True)
 
     @property
     def tf(self) -> TfCache:

@@ -11,7 +11,7 @@ from x30_utils.config import ConfigError, Entry, build, entries
 T = TypeVar('T')
 
 ROBOT = 'robot'
-"""The shared robot profile: searched upward from the node (~robot, <ns>/robot, /robot)."""
+"""The shared robot profile: searched up from the node (~robot, <ns>/robot, ..., /robot)."""
 
 
 class LiveConfig(Generic[T]):
@@ -59,12 +59,16 @@ def server_name(namespace: str, dotted: str) -> str:
 class _Section:
     """One declared configuration with where its values live on the server."""
 
-    def __init__(self, config: LiveConfig, items: list[Entry], namespace: str, prefix: str):
-        self.config, self.items = config, items
-        self.namespace, self.prefix = namespace, prefix
+    def __init__(self, config: LiveConfig, items: list[Entry], namespace: str, frozen: bool):
+        self.config, self.items, self.namespace = config, items, namespace
         self.names = {e.name for e in items}
-        self.live = any(e.spec.live for e in items)
+        self.frozen = frozen
+        self.live = not frozen and any(e.spec.live for e in items)
         self.seen: dict[str, Any] = {}
+
+    def is_live(self, entry: Entry) -> bool:
+        """Return True when a server change of entry applies at once."""
+        return not self.frozen and entry.spec.live
 
 
 class ParamBinder:
@@ -77,25 +81,30 @@ class ParamBinder:
         self.sections: list[_Section] = []
         self._fetch: Callable[[str], Any] = _get_param
 
-    def declare(self, cls: type, prefix: str = '') -> LiveConfig:
+    def declare(self, cls: type, prefix: str = '', frozen: bool = False) -> LiveConfig:
         """Read every field of cls (prefix.name) from the server; raise ConfigError if invalid."""
-        namespace, server_prefix = self.namespace, prefix
-        if prefix.startswith(f'{ROBOT}.'):
-            namespace, server_prefix = self.robot_namespace(), prefix
+        namespace = self.robot_namespace() if prefix.startswith(f'{ROBOT}.') else self.namespace
         items = entries(cls, prefix)
-        values = self._values(namespace, server_prefix, items)
+        values = self._values(namespace, prefix, items)
         config = LiveConfig(cls, prefix, build(cls, values, prefix))
-        section = _Section(config, items, namespace, server_prefix)
+        section = _Section(config, items, namespace, frozen)
         section.seen = values
         self.sections.append(section)
         return config
 
+    def find_robot(self) -> str | None:
+        """Return the namespace holding robot/, searched up from the node's, or None."""
+        namespace = self.namespace
+        while True:
+            if _has_param(server_name(namespace, ROBOT)):
+                return namespace
+            if namespace in ('', '/'):
+                return None
+            namespace = namespace.rsplit('/', 1)[0] or '/'
+
     def robot_namespace(self) -> str:
-        """Return the namespace holding robot/: the nearest one up from the node."""
-        found = rospy.search_param(ROBOT) if rospy.core.is_initialized() else None
-        if found is None:
-            return self.namespace
-        return found.rsplit('/', 1)[0] or '/'
+        """Return the namespace holding robot/ (the node's own when there is none)."""
+        return self.find_robot() or self.namespace
 
     def names(self) -> set[str]:
         """Return every declared parameter name (dotted)."""
@@ -108,12 +117,10 @@ class ParamBinder:
         return sorted(n for n in flatten(tree) if n not in known and not n.startswith(f'{ROBOT}.'))
 
     def poll(self) -> list[str]:
-        """Apply server changes of live sections; return what happened, one line each."""
+        """Apply server changes of live fields, refuse the others; one line per change."""
         notes = []
         for section in self.sections:
-            if not section.live:
-                continue
-            values = self._values(section.namespace, section.prefix, section.items)
+            values = self._values(section.namespace, section.config._prefix, section.items)
             changed = {k for k in section.names if values.get(k) != section.seen.get(k)}
             if not changed:
                 continue
@@ -122,7 +129,9 @@ class ParamBinder:
         return notes
 
     def _apply(self, section: _Section, values: dict[str, Any], changed: set[str]) -> str:
-        frozen = sorted(e.name for e in section.items if e.name in changed and not e.spec.live)
+        frozen = sorted(
+            e.name for e in section.items if e.name in changed and not section.is_live(e)
+        )
         if frozen:
             return f'ignored, read-only until restart: {", ".join(frozen)}'
         merged = {e.name: values.get(e.name, e.default) for e in section.items}
@@ -140,6 +149,13 @@ class ParamBinder:
         values = {e.name: flat[e.name] for e in items if e.name in flat}
         values.update({k: v for k, v in self.overrides.items() if k in {e.name for e in items}})
         return values
+
+
+def _has_param(name: str) -> bool:
+    try:
+        return rospy.has_param(name)
+    except (rospy.ROSException, OSError):
+        return False
 
 
 def _get_param(name: str) -> Any:
