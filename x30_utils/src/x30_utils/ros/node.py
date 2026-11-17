@@ -98,6 +98,11 @@ class X30Node:
         return self._tf_publisher
 
     @property
+    def param_notes(self) -> list[str]:
+        """The newest notes of the parameter polls: applied, read-only or rejected changes."""
+        return list(self._binder.history)
+
+    @property
     def destroyed(self) -> bool:
         """True once destroy_node() ran: publications are dropped, callbacks do nothing."""
         return self._destroyed

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import threading
 from typing import Any, Callable, Generic, TypeVar
 
 import rospy
@@ -10,6 +11,7 @@ import rospy
 from x30_utils.config import ConfigError, Entry, build, entries, flatten, values_of
 
 T = TypeVar('T')
+HISTORY = 50  # notes kept
 
 ROBOT = 'robot'
 """The shared robot profile: searched up from the node (~robot, <ns>/robot, ..., /robot)."""
@@ -70,7 +72,9 @@ class ParamBinder:
         self.overrides = dict(overrides or {})
         self.log = log
         self.sections: list[_Section] = []
+        self.history: list[str] = []  # the newest notes of poll(), whoever polled
         self._fetch: Callable[[str], Any] = _get_param
+        self._poll_lock = threading.Lock()
 
     def declare(self, cls: type, prefix: str = '', frozen: bool = False) -> LiveConfig:
         """Read every field of cls (prefix.name) from the server; raise ConfigError if invalid."""
@@ -121,15 +125,17 @@ class ParamBinder:
 
     def poll(self) -> list[str]:
         """Apply server changes of live fields, refuse the others; one line per change."""
-        notes = []
-        for section in self.sections:
-            values = self._values(section.namespace, section.config._prefix, section.items)
-            changed = {k for k in section.names if values.get(k) != section.seen.get(k)}
-            if not changed:
-                continue
-            section.seen = values
-            notes.append(self._apply(section, values, changed))
-        return notes
+        with self._poll_lock:  # each change is applied once, whoever polls
+            notes = []
+            for section in self.sections:
+                values = self._values(section.namespace, section.config._prefix, section.items)
+                changed = {k for k in section.names if values.get(k) != section.seen.get(k)}
+                if not changed:
+                    continue
+                section.seen = values
+                notes.append(self._apply(section, values, changed))
+            self.history = (self.history + notes)[-HISTORY:]
+            return notes
 
     def _apply(self, section: _Section, values: dict[str, Any], changed: set[str]) -> str:
         frozen = sorted(

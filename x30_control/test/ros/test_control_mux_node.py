@@ -201,8 +201,11 @@ def test_safety_parameters_are_read_only(make_rig):
     rospy.set_param(f'{rig.ns}/nav_timeout_sec', 2.0)
     rospy.set_param(f'{rig.ns}/field/margin', 0.0)
     rospy.set_param(f'{rig.ns}/robot/limits/max_vx', 3.0)
-    notes = rig.mux._binder.poll()
-    assert len(notes) == 3 and all('read-only' in n for n in notes), notes
+    # the node's own poll or this one: each change is noted once
+    rig.mux._binder.poll()
+    assert wait_for(lambda: len(rig.mux.param_notes) == 3, 3.0), rig.mux.param_notes
+    notes = rig.mux.param_notes
+    assert all('read-only' in n for n in notes), notes
     assert rig.mux._mux.nav_timeout_sec == 0.5 and rig.mux._field_cfg.margin == 0.15
     assert rig.mux._robot.limits.max_vx == 0.8
 

@@ -44,6 +44,11 @@ def make(ns: str, **overrides) -> X30Node:
     return X30Node('test_node', param_ns=ns, overrides=overrides)
 
 
+def noted(node: X30Node, prefix: str) -> bool:
+    """Return True once a parameter poll (the node's own or a test's) noted prefix."""
+    return any(note.startswith(prefix) for note in node.param_notes)
+
+
 def test_config_from_the_server_with_overrides(ns):
     rospy.set_param(ns, {'rate': 10, 'gains': {'kp': 2.5, 'names': ['p', 'q']}})
     node = make(ns, label='y')
@@ -189,7 +194,8 @@ def test_the_effective_values_go_back_to_the_server(ns):
         assert rospy.get_param(f'{ns}/rate') == 25
         assert rospy.get_param(f'{ns}/label') == 'y'
         assert rospy.get_param(f'{ns}/gains/names') == list(Cfg().gains.names)
-        assert node._binder.poll() == []  # nothing changed by writing them back
+        time.sleep(1.5)  # a poll or two
+        assert node.param_notes == []  # nothing changed by writing them back
     finally:
         node.destroy_node()
 
