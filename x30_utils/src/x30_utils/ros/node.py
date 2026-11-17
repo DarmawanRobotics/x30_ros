@@ -147,12 +147,14 @@ class X30Node:
         self._handles.append(sub)
         return sub
 
-    def create_service(self, srv_type, name: str, callback):
+    def create_service(self, srv_type, name: str, callback, *, concurrent: bool = False):
         """Serve callback(request, response) -> response; an exception fails the call."""
+        # concurrent: the callback runs beside the other callbacks instead of after them, for a
+        # service that waits for them (a recording that the timers finish); it guards its state
         response_class = srv_type._response_class
 
         def serve(request):
-            with self._lock:
+            with contextlib.nullcontext() if concurrent else self._lock:
                 if self._halted:
                     raise rospy.ServiceException('node is shutting down')
                 try:

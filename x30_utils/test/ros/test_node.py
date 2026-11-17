@@ -203,6 +203,25 @@ def test_services_answer_and_errors_fail_the_call(ns):
         node.destroy_node()
 
 
+def test_a_concurrent_service_can_wait_for_the_timers(ns):
+    """A service that waits for the timers (a recording they finish) runs beside them."""
+    node = make(ns)
+    ticked = threading.Event()
+
+    def wait_for_a_tick(_request, response):
+        ticked.clear()
+        response.success = ticked.wait(3.0)
+        return response
+
+    try:
+        node.every(0.05, ticked.set)
+        node.create_service(Trigger, f'{ns}/waits', wait_for_a_tick, concurrent=True)
+        rospy.wait_for_service(f'{ns}/waits', 5.0)
+        assert rospy.ServiceProxy(f'{ns}/waits', Trigger)().success
+    finally:
+        node.destroy_node()
+
+
 def test_raw_subscription_passes_bytes_and_drops_other_types(ns):
     node = make(ns)
     got = []
