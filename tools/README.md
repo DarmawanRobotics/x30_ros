@@ -8,6 +8,8 @@ nothing downloaded on the robot.
 | `dr_services.sh status\|off\|on` | the navigation host (192.168.1.106) | Deep Robotics' own localization, navigation, mapping, URDF and bridge off, now and at boot, and back on |
 | `check_deps.sh [--tests] [--gui]` | the robot | what the build and the stack need, checked offline: the apt packages, the sources of x30.repos, the Livox SDK |
 | `install_neupan.sh [--venv DIR] [--wheels DIR]`, `--download DIR`, `--check` | the navigation host | NeuPAN for the `neupan` controller: a venv with PyTorch (CPU), cvxpy and NeuPAN with the patches of [neupan/](neupan) |
+| `x30_host.sh env\|check\|start\|install` | each host | the ROS network of the navigation (192.168.1.106) and the perception host (192.168.1.105), whether they see each other, and each one's launch file by hand or as the service `x30-<role>` |
+| `x30_watchdog.py` | (the service) | the host's roslaunch under systemd's watchdog: restarts it when the master restarts or a critical node stays away |
 | `pack_sources.sh [OUT] [--skip PATH]` | a computer with internet | x30_ros, the repositories of x30.repos and the Livox SDK in one archive (about 5 MB) |
 
 ## Deep Robotics' own autonomy
@@ -75,6 +77,37 @@ at mounting position A, (47.15, −1, 117) at B, (7.15, −1, 117) at C) rather 
 [x30_odometry/config/fast_lio.yaml](../x30_odometry/config/fast_lio.yaml) is minus that position
 (the axes are the body's in both cases). Check it before the first map:
 `rosnode info /yesense_imu_node`, and the frame of `rostopic echo -n 1 /imu/data/header`.
+
+## Two hosts and the watchdog
+
+`x30_host.sh` (x30_bringup README, "Two hosts", has the split and the why):
+
+| | |
+|---|---|
+| `env navigation\|perception` | the exports of that host: `ROS_MASTER_URI=http://192.168.1.106:11311`, its `ROS_IP`, no `ROS_HOSTNAME`, `PYTHONNOUSERSITE=1`, and `X30_PYTHON` when NeuPAN's venv is there; `eval` it |
+| `check` | this host's role, `ROS_IP` one of its addresses, the other host answering ping, the clock synchronized, the master answering, every registered node reachable from here (a name that does not resolve: `/etc/hosts`) |
+| `start navigation\|perception` | what the service runs: ROS and the workspace sourced, the network set (the service's settings win), on the navigation host `dr_services.sh off` until Deep Robotics' boot settled, then the host's launch file with `X30_LAUNCH_ARGS` under `x30_watchdog.py` |
+| `install navigation\|perception` | with sudo: `/etc/x30/<role>.env` (kept when it exists; mode 600, the cameras' passwords go there) and `/etc/systemd/system/x30-<role>.service` (`Type=notify`, `WatchdogSec=60`, `Restart=on-failure`), enabled |
+
+`X30_NAV_IP` and `X30_PER_IP` change the two addresses. The service's settings:
+
+```bash
+# /etc/x30/navigation.env
+X30_LAUNCH_ARGS="site:=gardu odometry_only:=true controller:=neupan"
+X30_PYTHON=/home/ysc/x30_ws/neupan/bin/python
+# /etc/x30/perception.env
+X30_LAUNCH_ARGS=""
+HIKMICRO_PASSWORD=...
+HERTZINO_PASSWORD=...
+```
+
+`x30_watchdog.py [--critical NODE]... [--grace 45] [--startup 240] [--period 5] -- roslaunch ...`
+runs the launch and tells systemd READY once the master and the critical nodes answer, then
+pings `WATCHDOG=1` with a status line (`systemctl status x30-navigation`) while they do. It ends
+with an error, for systemd to restart the service, when the master restarted (`/run_id`
+changed), when the master or a critical node stays away longer than the grace, when the start
+takes longer than `--startup`, or when roslaunch exits; a hung watchdog stops pinging and
+systemd restarts it after 60 s. Stopping the service stops roslaunch with SIGINT first.
 
 ## NeuPAN
 
