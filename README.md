@@ -17,7 +17,8 @@ blocks every node shares.**
 
 [Packages](#packages) · [Stack](#stack) · [Network](#network) · [Quick start](#quick-start) ·
 [Dependencies](#dependencies) ·
-[Interface](#interface) · [Verify on the real robot](#verify-on-the-real-robot) ·
+[Interface](#interface) · [Deep Robotics' own software](#deep-robotics-own-software) ·
+[Verify on the real robot](#verify-on-the-real-robot) ·
 [Safety](#safety) · [Develop](#develop)
 
 </div>
@@ -37,7 +38,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 [x30_localization](x30_localization/README.md) · [x30_mapping](x30_mapping/README.md) ·
 [x30_navigation](x30_navigation/README.md) · [x30_health](x30_health/README.md) ·
 [x30_inspection](x30_inspection/README.md) · [x30_sim](x30_sim/README.md) ·
-[CHANGELOG](CHANGELOG.md)
+[tools](tools/README.md) · [CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -236,6 +237,20 @@ zero Twists keep arriving; a `cmd_vel` with NaN or inf in any field is a stop.
 `velocity_mode: topic` republishes `cmd_vel` to `/cmd_vel_corrected` instead, for a driver on the
 X30's own ROS master (2.3).
 
+## Deep Robotics' own software
+
+The navigation host (192.168.1.106) also runs Deep Robotics' localization, navigation and
+mapping; with x30_ros they only take CPU and clash with it (`/initialpose`, `/map`, TF,
+`/cmd_vel`). Turn them off there, now and at boot, before running the stack:
+
+```bash
+bash tools/dr_services.sh off      # status: what runs; on: back as it was
+```
+
+The sensor drivers, the ROS master, the motion host and the perception host (elevation map,
+charging) stay as they are. What it does and what to check afterwards, the IMU of the
+navigation host included: [tools/README.md](tools/README.md).
+
 ## Verify on the real robot
 
 On a new robot, in an open area, with someone at the handheld:
@@ -324,6 +339,11 @@ Everything else comes from rosdep. Without them the stack still builds and runs:
 `odometry_method:=external`, the cameras and the inspection off (x30_inspection needs the two
 message packages; CI builds them alone). The camera passwords come from `HIKMICRO_PASSWORD`
 and `HERTZINO_PASSWORD` in the environment, never from a launch argument.
+
+**Robot without internet** ([tools/README.md](tools/README.md)): `tools/pack_sources.sh` packs
+x30_ros, x30.repos and the Livox SDK on a computer with internet (about 5 MB);
+`tools/check_deps.sh` on the robot lists, offline, every apt package, source package and the
+SDK still missing; the laptop's internet through `ssh -R` brings in the packages.
 
 ## Develop
 
