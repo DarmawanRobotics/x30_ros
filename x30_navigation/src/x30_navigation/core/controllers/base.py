@@ -76,6 +76,8 @@ class PathController(ABC):
 
     Config: ClassVar[type] = NoConfig
     strafes: ClassVar[bool] = False
+    avoids: ClassVar[bool] = False
+    """True: the controller keeps off the obstacles itself (path shift and reactive stand by)."""
 
     def __init__(self, config=None, limits: ControllerLimits | None = None):
         self.config = config if config is not None else self.Config()

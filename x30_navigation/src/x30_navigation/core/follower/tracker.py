@@ -86,8 +86,17 @@ class Tracker:
 
     @property
     def shifting(self) -> bool:
-        """True when obstacles are passed by sliding sideways."""
-        return self.config.avoidance_mode == 'path_shift' and self.controller.strafes
+        """True when obstacles are passed by sliding sideways (not by a controller that avoids)."""
+        return (
+            self.config.avoidance_mode == 'path_shift'
+            and self.controller.strafes
+            and not self.controller.avoids
+        )
+
+    @property
+    def reacting(self) -> bool:
+        """True when reactive avoidance biases the controller (not one that avoids by itself)."""
+        return self.config.avoidance_mode == 'reactive' and not self.controller.avoids
 
     @property
     def offset(self) -> float:
@@ -138,7 +147,7 @@ class Tracker:
             )
             speed = min(speed, shift.speed_limit)
         bias, scale, push = Bias(), 1.0, 0.0
-        if self.config.avoidance_mode == 'reactive' and avoidance is not None:
+        if self.reacting and avoidance is not None:
             bias = Bias(avoidance.heading_offset, avoidance.yaw_rate_bias)
             scale, push = avoidance.velocity_scale, avoidance.lateral_bias
         if shift is not None and shift.slide:
