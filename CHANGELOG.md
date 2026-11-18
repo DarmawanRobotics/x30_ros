@@ -7,12 +7,13 @@ versions follow [SemVer](https://semver.org).
 
 ### Added
 - `tools/dr_services.sh status|off|on`: Deep Robotics' own localization, navigation (with its
-  local planner), mapping and URDF publisher on the navigation host off, now (its
-  `kill_nav.sh` / `kill_mapping.sh`, then what is left, all at once) and at boot
-  (`autorun_slam` false, the original kept), and back on; a process judged by its program in
-  jy_cog, never its arguments; the sensor drivers, the ROS master and the robot server kept,
-  the motion and perception hosts never touched. `status` also shows who holds UDP 43897 (the
-  driver's reports) and the files that start jy_cog at boot.
+  local planner), mapping, URDF publisher and bridge (`transfer`: UDP 43897 and `/cmd_vel` to
+  the robot) on the navigation host off, now (its `kill_nav.sh` / `kill_mapping.sh`, then what
+  is left, all at once) and at boot (`autorun_slam` false, the original kept), and back on; a
+  process judged by its program in jy_cog, never its arguments, and what a wrapper script
+  started goes with it unless it also runs a kept process; the sensor drivers, the ROS master
+  and the robot server kept, the motion and perception hosts never touched. `status` also
+  shows who holds UDP 43897 (the driver's reports) and the files that start jy_cog at boot.
 - `tools/check_deps.sh`: every apt package, x30.repos source package and the Livox SDK the stack
   needs, checked offline on the robot, with one `apt install` line for what is missing; a
   setuptools in `~/.local` that stops catkin puts `PYTHONNOUSERSITE=1` in its build line.
