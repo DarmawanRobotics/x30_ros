@@ -57,8 +57,14 @@ def jy(tmp_path):
         (root / 'system' / 'scripts' / name).write_text(f'echo {name} >> {log}\n')
     processes = []
 
-    def spawn(path: str) -> subprocess.Popen:
-        process = subprocess.Popen(['bash', '-c', f'exec -a "{root}/{path}" sleep 60'])
+    def spawn(path: str, *args: str) -> subprocess.Popen:
+        """Run path of jy_cog; with args as a script a shell runs ('bash <path> <args>')."""
+        if args:
+            line = 'exec -a bash python3 -c "import time; time.sleep(60)" "$@"'
+            command = ['bash', '-c', line, '_', f'{root}/{path}', *args]
+        else:
+            command = ['bash', '-c', f'exec -a "{root}/{path}" sleep 60']
+        process = subprocess.Popen(command, stderr=subprocess.DEVNULL)
         processes.append(process)
         assert wait_until(lambda: listed(process.pid))
         return process
@@ -81,6 +87,26 @@ def test_status_sorts_the_jy_cog_processes(jy):
     autonomy, kept = out.stdout.split('kept (')
     assert 'autorun_slam: true' in autonomy and f'{nav.pid} ' in autonomy
     assert f'{driver.pid} ' in kept.split('other jy_cog')[0]
+
+
+def test_the_program_decides_never_its_arguments(jy):
+    """A wrapper's arguments (livox) never keep it; the planner and the URDF are autonomy."""
+    root, _, spawn = jy
+    wrapper = spawn('localization/scripts/localization.sh', 'false', 'livox')
+    lidar = spawn('drivers/scripts/lidar_driver.sh', 'livox')
+    imu = spawn('drivers/lib/yesense_imu/yesense_imu_node')
+    planner = spawn('planner/lib/local_planner/localPlanner')
+    plan = spawn('nav/scripts/plan.sh', 'false')
+    urdf = spawn('drivers/scripts/urdf.sh')
+    bridge = spawn('transfer/lib/message_transformer_cpp/udp_receiver')
+    out = services(root, 'status')
+    assert out.returncode == 0, out.stdout + out.stderr
+    autonomy, rest = out.stdout.split('kept (')
+    kept, other = rest.split('other jy_cog')
+    for process in (wrapper, planner, plan, urdf):
+        assert f'{process.pid} ' in autonomy, out.stdout
+    assert f'{lidar.pid} ' in kept and f'{imu.pid} ' in kept, out.stdout
+    assert f'{bridge.pid} ' in other.split('load ')[0], out.stdout
 
 
 def test_off_stops_the_autonomy_now_and_at_boot_and_keeps_the_drivers(jy):
