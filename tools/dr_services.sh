@@ -108,22 +108,23 @@ list() {  # <class> <title>
   if [ -z "$lines" ]; then say "  none"; else printf '%s\n' "$lines" | cut -c1-150 | sed 's/^/  /'; fi
 }
 
-stop_pid() {  # <pid>: SIGINT (a roslaunch shuts its nodes down), then TERM, then KILL
-  local pid=$1 sig ticks i
+stop_all() {  # the autonomy at once: SIGINT (a roslaunch shuts its nodes down), TERM, KILL
+  local sig ticks i pid left denied=''
   for sig in INT TERM KILL; do
-    if ! kill -s "$sig" "$pid" 2>/dev/null; then
-      alive "$pid" || return 0
-      say "  cannot signal $pid (another user's process): run with sudo"
-      FAILED=1
-      return 0
-    fi
+    left=$(dr_processes stop | cut -d' ' -f1)
+    [ -n "$left" ] || return 0
+    for pid in $left; do  # a wrapper script and its node together: neither restarts the other
+      if ! kill -s "$sig" "$pid" 2>/dev/null && alive "$pid"; then
+        case " $denied " in *" $pid "*) ;; *) denied="$denied $pid" ;; esac
+      fi
+    done
     case "$sig" in INT) ticks=50 ;; TERM) ticks=30 ;; *) ticks=10 ;; esac
     for ((i = 0; i < ticks; i++)); do
-      alive "$pid" || return 0
+      [ -n "$(dr_processes stop)" ] || return 0
       sleep 0.1
     done
   done
-  say "  $pid is still running"
+  for pid in $denied; do say "  cannot signal $pid (another user's process): run with sudo"; done
   FAILED=1
 }
 
@@ -192,9 +193,9 @@ cmd_off() {
   while read -r pid _ args; do
     [ -n "$pid" ] || continue
     say "  stop $pid ${args:0:100}"
-    [ "$DRY" = 1 ] || stop_pid "$pid"
   done < <(dr_processes stop)
   [ "$DRY" = 1 ] && return 0
+  stop_all
   list stop "still running"
   list keep "kept"
   return "$FAILED"

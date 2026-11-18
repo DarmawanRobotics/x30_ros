@@ -112,15 +112,20 @@ def test_the_program_decides_never_its_arguments(jy):
 def test_off_stops_the_autonomy_now_and_at_boot_and_keeps_the_drivers(jy):
     root, log, spawn = jy
     nav, mapping = spawn('nav/bin/move_base'), spawn('slam/bin/mapping_node')
+    wrapper, planner = spawn('nav/scripts/plan.sh', 'false'), spawn('planner/lib/x/localPlanner')
     driver = spawn('drivers/livox_lidar_publisher2')
+    bridge = spawn('transfer/lib/message_transformer_cpp/udp_sender')
+    began = time.monotonic()
     out = services(root, 'off')
     assert out.returncode == 0, out.stdout + out.stderr
+    assert time.monotonic() - began < 5.0  # all at once, each answering SIGINT
     conf = root / 'system' / 'conf'
     assert (conf / 'autorun_slam').read_text() == 'false\n'  # the file's own format kept
     assert (conf / 'autorun_slam.x30_backup').read_text() == 'true\n'
     assert log.read_text().split() == ['kill_nav.sh', 'kill_mapping.sh']  # Deep Robotics' own
-    assert wait_until(lambda: nav.poll() is not None and mapping.poll() is not None)
-    assert driver.poll() is None
+    stopped = (nav, mapping, wrapper, planner)
+    assert wait_until(lambda: all(p.poll() is not None for p in stopped))
+    assert driver.poll() is None and bridge.poll() is None
     assert 'still running:\n  none' in out.stdout
 
 
