@@ -75,19 +75,19 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     (tmp_path / 'ros.bash').write_text('')
     launched = tmp_path / 'launched'
     fake = bin_dir / 'roslaunch'
-    fake.write_text(f'#!/bin/sh\necho "$ROS_IP $*" > {launched}\nexit 3\n')
+    fake.write_text(f'#!/bin/sh\nprintf "%s\\n" "$ROS_IP" "$@" > {launched}\nexit 3\n')
     fake.chmod(0o755)
     env = {
         'PATH': f'{bin_dir}:{os.environ["PATH"]}',
         'X30_ROS_SETUP': str(tmp_path / 'ros.bash'),
         'X30_WS': str(ws),
-        'X30_LAUNCH_ARGS': 'hertzino:=false hikmicro_host:=10.0.0.9',
+        'X30_LAUNCH_ARGS': "hertzino:=false hikmicro_host:='10.0.0.9'",
         'X30_SETTLE_SEC': '0',
         'ROS_MASTER_URI': 'http://127.0.0.1:9',
     }
     out = host('start', 'perception', env=env)
     assert out.returncode == 3, out.stdout + out.stderr  # the launch's exit, through the watchdog
-    assert launched.read_text().split() == [
+    assert launched.read_text().splitlines() == [
         '192.168.1.105',
         '--wait',
         'x30_bringup',
@@ -95,16 +95,20 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
         'hertzino:=false',
         'hikmicro_host:=10.0.0.9',
     ]
-    nowhere = {'X30_LAUNCH_ARGS': 'controller:=neupan', 'X30_PYTHON': str(tmp_path / 'none')}
+    nowhere = {
+        'X30_LAUNCH_ARGS': "controller:=neupan lidar_pose:='0.3 0 0.1 0 0 0'",
+        'X30_PYTHON': str(tmp_path / 'none'),
+    }
     out = host('start', 'navigation', env={**env, **nowhere})
     assert out.returncode == 3, out.stdout + out.stderr
     assert 'path follower runs with the system' in out.stdout  # never a missing launch-prefix
-    assert launched.read_text().split() == [
+    assert launched.read_text().splitlines() == [
         '192.168.1.106',
-        '--wait',  # Deep Robotics' master: never one of the launch's own
+        '--wait',  # Deep Robotics' master, never one of the launch's own
         'x30_bringup',
         'navigation_host.launch',
         'controller:=neupan',
+        'lidar_pose:=0.3 0 0.1 0 0 0',  # one argument
     ]
     assert '/x30/x30_driver' in out.stdout  # the critical nodes, logged by the watchdog
 

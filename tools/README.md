@@ -92,8 +92,8 @@ at mounting position A, (47.15, −1, 117) at B, (7.15, −1, 117) at C) rather 
 `X30_NAV_IP` and `X30_PER_IP` change the two addresses. The service's settings:
 
 ```bash
-# /etc/x30/navigation.env
-X30_LAUNCH_ARGS="site:=gardu odometry_only:=true controller:=neupan"
+# /etc/x30/navigation.env (shell words: a quoted value stays one argument)
+X30_LAUNCH_ARGS="site:=gardu odometry_only:=true controller:=neupan lidar_pose:='0.3 0 0.1 0 0 0'"
 X30_PYTHON=/home/ysc/x30_ws/neupan/bin/python
 # /etc/x30/perception.env
 X30_LAUNCH_ARGS=""

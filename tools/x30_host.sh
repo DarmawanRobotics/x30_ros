@@ -166,7 +166,9 @@ cmd_start() { # <role>
     say "no $X30_PYTHON: the path follower runs with the system's python (no NeuPAN)"
     unset X30_PYTHON
   fi
-  read -r -a args <<< "${X30_LAUNCH_ARGS:-}"
+  # shell words: lidar_pose:='0.3 0 0.1 0 0 0' is one argument
+  mapfile -t args < <(python3 -c 'import shlex, sys; print(*shlex.split(sys.argv[1]), sep="\n")' \
+    "${X30_LAUNCH_ARGS:-}")
   say "x30_ros, $role host: master $ROS_MASTER_URI, ROS_IP $ROS_IP, ${args[*]:-no arguments}"
   # the master is Deep Robotics' roscore on the navigation host: wait for it, never start one
   # with the launch (it would go with every restart, and Deep Robotics' LiDAR and IMU drivers,
@@ -187,6 +189,7 @@ env_file() { # <role> <user> <ws>
   say "# arguments of x30_bringup ${role}_host.launch, in quotes, e.g."
   if [ "$role" = navigation ]; then
     say "# X30_LAUNCH_ARGS=\"site:=gardu odometry_only:=true controller:=neupan\""
+    say "#   lidar_frame:=livox_frame lidar_pose:='0.3 0 0.1 0 0 0'\""
   else
     say "# X30_LAUNCH_ARGS=\"hertzino:=false\""
   fi
