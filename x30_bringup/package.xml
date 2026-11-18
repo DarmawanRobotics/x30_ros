@@ -31,6 +31,7 @@
   <test_depend>roslaunch</test_depend>
   <test_depend>rostest</test_depend>
   <test_depend>std_srvs</test_depend>
+  <test_depend>tf2_ros</test_depend>
   <test_depend>x30_msgs</test_depend>
   <test_depend>x30_utils</test_depend>
 </package>

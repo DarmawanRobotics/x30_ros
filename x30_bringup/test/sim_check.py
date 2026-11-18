@@ -12,12 +12,14 @@ from geometry_msgs.msg import PoseStamped
 import rospy
 import rostest
 from std_msgs.msg import Bool
+import tf2_ros
 
 from x30_msgs.msg import ControlStatus, HealthStatus, LocalizationStatus, PlannerStatus
 from x30_msgs.srv import GoTo
 
 GOAL = (4.5, 0.0, math.pi / 2)  # up the east corridor of mall_loop, from the start at (-4.5, -3)
 ARRIVED_WITHIN = 0.15  # m, the true pose from the goal (0.25 m without the tag corrections)
+LOCALIZED_WITHIN = 0.10  # m, map -> base_link from the true pose
 
 
 class StackSim(unittest.TestCase):
@@ -26,6 +28,8 @@ class StackSim(unittest.TestCase):
         cls.lock = threading.Lock()
         cls.latest = {}
         cls.sources = set()  # the localization's corrections seen
+        cls.tf = tf2_ros.Buffer()
+        cls.tf_listener = tf2_ros.TransformListener(cls.tf)
         for topic, msg_type in (
             ('/localization/status', LocalizationStatus),
             ('/control/status', ControlStatus),
@@ -73,7 +77,13 @@ class StackSim(unittest.TestCase):
         self.assertEqual(status.state, PlannerStatus.ARRIVED, status.message)
         truth = self.last('/sim/ground_truth').pose.position
         error = math.hypot(truth.x - GOAL[0], truth.y - GOAL[1])
-        rospy.loginfo('arrived %.3f m from the goal (true pose)', error)
+        seen = self.tf.lookup_transform('map', 'base_link', rospy.Time(0), rospy.Duration(2.0))
+        estimate = seen.transform.translation
+        drift = math.hypot(estimate.x - truth.x, estimate.y - truth.y)
+        rospy.loginfo(
+            'arrived %.3f m from the goal, localized %.3f m off (true pose)', error, drift
+        )
+        self.assertLess(drift, LOCALIZED_WITHIN)
         self.assertLess(error, ARRIVED_WITHIN)
         self.assertFalse(self.last('/sim/collision').data, 'the robot touched something')
         localization = self.last('/localization/status')
