@@ -1,8 +1,7 @@
-"""The NeuPAN controller: its checks before it builds, then on routes with the X30's model.
+"""The NeuPAN controller: its checks before it builds, then on routes with the X30's model."""
 
-The tests driving the robot need NeuPAN with the X30 patches (tools/install_neupan.sh) and are
-skipped without it.
-"""
+# The tests driving the robot need NeuPAN with the X30 patches (tools/install_neupan.sh) and are
+# skipped without it.
 
 from __future__ import annotations
 

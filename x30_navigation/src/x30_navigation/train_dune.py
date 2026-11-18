@@ -1,11 +1,9 @@
-"""train_dune: train NeuPAN's DUNE model for the footprint of a robot profile (no ROS).
+"""train_dune: train NeuPAN's DUNE model for the footprint of a robot profile (no ROS)."""
 
-    rosrun x30_navigation train_dune --robot-params $(rospack find x30_bringup)/config/robot.yaml \
-        --out $(rospack find x30_navigation)/models/dune_x30.pth
-
-The checkpoint is written with its record (dune_x30.json): the footprint, the training and the
-distance error measured on points around the robot. Needs NeuPAN (tools/install_neupan.sh).
-"""
+# $X30_PYTHON $(rospack find x30_navigation)/scripts/train_dune \
+#     --robot-params $(rospack find x30_bringup)/config/robot.yaml --out ~/x30/dune_mine.pth
+# The checkpoint is written with its record (dune_mine.json): the footprint, the training and the
+# distance error measured on points around the robot. Needs NeuPAN (tools/install_neupan.sh).
 
 from __future__ import annotations
 

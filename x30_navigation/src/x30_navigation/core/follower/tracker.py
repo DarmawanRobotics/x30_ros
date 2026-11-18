@@ -86,11 +86,7 @@ class Tracker:
 
     @property
     def shifting(self) -> bool:
-        """True when obstacles are passed by sliding sideways.
-
-        Also with a controller that avoids by itself: it keeps the clearance, the shift picks the
-        side it passes on.
-        """
+        """True when obstacles are passed by sliding sideways (also the side NeuPAN takes)."""
         return self.config.avoidance_mode == 'path_shift' and self.controller.strafes
 
     @property

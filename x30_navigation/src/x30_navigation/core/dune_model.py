@@ -1,10 +1,9 @@
-"""NeuPAN's DUNE model of the robot's footprint: its vertices, its record and its training.
+"""NeuPAN's DUNE model of the robot's footprint: its vertices, its record and its training."""
 
-DUNE maps an obstacle point (robot frame) to the dual variables of the point's distance to the
-footprint. It depends on the footprint only, never on the kinematics: train it once per
-footprint, keep the checkpoint with the record of what it was trained for (`<model>.json`),
-and the controller refuses a checkpoint whose footprint is not the robot's.
-"""
+# DUNE maps an obstacle point (robot frame) to the dual variables of the point's distance to the
+# footprint. It depends on the footprint only, never on the kinematics: train it once per
+# footprint, keep the checkpoint with the record of what it was trained for (<model>.json), and
+# the controller refuses a checkpoint whose footprint is not the robot's.
 
 from __future__ import annotations
 
@@ -167,11 +166,7 @@ def train(
     threads: int = 0,
     **train_kwargs,
 ) -> DuneRecord:
-    """Train DUNE for the vertices with NeuPAN's trainer; write checkpoint and its record.
-
-    The learning rate halves every 30 % of the epochs (NeuPAN's 1500 of 5000) unless
-    train_kwargs give decay_freq.
-    """
+    """Train DUNE for the vertices with NeuPAN's trainer; write checkpoint and its record."""
     from neupan.blocks.dune_train import DUNETrain
     from neupan.blocks.obs_point_net import ObsPointNet
     from neupan.configuration import np_to_tensor
@@ -190,6 +185,7 @@ def train(
     work = tempfile.mkdtemp(prefix='dune_')
     try:
         trainer = DUNETrain(model, np_to_tensor(g), np_to_tensor(h), work)
+        # the learning rate halves every 30 % of the epochs (NeuPAN's 1500 of 5000)
         train_kwargs.setdefault('decay_freq', max(1, round(epochs * 0.3)))
         best = trainer.start(
             data_size=data_size,
