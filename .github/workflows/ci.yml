@@ -41,11 +41,15 @@ jobs:
             src/drivers/hertzino_driver/hertzino_driver/CATKIN_IGNORE
           source /opt/ros/noetic/setup.bash
           apt-get update -qq
-          apt-get install -y -qq liburdfdom-tools > /dev/null
+          apt-get install -y -qq git liburdfdom-tools shellcheck > /dev/null  # git: pack_sources test
           rosdep update --rosdistro noetic --include-eol-distros
           # GUI tools of display.launch: not needed to build and test
           rosdep install --from-paths src --ignore-src -y --rosdistro noetic \
             --skip-keys "rviz joint_state_publisher_gui"
+
+      - name: Shell scripts
+        working-directory: src/x30_ros
+        run: shellcheck -x tools/*.sh
 
       - name: Build and test
         run: |

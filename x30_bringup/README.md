@@ -132,3 +132,7 @@ the robot alone by default, every layer when asked, the leg odometry topic follo
 namespace, `leg_odom_tf` with `localization` refused, health expecting exactly the nodes
 started, the inspection as the follower's hook and not expected by health, and `sim` in place of
 the driver and FAST-LIO with `sites_dir` and `reports_dir` reaching every layer.
+
+`test_tools.py` checks the robot tools of [tools/](../tools/README.md): Deep Robotics' autonomy
+off and on against a fake jy_cog, the offline dependency check and its package lists, and the
+source archive.
