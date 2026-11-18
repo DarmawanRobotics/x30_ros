@@ -17,6 +17,7 @@ from x30_utils.math import Pose2D
 from x30_utils.ros import EVENTS, LATCHED, X30Node, run
 
 NAME = 'route_recorder_node'
+TF_SETTLE_SEC = 2.0  # TF fills the buffer within this after the listener started (no warning)
 
 
 class RouteRecorderNode(X30Node):
@@ -30,6 +31,7 @@ class RouteRecorderNode(X30Node):
         live.on_change(self._on_config)
         self.site = ''
         self.localized = False
+        self._tf_since: float | None = None  # when the first lookup started the TF listener
         self._saved_pub = self.create_publisher(String, 'route/saved', EVENTS)
         self.create_subscription(SiteStatus, 'site/status', self._on_site, LATCHED)
         self.create_subscription(
@@ -49,12 +51,15 @@ class RouteRecorderNode(X30Node):
         return self.now()
 
     def _pose(self) -> Pose2D | None:
-        """Return the fresh map->base pose, or None."""
+        """Return the fresh map->base pose, or None (warned once TF had time to arrive)."""
+        if self._tf_since is None:
+            self._tf_since = self._now()
         result = self.tf.fresh(
             self.frames.map, self.frames.base, self.recorder.config.max_tf_age_sec
         )
         if result is None:
-            self.log.warning('no fresh map->base TF', error=self.tf.error, throttle=5.0)
+            if self._now() - self._tf_since > TF_SETTLE_SEC:
+                self.log.warning('no fresh map->base TF', error=self.tf.error, throttle=5.0)
             return None
         return result.pose2d
 
