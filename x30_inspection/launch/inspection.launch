@@ -1,0 +1,29 @@
+<launch>
+  <!--
+    inspection_node (x30_inspection): thermal and partial discharge inspection at the stop
+    points, with the HIKMICRO PTZ camera (hikmicro_driver) and the Hertzino HZ-FA-371
+    (hertzino_driver). The path follower calls inspection/inspect (x30_bringup inspection:=true
+    sets its hooks/inspection).
+      params_file:  parameters on top of config/inspection.yaml
+      robot_params: the robot profile, loaded as robot/ (empty: already on the parameter server)
+      sites_dir:    where <site>/inspection.yaml is read (empty: the files')
+      reports_dir:  where the reports are written (empty: the files')
+  -->
+  <arg name="params_file" default=""/>
+  <arg name="robot_params" default=""/>
+  <arg name="sites_dir" default=""/>
+  <arg name="reports_dir" default=""/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
+            file="$(arg robot_params)"/>
+
+  <node pkg="x30_inspection" type="inspection_node" name="inspection_node"
+        output="$(arg output)" respawn="$(arg respawn)">
+    <rosparam command="load" file="$(find x30_inspection)/config/inspection.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+    <param if="$(eval arg('sites_dir') != '')" name="sites_dir" value="$(arg sites_dir)"/>
+    <param if="$(eval arg('reports_dir') != '')" name="reports_dir" value="$(arg reports_dir)"/>
+  </node>
+</launch>

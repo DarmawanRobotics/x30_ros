@@ -1,0 +1,23 @@
+# x30_inspection defaults (private parameters of inspection_node). Every parameter with its unit
+# and range: src/x30_inspection/core/config.py. The points and targets of a site are in
+# <sites_dir>/<site>/inspection.yaml (README.md).
+enabled: true
+sites_dir: ~/x30/map          # the sites of x30_mapping and x30_navigation
+reports_dir: ~/x30/reports    # <YYYYMMDD>/<HHMMSS>_<point>/report.json and the images
+match_radius_m: 1.5           # a stop this close to an inspection point inspects it
+max_duration_sec: 150.0       # one point (the follower's hooks/inspection_timeout_sec: more)
+camera: # the HIKMICRO PTZ camera (hikmicro_driver)
+  namespace: /hikmicro
+  move_timeout_sec: 20.0
+  settle_sec: 1.0             # after arriving: focus and a fresh thermometry frame
+  park_preset: 0              # a preset called after each point; 0: the camera stays
+thermal:
+  ambient_c: 30.0             # degC, the air temperature of the day (live: rosparam set)
+  samples: 3
+acoustic: # the Hertzino HZ-FA-371 (hertzino_driver), partial discharge mode
+  enabled: true
+  namespace: /hertzino
+  duration_sec: 5.0
+  corona: attention
+  surface: warning
+  floating: critical
