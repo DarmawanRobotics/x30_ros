@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Deep Robotics' own autonomy on the X30's navigation host (192.168.1.106, ~/jy_cog): its
 # localization, navigation (move_base and the local planner) and mapping take the CPU x30_ros
-# needs and clash with it (/map, /initialpose, TF, /cmd_vel), and its URDF publisher sends the
-# frames x30_description does. Turns them off and on again; offline, on the navigation host.
+# needs and clash with it (/map, /initialpose, TF, /cmd_vel), its URDF publisher sends the
+# frames x30_description does, and its bridge (transfer) holds the UDP port of the motion host's
+# reports and drives the robot from /cmd_vel. Turns them off and on again; offline, on the
+# navigation host.
 # Kept: the sensor drivers (/livox/lidar, /imu/data), the ROS master and the robot server
 # (the controller app). Never touched: the motion host (.103) and the perception host (.105:
 # elevation map, autonomous charging and their drivers).
@@ -12,7 +14,7 @@ usage() {
   cat <<'EOF'
 usage: dr_services.sh status|off|on [--dry-run] [--force]
   status   autorun_slam, the Deep Robotics processes, the busiest, the report port, boot starters
-  off      stop the localization, navigation, mapping and URDF now, and keep them off at boot
+  off      stop the localization, navigation, mapping, URDF and bridge now; autorun_slam false
   on       autorun_slam as it was before off (back from the next boot)
   --dry-run  print what would be done, change nothing
 from a laptop: ssh ysc@192.168.1.106 'bash -s -- off' < tools/dr_services.sh
@@ -33,8 +35,9 @@ SCRIPTS=$JY/system/scripts
 RECORDER=$JY/rosbag_recorder/scripts
 # processes started from jy_cog, judged by their program inside it (the binary, the script a
 # shell runs, the launch file), never by its arguments; lower case, KEEP wins over STOP, the
-# rest is only listed
-STOP='^(localization|nav|planner|mapping|slam)/|locali[sz]ation|location|navigation|move_base|planner|slam|mapping|player|record|rviz|pcd2map|occ_|(^|/)urdf'
+# rest is only listed. A process with no program there (the robot_state_publisher a wrapper
+# script runs, a roslaunch's nodes) belongs to its nearest ancestor that has one.
+STOP='^(localization|nav|planner|mapping|slam|transfer)/|locali[sz]ation|location|navigation|move_base|planner|slam|mapping|player|record|rviz|pcd2map|occ_|(^|/)urdf|message_transformer'
 KEEP='livox|lidar|yesense|(^|[/_])imu|robot_server|broker|rosmaster|roscore|rosout'
 REPORT_PORT=43897  # x30_driver's local_port, where the motion host's reports arrive
 DRY=0
@@ -64,10 +67,23 @@ autorun() {
 }
 
 alive() {  # <pid>: running, and not a zombie waiting for its parent
-  local state
-  state=$(ps -o stat= -p "$1" 2>/dev/null) || return 1
-  case "$state" in Z* | '') return 1 ;; esac
-  return 0
+  local key value
+  while read -r key value _; do
+    if [ "$key" = State: ]; then
+      [ "$value" != Z ] && [ "$value" != X ]
+      return
+    fi
+  done 2>/dev/null < "/proc/$1/status"
+  return 1
+}
+
+remaining() {  # <pid>...: those still alive, once each
+  local pid out=''
+  for pid in "$@"; do
+    alive "$pid" || continue
+    case " $out " in *" $pid "*) ;; *) out="$out $pid" ;; esac
+  done
+  printf '%s' "${out# }"
 }
 
 program() {  # <args>: PROGRAM = the first word inside jy_cog, relative to it, lower case
@@ -85,21 +101,77 @@ program() {  # <args>: PROGRAM = the first word inside jy_cog, relative to it, l
   done
 }
 
-dr_processes() {  # <class>: "pid cpu args" of the jy_cog processes of that class
-  local pid cpu args class
-  while read -r pid cpu args; do
+declare -A PARENT=() OWN=() CPU=() ARGS=()
+
+snapshot() {  # every process now: parent, cpu, args, own class ('' when not from jy_cog)
+  local pid ppid cpu args
+  PARENT=() OWN=() CPU=() ARGS=()
+  while read -r pid ppid cpu args; do
     [ "$pid" = "$$" ] && continue
+    PARENT[$pid]=$ppid
+    CPU[$pid]=$cpu
+    ARGS[$pid]=$args
     program "$args"
-    [ -n "$PROGRAM" ] || continue
-    if [[ $PROGRAM =~ $KEEP ]]; then
-      class=keep
+    if [ -z "$PROGRAM" ]; then
+      OWN[$pid]=''
+    elif [[ $PROGRAM =~ $KEEP ]]; then
+      OWN[$pid]=keep
     elif [[ $PROGRAM =~ $STOP ]]; then
-      class=stop
+      OWN[$pid]=stop
     else
-      class=other
+      OWN[$pid]=other
     fi
-    [ "$class" = "$1" ] && printf '%s %s %s\n' "$pid" "$cpu" "$args"
-  done < <(ps -eo pid=,pcpu=,args=)
+  done < <(ps -eo pid=,ppid=,pcpu=,args=)
+}
+
+class_of() {  # <pid>: CLASS = its own class, else its nearest classified ancestor's, else ''
+  local pid=$1 hops=0
+  CLASS=''
+  while [ -n "$pid" ] && [ "$pid" != 0 ] && [ "$hops" -lt 64 ]; do
+    if [ -n "${OWN[$pid]:-}" ]; then
+      CLASS=${OWN[$pid]}
+      return 0
+    fi
+    pid=${PARENT[$pid]:-}
+    hops=$((hops + 1))
+  done
+}
+
+pids() {  # the pids of the snapshot, in order
+  printf '%s\n' "${!ARGS[@]}" | sort -n
+}
+
+dr_processes() {  # <class>: "pid cpu args" of its processes (their own class, or a wrapper's)
+  local pid
+  snapshot
+  for pid in $(pids); do
+    class_of "$pid"
+    [ "$CLASS" = "$1" ] && printf '%s %s %s\n' "$pid" "${CPU[$pid]}" "${ARGS[$pid]}"
+  done
+}
+
+plan_stop() {  # STOPPING: the autonomy's pids; GUARDED: autonomy that also runs kept processes
+  local pid up hops
+  local -A guard=()
+  STOPPING=()
+  GUARDED=()
+  snapshot
+  for pid in "${!ARGS[@]}"; do  # the ancestors of what is kept or left alone are not stopped
+    class_of "$pid"
+    if [ -z "$CLASS" ] || [ "$CLASS" = stop ]; then continue; fi
+    up=${PARENT[$pid]:-}
+    hops=0
+    while [ -n "$up" ] && [ "$up" != 0 ] && [ "$hops" -lt 64 ]; do
+      guard[$up]=1
+      up=${PARENT[$up]:-}
+      hops=$((hops + 1))
+    done
+  done
+  for pid in $(pids); do
+    class_of "$pid"
+    [ "$CLASS" = stop ] || continue
+    if [ -n "${guard[$pid]:-}" ]; then GUARDED+=("$pid"); else STOPPING+=("$pid"); fi
+  done
 }
 
 list() {  # <class> <title>
@@ -110,21 +182,28 @@ list() {  # <class> <title>
 }
 
 stop_all() {  # the autonomy at once: SIGINT (a roslaunch shuts its nodes down), TERM, KILL
-  local sig ticks i pid left denied=''
+  local sig ticks i pid targets='' denied=''
   for sig in INT TERM KILL; do
-    left=$(dr_processes stop | cut -d' ' -f1)
-    [ -n "$left" ] || return 0
-    for pid in $left; do  # a wrapper script and its node together: neither restarts the other
+    plan_stop  # a node whose wrapper is gone stays a target: it is orphaned, not kept
+    # shellcheck disable=SC2086
+    targets=$(remaining $targets "${STOPPING[@]}")
+    [ -n "$targets" ] || return 0
+    for pid in $targets; do  # a wrapper and its node together: neither restarts the other
       if ! kill -s "$sig" "$pid" 2>/dev/null && alive "$pid"; then
         case " $denied " in *" $pid "*) ;; *) denied="$denied $pid" ;; esac
       fi
     done
     case "$sig" in INT) ticks=50 ;; TERM) ticks=30 ;; *) ticks=10 ;; esac
     for ((i = 0; i < ticks; i++)); do
-      [ -n "$(dr_processes stop)" ] || return 0
+      # shellcheck disable=SC2086
+      [ -n "$(remaining $targets)" ] || break
       sleep 0.1
     done
   done
+  plan_stop
+  # shellcheck disable=SC2086
+  targets=$(remaining $targets "${STOPPING[@]}")
+  [ -n "$targets" ] || return 0
   for pid in $denied; do say "  cannot signal $pid (another user's process): run with sudo"; done
   FAILED=1
 }
@@ -165,7 +244,7 @@ cmd_status() {
   [ -f "$BACKUP" ] && before=" (before x30_ros: $(tr -d ' \t\r\n' < "$BACKUP"))"
   say "jy_cog: $JY"
   say "autorun_slam: $(autorun)$before"
-  list stop "Deep Robotics autonomy and URDF (stopped by off)"
+  list stop "Deep Robotics autonomy, URDF and bridge (stopped by off)"
   list keep "kept (sensor drivers, ROS master, robot server)"
   list other "other jy_cog processes (left alone)"
   say "load $(cut -d' ' -f1-3 /proc/loadavg) on $(nproc) cores; busiest:"
@@ -186,7 +265,7 @@ cmd_status() {
 }
 
 cmd_off() {
-  local script pid args
+  local script pid
   say "at boot:"
   case "$(autorun)" in
     true | True | TRUE)
@@ -208,10 +287,11 @@ cmd_off() {
     say "  stop_record.sh"
     run_quiet bash "$RECORDER/stop_record.sh"
   fi
-  while read -r pid _ args; do
-    [ -n "$pid" ] || continue
-    say "  stop $pid ${args:0:100}"
-  done < <(dr_processes stop)
+  plan_stop
+  for pid in "${STOPPING[@]}"; do say "  stop $pid ${ARGS[$pid]:0:100}"; done
+  for pid in "${GUARDED[@]}"; do
+    say "  left $pid ${ARGS[$pid]:0:100} (it also runs what is kept)"
+  done
   [ "$DRY" = 1 ] && return 0
   stop_all
   list stop "still running"

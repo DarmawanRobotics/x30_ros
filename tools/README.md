@@ -5,7 +5,7 @@ nothing downloaded on the robot.
 
 | Script | Run on | |
 |---|---|---|
-| `dr_services.sh status\|off\|on` | the navigation host (192.168.1.106) | Deep Robotics' own localization, navigation and mapping off, now and at boot, and back on |
+| `dr_services.sh status\|off\|on` | the navigation host (192.168.1.106) | Deep Robotics' own localization, navigation, mapping, URDF and bridge off, now and at boot, and back on |
 | `check_deps.sh [--tests] [--gui]` | the robot | what the build and the stack need, checked offline: the apt packages, the sources of x30.repos, the Livox SDK |
 | `pack_sources.sh [OUT] [--skip PATH]` | a computer with internet | x30_ros, the repositories of x30.repos and the Livox SDK in one archive (about 5 MB) |
 
@@ -30,35 +30,40 @@ ssh ysc@192.168.1.106 'bash -s -- off' < tools/dr_services.sh   # the same from 
 Robotics' own `kill_nav.sh` and `kill_mapping.sh` (`stop_record.sh` while a recording runs), and
 stops what of jy_cog still runs of localization, navigation (`move_base` and the local planner:
 `plan.sh`, `local_planner.sh`, `pcl_concatenate`, `localPlanner`), mapping, the player, the
-recorder, RViz and Deep Robotics' URDF publisher (`drivers/scripts/urdf.sh`: x30_description
-publishes those frames, and a frame with two publishers jumps between them). All of them at
-once: SIGINT, then TERM, then KILL, so no wrapper script restarts its node. A process is judged
-by its program inside jy_cog (the binary, the script a shell runs, the launch file), never by
-its arguments: `localization.sh false livox` is the localization. `--dry-run` prints all of it
-and changes nothing; `on` restores `autorun_slam` from the backup.
+recorder, RViz, Deep Robotics' URDF publisher (`drivers/scripts/urdf.sh`: x30_description
+publishes those frames, and a frame with two publishers jumps between them) and its bridge to
+the robot (`transfer`: `udp_receiver` holds UDP 43897, where the motion host's reports arrive
+for x30_driver, and `udp_sender` drives the robot from `/cmd_vel`, past the control mux;
+x30_driver does both now). All of them at once: SIGINT, then TERM, then KILL, so no wrapper
+script restarts its node.
+
+A process is judged by its program inside jy_cog (the binary, the script a shell runs, the
+launch file), never by its arguments: `localization.sh false livox` is the localization. A
+process with no program there (the `robot_state_publisher` that `urdf.sh` runs, a roslaunch's
+nodes) goes with its nearest ancestor that has one, also once that ancestor is gone; a script
+of the autonomy that also runs something kept is left (`left ...`), since stopping it could
+take the kept one along. `--dry-run` prints all of it and changes nothing; `on` restores
+`autorun_slam` from the backup.
 
 Kept: the navigation host's sensor drivers (`/livox_lidar_publisher2`, `/yesense_imu_node`:
 `/livox/lidar`, `/lidar_points`, `/imu/data`), its ROS master and the robot server
-(`robot_server`, formerly `broker`: the controller app). Listed under "other", left running:
-`transfer` (`udp_receiver`, `udp_sender`: Deep Robotics' bridge between ROS and the robot) and
-`cpu_monitor`; `rosnode info /udp_sender` shows what the bridge takes to the robot, so publish
-nothing there that Deep Robotics' navigation used to (`/cmd_vel`): it would pass the control
-mux. Never touched: the motion host (192.168.1.103: the walking) and the perception host
-(192.168.1.105: the elevation map, autonomous charging on UDP 3333 and their drivers);
+(`robot_server`, formerly `broker`: the controller app). Listed under "other" and left running:
+`cpu_monitor`. Never touched: the motion host (192.168.1.103: the walking) and the perception
+host (192.168.1.105: the elevation map, autonomous charging on UDP 3333 and their drivers);
 x30_driver uses both, and the script refuses to run there.
 
-`status` also tells who holds UDP 43897, where x30_driver takes the motion host's reports
-(`free`, or the process: then give the driver another `local_port` and list that port in the
-motion host's `network.toml`), and which files start jy_cog at boot (`file:` lines).
+`status` also tells who holds UDP 43897 (`free` once the bridge is off; another process: give
+the driver another `local_port` and list that port in the motion host's `network.toml`) and
+which files start jy_cog at boot (`file:` lines).
 
 After `off`:
 
 1. `rostopic hz /livox/lidar /imu/data`: still 10 Hz and 200 Hz.
 2. `rostopic info /map` and `rostopic info /initialpose`: no Deep Robotics node left among the
    publishers and subscribers.
-3. `dr_services.sh status` again: nothing under "Deep Robotics autonomy and URDF". A heavy
-   process still listed under "other jy_cog processes" is left alone on purpose: look at it
-   first.
+3. `dr_services.sh status` again: nothing under "Deep Robotics autonomy, URDF and bridge", and
+   `udp 43897 (x30_driver's reports): free`. A heavy process still listed under "other jy_cog
+   processes" is left alone on purpose: look at it first.
 4. The controller app's navigation recorder needs Deep Robotics' navigation; x30_mapping's
    routes replace it. Charging (`charge_start`) belongs to the perception host and stays.
 
