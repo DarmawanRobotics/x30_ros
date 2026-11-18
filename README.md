@@ -5,8 +5,8 @@
 **ROS Noetic robot package and autonomy stack for the Deep Robotics Jueying X30: the motion
 host's UDP protocol as a driver, Deep Robotics' own URDF as xacro, and the X30 stack, the ROS
 Noetic port of Dharma: a control mux with a protective field, LiDAR sector scans, FAST-LIO
-odometry, localization on site maps, route and goal navigation, and the building blocks every
-node shares.**
+odometry, localization on site maps, route and goal navigation, health, a simulated X30 for
+the whole stack, and the building blocks every node shares.**
 
 [![CI](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-22314E?logo=ros&logoColor=white)](http://wiki.ros.org/noetic)
@@ -35,7 +35,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 [x30_perception](x30_perception/README.md) · [x30_odometry](x30_odometry/README.md) ·
 [x30_localization](x30_localization/README.md) · [x30_mapping](x30_mapping/README.md) ·
 [x30_navigation](x30_navigation/README.md) · [x30_health](x30_health/README.md) ·
-[CHANGELOG](CHANGELOG.md)
+[x30_sim](x30_sim/README.md) · [CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -53,6 +53,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 | [`x30_mapping`](x30_mapping/README.md) | sites (map, fiducials, routes), the occupancy grid from FAST-LIO's scans, `/map`, mapping sessions and route teaching with stop points |
 | [`x30_navigation`](x30_navigation/README.md) | a planner on the site map with replanning, routes from the active site, a path follower with pluggable controllers, path shifting and stop point inspections, reactive avoidance and tag docking; every command to the control mux |
 | [`x30_health`](x30_health/README.md) | one health signal: sensor rates and header ages (raw, any type), the expected nodes, the stack's states, the safety scan, TF, the clock and the computer; `health/status` with a speed scale for the mux, and diagnostics |
+| [`x30_sim`](x30_sim/README.md) | the X30 in software (`bringup.launch sim:=true`): a kinematic body behind the driver's topics and services, the four Mid-360 ray-cast into `/livox/lidar`, the body IMU, a drifting FAST-LIO stand-in and leg odometry, a tag camera, seeded scenarios, worlds and sites; no Gazebo, no GPU |
 
 ## Stack
 
@@ -70,7 +71,7 @@ and reads the X30's sensor topics.
  estimation   localization (EKF) · FAST-LIO odometry · sector scans
               ◄ x30_localization · x30_odometry · x30_perception
  control      control mux: the only /x30/cmd_vel, e-stop, protective field  ◄ x30_control
- robot        x30_driver (UDP) · x30_description (URDF)
+ robot        x30_driver (UDP) · x30_description (URDF) · or x30_sim (sim:=true)
  base         x30_utils (robot profile, config, math, X30Node) · x30_msgs
 ```
 
@@ -119,12 +120,21 @@ rostopic echo -n 1 /x30/state
 rosservice call /x30/stand_up
 ```
 
-Without a robot, against the simulated one (motion and perception hosts on this computer):
+Without a robot, the driver against the simulated motion and perception hosts on this computer:
 
 ```bash
 rosrun x30_driver fake_robot.py                  # terminal 1: the simulated robot
 roslaunch x30_bringup bringup.launch rviz:=true \
   overrides_file:=$(rospack find x30_driver)/config/fake_robot.yaml   # terminal 2
+```
+
+Or the whole stack on the simulated X30 ([x30_sim](x30_sim/README.md)): its LiDARs, IMU and
+FAST-LIO in a mall world, the site drawn from it, `planner/go_to` from RViz or the command line:
+
+```bash
+roslaunch x30_bringup bringup.launch sim:=true site:=mall control:=true perception:=true \
+  odometry:=true localization:=true mapping:=true navigation:=true health:=true rviz:=true
+rosservice call /planner/go_to "{x: 4.5, y: 0.0, yaw: 1.57}"
 ```
 
 Then work through [Verify on the real robot](#verify-on-the-real-robot), including the `cmd_vel`
