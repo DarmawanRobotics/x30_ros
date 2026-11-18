@@ -5,8 +5,9 @@
 **ROS Noetic robot package and autonomy stack for the Deep Robotics Jueying X30: the motion
 host's UDP protocol as a driver, Deep Robotics' own URDF as xacro, and the X30 stack, the ROS
 Noetic port of Dharma: a control mux with a protective field, LiDAR sector scans, FAST-LIO
-odometry, localization on site maps, route and goal navigation, health, a simulated X30 for
-the whole stack, and the building blocks every node shares.**
+odometry, localization on site maps, route and goal navigation, health, thermal and partial
+discharge inspection at the stop points, a simulated X30 for the whole stack, and the building
+blocks every node shares.**
 
 [![CI](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-22314E?logo=ros&logoColor=white)](http://wiki.ros.org/noetic)
@@ -35,7 +36,8 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 [x30_perception](x30_perception/README.md) · [x30_odometry](x30_odometry/README.md) ·
 [x30_localization](x30_localization/README.md) · [x30_mapping](x30_mapping/README.md) ·
 [x30_navigation](x30_navigation/README.md) · [x30_health](x30_health/README.md) ·
-[x30_sim](x30_sim/README.md) · [CHANGELOG](CHANGELOG.md)
+[x30_inspection](x30_inspection/README.md) · [x30_sim](x30_sim/README.md) ·
+[CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -53,6 +55,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 | [`x30_mapping`](x30_mapping/README.md) | sites (map, fiducials, routes), the occupancy grid from FAST-LIO's scans, `/map`, mapping sessions and route teaching with stop points |
 | [`x30_navigation`](x30_navigation/README.md) | a planner on the site map with replanning, routes from the active site, a path follower with pluggable controllers, path shifting and stop point inspections, reactive avoidance and tag docking; every command to the control mux |
 | [`x30_health`](x30_health/README.md) | one health signal: sensor rates and header ages (raw, any type), the expected nodes, the stack's states, the safety scan, TF, the clock and the computer; `health/status` with a speed scale for the mux, and diagnostics |
+| [`x30_inspection`](x30_inspection/README.md) | substation inspection at the stop points (the follower's hook): the HIKMICRO PTZ camera pointed at each target taught there, overheating judged by absolute, ambient and similar criteria (NETA MTS); partial discharge from the Hertzino HZ-FA-371; a report with the thermal, visible, sound map and PRPD images on the robot and on `inspection/report` |
 | [`x30_sim`](x30_sim/README.md) | the X30 in software (`bringup.launch sim:=true`): a kinematic body behind the driver's topics and services, the four Mid-360 ray-cast into `/livox/lidar`, the body IMU, a drifting FAST-LIO stand-in and leg odometry, a tag camera, seeded scenarios, worlds and sites; no Gazebo, no GPU |
 
 ## Stack
@@ -65,6 +68,8 @@ robot's own perception and navigation software: the stack drives the robot throu
 and reads the X30's sensor topics.
 
 ```
+ inspection   thermal and partial discharge at the stop points  ◄ x30_inspection
+              (hikmicro_driver, hertzino_driver of x30.repos)
  watching     health/status, diagnostics, speed scale  ◄ x30_health
  navigation   planner · route loader · path follower · avoidance · docking  ◄ x30_navigation
  world        occupancy grid · sites (map, fiducials, routes)        ◄ x30_mapping
@@ -312,11 +317,13 @@ On a new robot, in an open area, with someone at the handheld:
 |---|---|
 | `FAST_LIO` (hku-mars, ROS 1) | the LiDAR-inertial odometry of x30_odometry; `--recursive` for its ikd-Tree |
 | `livox_ros_driver` | the Livox `CustomMsg` FAST-LIO is built with (the same md5 as the X30's `livox_ros_driver2`); it needs the [Livox SDK](https://github.com/Livox-SDK/Livox-SDK) installed first: `git clone https://github.com/Livox-SDK/Livox-SDK.git && cd Livox-SDK/build && cmake .. && make && sudo make install` |
-| `hikmicro_driver` | the HIKMICRO thermal + visible PTZ camera (`hikmicro:=true`) |
-| `hertzino_driver` | the Hertzino acoustic camera (`hertzino:=true`) |
+| `hikmicro_driver` | the HIKMICRO thermal + visible PTZ camera (`hikmicro:=true`); its `hikmicro_msgs` for x30_inspection |
+| `hertzino_driver` | the Hertzino acoustic camera (`hertzino:=true`); its `hertzino_msgs` for x30_inspection |
 
 Everything else comes from rosdep. Without them the stack still builds and runs: odometry with
-`odometry_method:=external`, the cameras off.
+`odometry_method:=external`, the cameras and the inspection off (x30_inspection needs the two
+message packages; CI builds them alone). The camera passwords come from `HIKMICRO_PASSWORD`
+and `HERTZINO_PASSWORD` in the environment, never from a launch argument.
 
 ## Develop
 
