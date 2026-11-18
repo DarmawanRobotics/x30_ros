@@ -60,6 +60,7 @@ HEALTH_CASES = (
     ('control:=true', 'navigation:=true'),
     ('odometry:=true',),  # FAST-LIO
     ('control:=true', 'perception:=true', *LAYERS),
+    ('sim:=true', 'control:=true', 'perception:=true', *LAYERS),
 )
 
 
@@ -89,3 +90,32 @@ def test_health_watches_the_states_and_sensors_of_the_layers_started():
 def test_leg_odom_tf_and_localization_together_are_refused():
     out = roslaunch('--dump-params', str(LAUNCH), 'leg_odom_tf:=true', 'localization:=true')
     assert 'both publish odom -> base_link' in out
+
+
+def test_sim_stands_in_for_the_driver_and_fast_lio():
+    nodes = roslaunch('--nodes', str(LAUNCH), 'sim:=true', 'odometry:=true').split()
+    assert '/sim_robot_node' in nodes and '/odometry_monitor_node' in nodes
+    assert '/x30/x30_driver' not in nodes and '/fast_lio/fast_lio' not in nodes
+    params = yaml.safe_load(
+        roslaunch('--dump-params', str(LAUNCH), 'sim:=true', 'namespace:=dog', 'leg_odom_tf:=true')
+    )
+    assert params['/sim_robot_node/driver_ns'] == 'dog'
+    assert params['/sim_robot_node/publish_tf'] is True
+    assert not any(k.startswith('/dog/x30_driver/') for k in params)
+
+
+def test_sim_with_fast_lio_is_refused():
+    out = roslaunch('--nodes', str(LAUNCH), 'sim:=true', 'odometry_method:=fast_lio')
+    assert 'sim:=true stands in for FAST-LIO' in out
+
+
+def test_sites_dir_reaches_every_layer(tmp_path):
+    layers = ('localization:=true', 'mapping:=true', 'navigation:=true')
+    args = ('sim:=true', 'site:=lobby', f'sites_dir:={tmp_path}', *layers)
+    params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
+    for node in ('localization_node', 'site_manager_node', 'grid_mapper_node', 'path_loader_node'):
+        assert params[f'/{node}/sites_dir'] == str(tmp_path), node
+    assert (tmp_path / 'lobby' / 'map.yaml').is_file()  # drawn while the launch file was read
+    real = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *layers))
+    assert real['/localization_node/sites_dir'] == '~/x30/map'  # the layers' own files
+    assert real['/path_loader_node/sites_dir'] == '~/x30/map'
