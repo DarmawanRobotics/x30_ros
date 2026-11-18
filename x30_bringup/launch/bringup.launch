@@ -23,9 +23,17 @@
       lidar_frame / lidar_pose: base_link -> the frame of /livox/lidar ("x y z yaw pitch roll",
                     m and rad): check it on the robot (x30_perception README) before relying
                     on the scans
+      sim:          x30_sim's simulated X30 in place of x30_driver, the LiDARs, the IMU and
+                    FAST-LIO (odometry_method external); world, scenario: its files; site is drawn
+                    from the world unless it has a map
+      sites_dir:    the sites of localization, mapping and navigation (empty: their files'; with
+                    sim: /tmp/x30_sim/sites)
       rviz: RViz with the robot model
   -->
   <arg name="namespace" default="x30"/>
+  <arg name="sim" default="false"/>
+  <arg name="world" default=""/>
+  <arg name="scenario" default=""/>
   <arg name="params_file" default="$(find x30_driver)/config/driver_params.yaml"/>
   <arg name="overrides_file" default=""/>
   <arg name="robot_params" default="$(find x30_bringup)/config/robot.yaml"/>
@@ -33,10 +41,11 @@
   <arg name="perception" default="false"/>
   <arg name="leg_odom_tf" default="false"/>
   <arg name="odometry" default="false"/>
-  <arg name="odometry_method" default="fast_lio"/>
+  <arg name="odometry_method" default="$(eval 'external' if arg('sim') else 'fast_lio')"/>
   <arg name="localization" default="false"/>
   <arg name="mapping" default="false"/>
   <arg name="site" default=""/>
+  <arg name="sites_dir" default="$(eval '/tmp/x30_sim/sites' if arg('sim') else '')"/>
   <arg name="navigation" default="false"/>
   <arg name="health" default="false"/>
   <arg name="hikmicro" default="false"/>
@@ -52,16 +61,31 @@
   <!-- base_link has one parent: the driver's leg odometry or the localization bridge -->
   <arg if="$(eval arg('leg_odom_tf') and arg('localization'))" name="one_parent_for_base_link"
        value="$(eval {}['leg_odom_tf and localization both publish odom -> base_link'])"/>
+  <!-- the simulator publishes FAST-LIO's outputs itself -->
+  <arg if="$(eval arg('sim') and arg('odometry_method') != 'external')" name="sim_without_fast_lio"
+       value="$(eval {}['sim:=true stands in for FAST-LIO: odometry_method:=external'])"/>
 
   <rosparam command="load" ns="robot" file="$(arg robot_params)"/>
 
-  <include file="$(find x30_driver)/launch/driver.launch">
-    <arg name="namespace" value="$(arg namespace)"/>
-    <arg name="params_file" value="$(arg params_file)"/>
-    <arg name="overrides_file" value="$(arg overrides_file)"/>
-  </include>
-  <!-- after the driver's files: the last setting of a parameter wins -->
-  <param if="$(arg leg_odom_tf)" name="$(arg namespace)/x30_driver/publish_tf" value="true"/>
+  <group unless="$(arg sim)">
+    <include file="$(find x30_driver)/launch/driver.launch">
+      <arg name="namespace" value="$(arg namespace)"/>
+      <arg name="params_file" value="$(arg params_file)"/>
+      <arg name="overrides_file" value="$(arg overrides_file)"/>
+    </include>
+    <!-- after the driver's files: the last setting of a parameter wins -->
+    <param if="$(arg leg_odom_tf)" name="$(arg namespace)/x30_driver/publish_tf" value="true"/>
+  </group>
+  <group if="$(arg sim)">
+    <include file="$(find x30_sim)/launch/sim.launch">
+      <arg name="world" value="$(arg world)"/>
+      <arg name="scenario" value="$(arg scenario)"/>
+      <arg name="site" value="$(arg site)"/>
+      <arg name="sites_dir" value="$(arg sites_dir)"/>
+    </include>
+    <param name="sim_robot_node/driver_ns" value="$(arg namespace)"/>
+    <param if="$(arg leg_odom_tf)" name="sim_robot_node/publish_tf" value="true"/>
+  </group>
 
   <include file="$(find x30_description)/launch/description.launch">
     <arg name="namespace" value="$(arg namespace)"/>
@@ -76,15 +100,19 @@
     <arg name="leg_odom_topic" value="/$(arg namespace)/odom"/>
   </include>
 
-  <include if="$(arg localization)" file="$(find x30_localization)/launch/localization.launch"/>
+  <include if="$(arg localization)" file="$(find x30_localization)/launch/localization.launch">
+    <arg name="sites_dir" value="$(arg sites_dir)"/>
+  </include>
 
   <include if="$(arg mapping)" file="$(find x30_mapping)/launch/mapping.launch">
     <arg name="site" value="$(arg site)"/>
+    <arg name="sites_dir" value="$(arg sites_dir)"/>
   </include>
 
   <include if="$(arg navigation)" file="$(find x30_navigation)/launch/navigation.launch">
     <arg name="battery_topic" value="/$(arg namespace)/battery"/>
     <arg name="odom_topic" value="/$(arg namespace)/odom"/>
+    <arg name="sites_dir" value="$(arg sites_dir)"/>
   </include>
 
   <group if="$(arg health)">
@@ -92,7 +120,8 @@
     <!-- after its files: the nodes, sensors and states of the layers started here; a missing
          node is an error (speed scale 0), so never the cameras, which do not drive the robot -->
     <rosparam param="health_monitor_node/nodes/expected" subst_value="true">$(eval str(
-      ['/' + arg('namespace') + '/x30_driver', '/' + arg('namespace') + '/robot_state_publisher']
+      (['/sim_robot_node'] if arg('sim') else ['/' + arg('namespace') + '/x30_driver'])
+      + ['/' + arg('namespace') + '/robot_state_publisher']
       + (['/control_mux_node'] if arg('control') else [])
       + (['/lidar_sector_node', '/lidar_mount'] if arg('perception') else [])
       + (['/odometry_monitor_node'] if arg('odometry') else [])
