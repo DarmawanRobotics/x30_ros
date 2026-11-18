@@ -7,7 +7,7 @@ catkin_package()
 
 catkin_install_python(
   PROGRAMS scripts/planner_node scripts/path_loader_node scripts/path_follower_node
-           scripts/obstacle_avoidance_node scripts/docking_node
+           scripts/obstacle_avoidance_node scripts/docking_node scripts/train_dune
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(DIRECTORY config launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
