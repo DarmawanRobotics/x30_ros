@@ -14,7 +14,8 @@ path_loader_node:
   route: ""                     # route CSV loaded at start ("": the remembered one)
 
 path_follower_node:
-  controller: holonomic         # the X30 strafes (robot/kinematics: omni)
+  controller: holonomic         # the X30 strafes (robot/kinematics: omni); neupan: NeuPAN, which
+                                # avoids by itself (tools/install_neupan.sh, README "NeuPAN")
   avoidance_mode: path_shift
   loop_route: false             # true: patrol a closed route
   speed:
@@ -26,6 +27,11 @@ path_follower_node:
   inspection:
     reverse_distance_m: 0.0     # m
     reverse_speed: 0.1          # m/s
+  neupan:                       # controller: neupan; read at start (its model: navigation.launch)
+    obstacle_range: 4.0         # m, the safety scan's points it plans around
+    max_clearance: 0.25         # m sought: a passage under 0.47 + 2 x 0.25 m wide would stall it
+    min_clearance: 0.1          # m kept from every point; the guard and the mux's field still apply
+    weight_speed: 2.0           # below 2 it stands before an obstacle instead of walking around
 
 obstacle_avoidance_node:
   policy: vfh                   # braitenberg | vfh | potential_field | follow_gap

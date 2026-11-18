@@ -131,18 +131,27 @@ def test_neupan_steps_around_an_obstacle_on_the_route():
     pole = [(3.0 + 0.1 * math.cos(a), 0.1 + 0.1 * math.sin(a)) for a in np.linspace(0, 6.2, 12)]
     _, _, clearance, lateral, finished = drive(route_of(straight_route(0.0, 6.0)), pole)
     assert finished
-    assert clearance > 0.05
-    assert lateral > 0.1  # it went around, not through
+    assert clearance > 0.1  # min_clearance
+    assert lateral > 0.3  # it went around, not through
 
 
-def test_neupan_stands_before_a_wall_across_the_route():
+def test_neupan_passes_a_narrow_passage_without_stalling():
+    walls = [(x, y) for x in np.linspace(1.0, 5.0, 41) for y in (-0.5, 0.5)]  # 1 m wide
+    _, commands, clearance, _, finished = drive(route_of(straight_route(0.0, 6.0)), walls)
+    assert finished
+    assert clearance > 0.2
+    assert np.median([c.vx for c in commands]) == pytest.approx(0.4, abs=0.03)
+
+
+def test_neupan_never_walks_into_a_wall_across_the_route():
     wall = [(3.0, y) for y in np.linspace(-1.5, 1.5, 31)]
-    _, commands, clearance, _, finished = drive(
+    poses, _, clearance, lateral, finished = drive(
         route_of(straight_route(0.0, 6.0)), wall, seconds=20.0
     )
     assert not finished
-    assert clearance > 0.03
-    assert max(abs(c.vx) for c in commands[-20:]) < 0.05
+    assert clearance > 0.1  # min_clearance
+    assert max(p.x for p in poses) < 3.0 - 0.5  # never through: the body's front is 0.5 m
+    assert lateral < 1.5  # looking for a way around, the follower's off_path_stop never reached
 
 
 def test_neupan_without_strafing_plans_like_a_differential_robot():

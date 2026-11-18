@@ -65,15 +65,26 @@ class NeupanConfig:
     )
     weight_xy: float = param(1.0, min=0.0, max=100.0, live=False, doc='position error cost')
     weight_yaw: float = param(0.5, min=0.0, max=100.0, live=False, doc='heading error cost')
-    weight_speed: float = param(1.0, min=0.0, max=100.0, live=False, doc='speed error cost')
+    weight_speed: float = param(
+        2.0,
+        min=0.0,
+        max=100.0,
+        live=False,
+        doc='speed error cost: below 2 it stands before obstacles',
+    )
     weight_lateral: float = param(
         1.0, min=0.0, max=100.0, live=False, doc='cost of walking sideways (0: free)'
     )
     clearance_gain: float = param(
-        15.0, min=0.0, max=1000.0, live=False, doc='reward per m of clearance up to max_clearance'
+        10.0, min=0.0, max=1000.0, live=False, doc='reward per m of clearance up to max_clearance'
     )
     max_clearance: float = param(
-        1.0, min=0.0, max=5.0, unit='m', live=False, doc='clearance rewarded up to here'
+        0.25,
+        min=0.0,
+        max=5.0,
+        unit='m',
+        live=False,
+        doc='clearance rewarded up to here: passages narrower than the body plus twice it stall',
     )
     min_clearance: float = param(
         0.1, min=0.0, max=2.0, unit='m', live=False, doc='clearance kept from every point'
