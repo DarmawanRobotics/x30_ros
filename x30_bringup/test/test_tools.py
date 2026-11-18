@@ -231,6 +231,30 @@ def test_check_deps_names_what_is_missing_and_how(system):
     assert 'ikd-Tree submodule' in out.stdout and 'livox    MISS' in out.stdout
 
 
+def test_check_deps_builds_past_a_user_site_that_breaks_setuptools(system, tmp_path):
+    """A pip --user setuptools that fails to import (catkin's error) asks for PYTHONNOUSERSITE."""
+    src, env, _, _ = system
+    env = {**env, 'PYTHONUSERBASE': str(tmp_path / 'user'), 'PYTHONNOUSERSITE': ''}
+    query = 'import site; print(site.getusersitepackages(), site.ENABLE_USER_SITE)'
+    answer = subprocess.run(
+        ['python3', '-c', query],
+        env={**os.environ, **env},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    site, enabled = answer.stdout.split()
+    if enabled != 'True':
+        pytest.skip('this python has no user site (a virtual environment)')
+    (Path(site) / 'setuptools').mkdir(parents=True)
+    message = "module 'importlib_metadata' has no attribute 'EntryPoints'"
+    (Path(site) / 'setuptools' / '__init__.py').write_text(f'raise AttributeError({message!r})\n')
+    out = run('check_deps.sh', '--src', str(src), env=env)
+    assert out.returncode == 0, out.stdout
+    assert re.search(r'python\s+WARN\s+setuptools in .*user.* breaks catkin', out.stdout)
+    assert 'everything there: PYTHONNOUSERSITE=1 catkin_make' in out.stdout
+
+
 def test_check_deps_adds_the_test_packages_when_asked(system):
     src, env, _, _ = system
     out = run('check_deps.sh', '--tests', '--src', str(src), env=env)
