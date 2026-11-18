@@ -8,7 +8,7 @@ and the controller refuses a checkpoint whose footprint is not the robot's.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import os
 import shutil
 import tempfile
@@ -42,6 +42,7 @@ class DuneRecord:
     seed: int = 0
     mean_error_m: float = -1.0  # -1: not measured
     max_error_m: float = -1.0
+    max_over_m: float = -1.0  # the largest overestimate: a point seen further than it is
 
     @classmethod
     def load(cls, checkpoint: str) -> DuneRecord:
@@ -116,6 +117,38 @@ def model_distance(model, vertices: np.ndarray, points: np.ndarray) -> np.ndarra
     return (mu * gap).sum(dim=1).numpy()
 
 
+def load_model(checkpoint: str, edges: int):
+    """Return the DUNE network of a checkpoint, for evaluation (needs torch, neupan)."""
+    from neupan.blocks.obs_point_net import ObsPointNet
+    import torch
+
+    model = ObsPointNet(2, edges)
+    model.load_state_dict(torch.load(checkpoint, map_location='cpu', weights_only=True))
+    model.eval()
+    return model
+
+
+def measure(model, vertices: np.ndarray, range_m: float, seed: int) -> dict:
+    """Return the record's error fields: DUNE's distances against the exact ones (m)."""
+    points = validation_points(range_m, 20000, seed)
+    signed = model_distance(model, vertices, points) - polygon_distance(vertices, points)
+    return {
+        'mean_error_m': round(float(np.abs(signed).mean()), 5),
+        'max_error_m': round(float(np.abs(signed).max()), 5),
+        'max_over_m': round(max(0.0, float(signed.max())), 5),
+    }
+
+
+def remeasure(checkpoint: str) -> DuneRecord:
+    """Measure a checkpoint again and rewrite its record's error fields."""
+    record = DuneRecord.load(checkpoint)
+    vertices = np.asarray(record.vertices, dtype=float)
+    model = load_model(checkpoint, vertices.shape[1])
+    updated = replace(record, **measure(model, vertices, record.range_m, record.seed))
+    updated.save(checkpoint)
+    return updated
+
+
 def validation_points(range_m: float, count: int, seed: int) -> np.ndarray:
     """Return points within range_m of the robot, half of them within 2 m (where it counts)."""
     rng = np.random.default_rng(seed + 1)
@@ -172,16 +205,13 @@ def train(
         shutil.rmtree(work, ignore_errors=True)
     model.eval()
     range_m = float(min(abs(value) for value in data_range))
-    points = validation_points(range_m, 20000, seed)
-    error = np.abs(model_distance(model, vertices, points) - polygon_distance(vertices, points))
     record = DuneRecord(
         vertices=vertices.round(6).tolist(),
         data_range=[float(value) for value in data_range],
         data_size=int(data_size),
         epochs=int(epochs),
         seed=int(seed),
-        mean_error_m=round(float(error.mean()), 5),
-        max_error_m=round(float(error.max()), 5),
+        **measure(model, vertices, range_m, seed),
     )
     record.save(checkpoint)
     return record
