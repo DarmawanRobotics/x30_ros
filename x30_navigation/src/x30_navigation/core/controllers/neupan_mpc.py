@@ -1,18 +1,17 @@
-"""NeuPAN: model predictive control straight from the obstacle points, heading included.
+"""NeuPAN: model predictive control straight from the obstacle points, heading included."""
 
-The route ahead (at the path shift offset) is NeuPAN's reference path and the safety scan's
-points are its obstacles. Each solve plans forward and sideways speed and the yaw rate over the
-horizon within the robot's speed and acceleration limits, keeping the footprint off every point
-through DUNE, the network trained for the footprint (models/, train_dune). This is the
-'holonomic' kinematics of NeuPAN patched for the X30 (third_party/neupan); a robot that cannot
-strafe uses NeuPAN's 'diff'.
-
-NeuPAN is an optional dependency (tools/install_neupan.sh): this module imports it only when the
-controller is built, and the build fails with the reason when NeuPAN or a model for the
-footprint is missing. The controller keeps its own clearance, so reactive avoidance stands by;
-path shift still picks the side to pass an obstacle on (NeuPAN alone stands before one right on
-the route, with no side to prefer). The guard and the control mux's protective field stay.
-"""
+# The route ahead (at the path shift offset) is NeuPAN's reference path and the safety scan's
+# points are its obstacles. Each solve plans forward and sideways speed and the yaw rate over the
+# horizon within the robot's speed and acceleration limits, keeping the footprint off every point
+# through DUNE, the network trained for the footprint (models/, train_dune). This is the
+# 'holonomic' kinematics of NeuPAN patched for the X30 (tools/neupan); a robot that cannot strafe
+# uses NeuPAN's 'diff'.
+#
+# NeuPAN is an optional dependency (tools/install_neupan.sh): this module imports it only when the
+# controller is built, and the build fails with the reason when NeuPAN or a model for the
+# footprint is missing. The controller keeps its own clearance, so reactive avoidance stands by;
+# path shift still picks the side to pass an obstacle on (NeuPAN alone stands before one right on
+# the route, with no side to prefer). The guard and the control mux's protective field stay.
 
 from __future__ import annotations
 
@@ -30,6 +29,7 @@ from x30_navigation.core.controllers.base import (
     PathController,
     TrackRequest,
 )
+from x30_navigation.core.controllers.neupan_inputs import map_points, route_ahead
 from x30_navigation.core.dune_model import DuneRecord, check_checkpoint
 from x30_utils.config import param
 
@@ -238,8 +238,10 @@ class NeupanController(PathController):
             return np.zeros(3)
         pose = request.pose
         state = np.array([[pose.x], [pose.y], [pose.yaw]])
-        points = self.world_points(request)
-        self.planner.set_initial_path(self.reference(request))
+        cfg = self.config
+        points = map_points(request, cfg.obstacle_range)
+        path = route_ahead(request, cfg.window, cfg.spacing, cfg.heading_lookahead)
+        self.planner.set_initial_path(path)
         self.planner.set_reference_speed(max(request.speed, 0.0))
         start = time.perf_counter()
         try:
@@ -266,36 +268,6 @@ class NeupanController(PathController):
         vx = float(np.clip(plan[0], -self.config.max_reverse_speed, lim.max_vx))
         vy = float(np.clip(plan[1], -lim.max_vy, lim.max_vy))
         return Command(vx, vy, self.clamp_wz(float(plan[2])))
-
-    def reference(self, request: TrackRequest) -> list:
-        """Return the route ahead as NeuPAN path points [x, y, yaw, gear=1] (4, 1)."""
-        cfg, route = self.config, request.route
-        end = route.length
-        start = min(request.s, max(0.0, end - cfg.spacing))
-        stop = min(end, start + max(cfg.window, cfg.spacing))
-        steps = np.append(np.arange(start, stop - 1e-6, cfg.spacing), stop)
-        path = []
-        for s in steps:
-            x, y = route.shifted_point(float(s), request.offset)
-            if cfg.heading_lookahead > 0.0 and s < end:
-                yaw = route.chord_heading(float(s), min(end, float(s) + cfg.heading_lookahead))
-            else:
-                yaw = float(route.segment_yaw[route.segment_at(float(s))])
-            path.append(np.array([[x], [y], [yaw], [1.0]]))
-        return path
-
-    def world_points(self, request: TrackRequest):
-        """Return the obstacle points within range in the map frame (2, N), or None."""
-        points = np.asarray(request.obstacles, dtype=float).reshape(-1, 2)
-        if points.size == 0:
-            return None
-        points = points[np.hypot(points[:, 0], points[:, 1]) <= self.config.obstacle_range]
-        if points.size == 0:
-            return None
-        pose = request.pose
-        c, s = math.cos(pose.yaw), math.sin(pose.yaw)
-        world = points @ np.array([[c, s], [-s, c]]) + (pose.x, pose.y)
-        return world.T
 
     def _debug(self, request: TrackRequest, info: dict, seconds: float, points) -> dict:
         """Return what the markers draw: the planned poses, the route ahead, the timing."""
