@@ -91,10 +91,18 @@ class PathFollowerNode(X30Node):
     def make_controller(self, name: str | None = None):
         """Build the configured path controller with the robot's limits."""
         name = name or self.config.controller
-        limits = self.robot.limits
-        period = 1.0 / self.config.control_rate
-        lim = ControllerLimits(limits.max_vx, limits.max_vy if self.robot.can_strafe else 0.0,
-                               limits.max_wz, period)  # fmt: skip
+        robot = self.robot.value
+        limits = robot.limits
+        corners = tuple(tuple(float(v) for v in corner) for corner in robot.footprint.corners())
+        lim = ControllerLimits(
+            max_vx=limits.max_vx,
+            max_vy=limits.max_vy if robot.can_strafe else 0.0,
+            max_wz=limits.max_wz,
+            period_sec=1.0 / self.config.control_rate,
+            max_accel=limits.max_accel,
+            max_yaw_accel=limits.max_yaw_accel,
+            footprint=corners,
+        )
         return CONTROLLERS.create(name, self.controller_configs[name].value, lim)
 
     def pose_input(self) -> PoseInput | None:

@@ -35,14 +35,21 @@ class Command:
         return Command(self.vx * factor, self.vy * factor, self.wz)
 
 
+DEFAULT_FOOTPRINT = ((0.4, 0.28), (-0.4, 0.28), (-0.4, -0.28), (0.4, -0.28))
+"""The robot profile's default footprint corners (m, base_link), counter-clockwise."""
+
+
 @dataclass(frozen=True)
 class ControllerLimits:
-    """What the robot can do, from the robot profile, and the control period."""
+    """What the robot can do and the body it moves, from the robot profile; the control period."""
 
     max_vx: float = 0.8
     max_vy: float = 0.4
     max_wz: float = 1.0
     period_sec: float = 0.05
+    max_accel: float = 0.5
+    max_yaw_accel: float = 1.5
+    footprint: tuple = DEFAULT_FOOTPRINT
 
 
 @dataclass(frozen=True)
