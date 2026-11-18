@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""draw_site: see x30_sim.draw_site."""
+
+import sys
+
+from x30_sim.draw_site import main
+
+if __name__ == '__main__':
+    sys.exit(main())
