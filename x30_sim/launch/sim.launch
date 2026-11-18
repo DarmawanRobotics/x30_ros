@@ -1,0 +1,33 @@
+<launch>
+  <!--
+    The X30 in software: sim_robot_node in place of x30_driver, the four LiDARs, the body IMU
+    and FAST-LIO (x30_sim). x30_bringup's sim:=true runs the whole stack on it.
+      params_file:  parameters on top of config/sim.yaml
+      robot_params: the robot profile, loaded as robot/ (empty: already on the parameter server)
+      world, scenario: a file or a name in config/worlds, config/scenarios (empty: the files')
+      site, sites_dir: draw this site (map, tags, the world's route) from the world before any
+                    node starts, unless it has a map already (draw_site)
+  -->
+  <arg name="params_file" default=""/>
+  <arg name="robot_params" default=""/>
+  <arg name="world" default=""/>
+  <arg name="scenario" default=""/>
+  <arg name="site" default=""/>
+  <arg name="sites_dir" default="/tmp/x30_sim/sites"/>
+  <arg name="output" default="screen"/>
+
+  <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
+            file="$(arg robot_params)"/>
+
+  <!-- a parameter's command runs while the launch file is read: the site exists before the
+       nodes that load it start -->
+  <param if="$(eval arg('site') != '')" name="sim/site_dir"
+         command="rosrun x30_sim draw_site --world '$(arg world)' --site '$(arg site)' --sites-dir '$(arg sites_dir)'"/>
+
+  <node pkg="x30_sim" type="sim_robot_node" name="sim_robot_node" output="$(arg output)">
+    <rosparam command="load" file="$(find x30_sim)/config/sim.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+    <param if="$(eval arg('world') != '')" name="world_file" value="$(arg world)"/>
+    <param if="$(eval arg('scenario') != '')" name="scenario_file" value="$(arg scenario)"/>
+  </node>
+</launch>

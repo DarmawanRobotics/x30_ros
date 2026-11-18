@@ -1,0 +1,6 @@
+# A person crosses the south corridor ahead of the start while the robot drives along it,
+# and a box is left on the route later: avoidance, the protective field and replanning.
+seed: 2
+obstacles:
+  - {start: 8.0, end: 30.0, x: -1.5, y: -4.2, vy: 0.15, radius: 0.25, height: 1.7}
+  - {start: 20.0, x: 4.5, y: 0.0, radius: 0.3, height: 0.5} # stays

@@ -1,0 +1,9 @@
+# Odometry that drifts noticeably: localization corrections and the uncertainty limits (L1)
+# get something to do. Times are seconds since the simulator started.
+seed: 1
+odometry:
+  sigma_x: 0.01 # m/sqrt(m)
+  sigma_y: 0.01
+  sigma_yaw_deg: 0.3 # deg/sqrt(m)
+  scale_error: 0.01 # 1 % long
+  yaw_bias_deg_per_m: 0.1

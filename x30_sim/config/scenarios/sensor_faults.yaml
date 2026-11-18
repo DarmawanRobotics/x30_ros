@@ -1,0 +1,12 @@
+# Late and missing sensor data: LiDAR and odometry dropouts, an odometry restart and high
+# latency. Watchdogs, BLOCKED scans, TF timeouts and the restart handling (O1, T1).
+seed: 3
+latency:
+  lidar_sec: 0.15
+  odometry_sec: 0.05
+  command_sec: 0.05
+dropouts:
+  - {start: 10.0, duration: 1.5, sensor: lidar}
+  - {start: 20.0, duration: 0.8, sensor: odometry}
+  - {start: 30.0, duration: 1.0, sensor: all}
+odometry_restarts: [40.0]

@@ -1,0 +1,21 @@
+# A small mall: one block of shops in the middle, a 3 m corridor around it, three pillars.
+# Map frame, metres. walls: polylines (repeat the first point to close) or
+# {points: [...], height: h} (default 2.5 m); pillars: [x, y, radius(, height)] (default 3 m);
+# start: [x, y, yaw_deg]; tags: frame: [x, y, z, facing_deg] (plates written to tags.json);
+# dock: the charging contacts, distance in front of the dock tag (sit_down, charge_start).
+walls:
+  - [[-6.0, -4.5], [6.0, -4.5], [6.0, 4.5], [-6.0, 4.5], [-6.0, -4.5]] # outer walls
+  - [[-3.0, -1.5], [3.0, -1.5], [3.0, 1.5], [-3.0, 1.5], [-3.0, -1.5]] # shops
+pillars:
+  - [5.3, 3.8, 0.25]
+  - [-5.3, -3.8, 0.25]
+  - [0.0, 3.9, 0.2]
+start: [-4.5, -3.0, 0.0] # on the patrol loop, facing +x
+tags:
+  base_map: [6.0, -3.0, 0.8, 180.0] # on the east wall, facing the start corridor
+  charging_dock: [-6.0, 0.0, 0.3, 0.0] # on the west wall, facing the west corridor
+dock: # the X30 charges sitting here: base_link 1.0 m in front of charging_dock, facing it
+  tag: charging_dock
+  distance: 1.0 # x30_navigation's docking goal/distance
+  tolerance: 0.08 # m
+  yaw_tolerance_deg: 8.0

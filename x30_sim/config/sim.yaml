@@ -1,0 +1,53 @@
+# x30_sim defaults (private parameters of sim_robot_node). Every parameter with its unit and
+# range: src/x30_sim/core/config.py. The robot (kinematics, footprint, base_height, limits,
+# frames) comes from the robot profile (robot/, x30_bringup/config/robot.yaml).
+world_file: ""        # path or name in config/worlds ("": mall_loop)
+scenario_file: ""     # path or name in config/scenarios ("": none)
+driver_ns: x30        # x30_driver's namespace: cmd_vel, odom, battery, sit_down, stand_up, charge_*
+seed: 0               # a scenario's seed replaces it
+rate_hz: 100.0        # physics; the body integrates the measured time (max_dt clamps stalls)
+odom_rate_hz: 50.0    # <driver_ns>/odom, the leg odometry
+publish_tf: false     # odom -> base_link from the leg odometry (x30_bringup: leg_odom_tf)
+cmd_timeout_sec: 0.5  # older command: the body brakes to a stop, like the driver
+lidar: # the four Mid-360 (vertical fov -7..52 deg around each dome, 0.1..40 m), merged in base_link
+  rate_hz: 10.0
+  frame: livox_frame  # /livox/lidar's frame: base_link (x30_bringup: lidar_pose all zeros)
+  mounts: # x y z (m, base_link), dome azimuth and elevation (deg): application manual 6.2
+    [0.44367, 0.0, 0.05415, 0.0, 25.0,     # front, upward
+     0.43297, 0.0, -0.05519, 0.0, -46.0,   # front, downward
+     -0.46576, 0.0, 0.03484, 180.0, -5.0,  # rear, upward
+     -0.41074, 0.0, -0.05601, 180.0, -56.0]  # rear, downward
+  rings: 16
+  azimuth_rays: 360
+  noise_m: 0.01
+lio: # FAST-LIO: /Odometry and TF camera_init -> body, /cloud_registered_body, per scan
+  blind: 0.7          # m around base_link, as x30_odometry/config/fast_lio.yaml
+imu: # the body IMU on /imu/data: axes of base_link, specific force in m/s^2
+  rate_hz: 200.0
+  frame: imu_link
+  xyz: [0.13045, -0.001, 0.0149]  # imu_link in base_link (x30_description)
+odometry: # FAST-LIO's drift per metre travelled (random walk); scenarios raise it
+  sigma_x: 0.005
+  sigma_y: 0.005
+  sigma_yaw_deg: 0.1
+leg_odometry: # the driver's leg odometry: more drift
+  sigma_x: 0.02
+  sigma_y: 0.02
+  sigma_yaw_deg: 0.5
+latency: # stamps are t - latency; commands act latency after they arrive
+  lidar_sec: 0.05
+  odometry_sec: 0.01
+  command_sec: 0.02
+camera: # a camera with a tag detector: the tags in view as TF camera -> tag
+  rate_hz: 10.0       # 0: off
+  tags: [base_map, charging_dock]
+  frame: camera_color_optical_frame  # x30_localization's tag/camera_frame
+  publish_mount: true  # base_link -> frame on /tf_static (false once the URDF has the camera)
+  mount_xyz: [0.50, 0.0, 0.10]  # in base_link
+  yaw_deg: 0.0        # 180: a rear camera (docking goal/direction: backward)
+  fov_deg: 80.0
+  range_max: 4.0
+battery:
+  start: 0.9
+  charge_per_hour: 1.0  # while charge_start holds, sitting on the dock
+  report_charging: false  # x30_driver's battery reports no charging status
