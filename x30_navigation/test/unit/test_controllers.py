@@ -28,7 +28,15 @@ def make(name, config=None, limits=LIMITS):
 
 
 def test_every_builtin_is_registered():
-    assert CONTROLLERS.names() == ['holonomic', 'lqr', 'mppi', 'pid', 'pure_pursuit', 'stanley']
+    assert CONTROLLERS.names() == [
+        'holonomic',
+        'lqr',
+        'mppi',
+        'neupan',
+        'pid',
+        'pure_pursuit',
+        'stanley',
+    ]
 
 
 @pytest.mark.parametrize('name', ['holonomic', 'lqr', 'mppi', 'pid', 'pure_pursuit', 'stanley'])
