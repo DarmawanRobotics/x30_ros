@@ -50,6 +50,7 @@ SRC=$(dirname "$(dirname "$HERE")")
 PACKAGES=("${BUILD[@]}")
 MISSING=()
 PROBLEMS=0
+BUILD_ENV=''
 
 row() { printf '%-8s %-5s %s\n' "$1" "$2" "$3"; }
 
@@ -130,6 +131,19 @@ check_livox_sdk() {
   fi
 }
 
+check_python() {  # pip --user packages shadow the system's: a newer setuptools there stops catkin
+  local site  # catkin's PYTHONPATH holds no setuptools: the user site comes before the system's
+  PYTHONPATH='' python3 -c 'import setuptools' > /dev/null 2>&1 && return 0
+  if PYTHONPATH='' python3 -s -c 'import setuptools' > /dev/null 2>&1; then
+    site=$(python3 -s -c 'import site; print(site.getusersitepackages())' 2>/dev/null)
+    row python WARN "setuptools in ${site:-the user site} breaks catkin: PYTHONNOUSERSITE=1"
+    BUILD_ENV='PYTHONNOUSERSITE=1 '
+  else
+    row python MISS "python3 cannot import setuptools (python3-setuptools)"
+    PROBLEMS=1
+  fi
+}
+
 check_rosdep() {  # authoritative when the robot has a rosdep cache already (it reads no network)
   command -v rosdep > /dev/null || return 0
   [ -d "${ROS_HOME:-$HOME/.ros}/rosdep/sources.cache" ] || return 0
@@ -159,9 +173,11 @@ main() {
   check_apt
   check_sources
   check_livox_sdk
+  check_python
   check_rosdep
   if [ "$PROBLEMS" = 0 ]; then
-    printf 'everything there: catkin_make -DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release\n'
+    printf 'everything there: %scatkin_make -DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release\n' \
+      "$BUILD_ENV"
     return 0
   fi
   printf 'missing: README.md, "Robot without internet", tells how to bring it in\n'

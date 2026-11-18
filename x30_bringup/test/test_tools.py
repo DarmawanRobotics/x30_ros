@@ -57,8 +57,14 @@ def jy(tmp_path):
         (root / 'system' / 'scripts' / name).write_text(f'echo {name} >> {log}\n')
     processes = []
 
-    def spawn(path: str) -> subprocess.Popen:
-        process = subprocess.Popen(['bash', '-c', f'exec -a "{root}/{path}" sleep 60'])
+    def spawn(path: str, *args: str) -> subprocess.Popen:
+        """Run path of jy_cog; with args as a script a shell runs ('bash <path> <args>')."""
+        if args:
+            line = 'exec -a bash python3 -c "import time; time.sleep(60)" "$@"'
+            command = ['bash', '-c', line, '_', f'{root}/{path}', *args]
+        else:
+            command = ['bash', '-c', f'exec -a "{root}/{path}" sleep 60']
+        process = subprocess.Popen(command, stderr=subprocess.DEVNULL)
         processes.append(process)
         assert wait_until(lambda: listed(process.pid))
         return process
@@ -83,18 +89,44 @@ def test_status_sorts_the_jy_cog_processes(jy):
     assert f'{driver.pid} ' in kept.split('other jy_cog')[0]
 
 
+def test_the_program_decides_never_its_arguments(jy):
+    """A wrapper's arguments (livox) never keep it; the planner and the URDF are autonomy."""
+    root, _, spawn = jy
+    wrapper = spawn('localization/scripts/localization.sh', 'false', 'livox')
+    lidar = spawn('drivers/scripts/lidar_driver.sh', 'livox')
+    imu = spawn('drivers/lib/yesense_imu/yesense_imu_node')
+    planner = spawn('planner/lib/local_planner/localPlanner')
+    plan = spawn('nav/scripts/plan.sh', 'false')
+    urdf = spawn('drivers/scripts/urdf.sh')
+    bridge = spawn('transfer/lib/message_transformer_cpp/udp_receiver')
+    out = services(root, 'status')
+    assert out.returncode == 0, out.stdout + out.stderr
+    autonomy, rest = out.stdout.split('kept (')
+    kept, other = rest.split('other jy_cog')
+    for process in (wrapper, planner, plan, urdf):
+        assert f'{process.pid} ' in autonomy, out.stdout
+    assert f'{lidar.pid} ' in kept and f'{imu.pid} ' in kept, out.stdout
+    assert f'{bridge.pid} ' in other.split('load ')[0], out.stdout
+    assert re.search(r"udp 43897 \(x30_driver's reports\): (free|in use|unknown)", out.stdout)
+
+
 def test_off_stops_the_autonomy_now_and_at_boot_and_keeps_the_drivers(jy):
     root, log, spawn = jy
     nav, mapping = spawn('nav/bin/move_base'), spawn('slam/bin/mapping_node')
+    wrapper, planner = spawn('nav/scripts/plan.sh', 'false'), spawn('planner/lib/x/localPlanner')
     driver = spawn('drivers/livox_lidar_publisher2')
+    bridge = spawn('transfer/lib/message_transformer_cpp/udp_sender')
+    began = time.monotonic()
     out = services(root, 'off')
     assert out.returncode == 0, out.stdout + out.stderr
+    assert time.monotonic() - began < 5.0  # all at once, each answering SIGINT
     conf = root / 'system' / 'conf'
     assert (conf / 'autorun_slam').read_text() == 'false\n'  # the file's own format kept
     assert (conf / 'autorun_slam.x30_backup').read_text() == 'true\n'
     assert log.read_text().split() == ['kill_nav.sh', 'kill_mapping.sh']  # Deep Robotics' own
-    assert wait_until(lambda: nav.poll() is not None and mapping.poll() is not None)
-    assert driver.poll() is None
+    stopped = (nav, mapping, wrapper, planner)
+    assert wait_until(lambda: all(p.poll() is not None for p in stopped))
+    assert driver.poll() is None and bridge.poll() is None
     assert 'still running:\n  none' in out.stdout
 
 
@@ -197,6 +229,30 @@ def test_check_deps_names_what_is_missing_and_how(system):
     assert 'sudo apt install -y ros-noetic-pcl-ros' in out.stdout
     assert re.search(r'DUP\s+hikmicro_msgs in src/.*src/', out.stdout), out.stdout
     assert 'ikd-Tree submodule' in out.stdout and 'livox    MISS' in out.stdout
+
+
+def test_check_deps_builds_past_a_user_site_that_breaks_setuptools(system, tmp_path):
+    """A pip --user setuptools that fails to import (catkin's error) asks for PYTHONNOUSERSITE."""
+    src, env, _, _ = system
+    env = {**env, 'PYTHONUSERBASE': str(tmp_path / 'user'), 'PYTHONNOUSERSITE': ''}
+    query = 'import site; print(site.getusersitepackages(), site.ENABLE_USER_SITE)'
+    answer = subprocess.run(
+        ['python3', '-c', query],
+        env={**os.environ, **env},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    site, enabled = answer.stdout.split()
+    if enabled != 'True':
+        pytest.skip('this python has no user site (a virtual environment)')
+    (Path(site) / 'setuptools').mkdir(parents=True)
+    message = "module 'importlib_metadata' has no attribute 'EntryPoints'"
+    (Path(site) / 'setuptools' / '__init__.py').write_text(f'raise AttributeError({message!r})\n')
+    out = run('check_deps.sh', '--src', str(src), env=env)
+    assert out.returncode == 0, out.stdout
+    assert re.search(r'python\s+WARN\s+setuptools in .*user.* breaks catkin', out.stdout)
+    assert 'everything there: PYTHONNOUSERSITE=1 catkin_make' in out.stdout
 
 
 def test_check_deps_adds_the_test_packages_when_asked(system):
