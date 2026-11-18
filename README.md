@@ -240,8 +240,9 @@ X30's own ROS master (2.3).
 ## Deep Robotics' own software
 
 The navigation host (192.168.1.106) also runs Deep Robotics' localization, navigation and
-mapping; with x30_ros they only take CPU and clash with it (`/initialpose`, `/map`, TF,
-`/cmd_vel`). Turn them off there, now and at boot, before running the stack:
+mapping, its URDF publisher and its bridge to the robot; with x30_ros they only take CPU and
+clash with it (`/initialpose`, `/map`, TF, `/cmd_vel`, the UDP port of the motion host's
+reports). Turn them off there, now and at boot, before running the stack:
 
 ```bash
 bash tools/dr_services.sh off      # status: what runs; on: back as it was
