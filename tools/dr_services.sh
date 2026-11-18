@@ -30,7 +30,9 @@ CONF=$JY/system/conf/autorun_slam
 BACKUP=$CONF.x30_backup
 SCRIPTS=$JY/system/scripts
 RECORDER=$JY/rosbag_recorder/scripts
-# processes started from jy_cog: KEEP wins over STOP, the rest is only listed
+# processes started from jy_cog, judged by their program inside it (the binary, the script a
+# shell runs, the launch file), never by its arguments; lower case, KEEP wins over STOP, the
+# rest is only listed
 STOP='locali[sz]ation|location|navigation|(^|/)nav|move_base|slam|mapping|player|record|rviz|pcd2map|occ_'
 KEEP='livox|lidar|yesense|(^|[/_])imu|driver|robot_server|broker|rosmaster|roscore|rosout'
 DRY=0
@@ -66,15 +68,30 @@ alive() {  # <pid>: running, and not a zombie waiting for its parent
   return 0
 }
 
+program() {  # <args>: PROGRAM = the first word inside jy_cog, relative to it, lower case
+  local word words
+  PROGRAM=''
+  read -r -a words <<< "$1"
+  for word in "${words[@]}"; do
+    case "$word" in
+      "$JY/"*)
+        PROGRAM=${word#"$JY/"}
+        PROGRAM=${PROGRAM,,}
+        return 0
+        ;;
+    esac
+  done
+}
+
 dr_processes() {  # <class>: "pid cpu args" of the jy_cog processes of that class
-  local pid cpu args own class
+  local pid cpu args class
   while read -r pid cpu args; do
     [ "$pid" = "$$" ] && continue
-    case "$args" in *"$JY/"*) ;; *) continue ;; esac
-    own=${args//"$JY/"/}  # judged by what is inside jy_cog, not by where jy_cog is
-    if printf '%s' "$own" | grep -qiE "$KEEP"; then
+    program "$args"
+    [ -n "$PROGRAM" ] || continue
+    if [[ $PROGRAM =~ $KEEP ]]; then
       class=keep
-    elif printf '%s' "$own" | grep -qiE "$STOP"; then
+    elif [[ $PROGRAM =~ $STOP ]]; then
       class=stop
     else
       class=other
