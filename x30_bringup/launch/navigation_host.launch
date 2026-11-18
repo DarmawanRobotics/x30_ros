@@ -11,6 +11,7 @@
       site, odometry_only, sites_dir, controller, reports_dir, lidar_frame, lidar_pose:
                  bringup.launch's
       mapping, health, inspection: those layers (on by default)
+      odometry_method: fast_lio, or external when another estimator publishes /Odometry
   -->
   <arg name="site" default=""/>
   <arg name="odometry_only" default="false"/>
@@ -22,11 +23,13 @@
   <arg name="reports_dir" default=""/>
   <arg name="lidar_frame" default="livox_frame"/>
   <arg name="lidar_pose" default="0 0 0 0 0 0"/>
+  <arg name="odometry_method" default="fast_lio"/>
 
   <include file="$(find x30_bringup)/launch/bringup.launch">
     <arg name="control" value="true"/>
     <arg name="perception" value="true"/>
     <arg name="odometry" value="true"/>
+    <arg name="odometry_method" value="$(arg odometry_method)"/>
     <arg name="localization" value="true"/>
     <arg name="odometry_only" value="$(arg odometry_only)"/>
     <arg name="mapping" value="$(arg mapping)"/>
