@@ -46,7 +46,7 @@ else may publish the driver's `cmd_vel` any more.
 | Argument | Default | |
 |---|---|---|
 | `namespace` | `x30` | driver topics and services, `robot_description` |
-| `sim`, `world`, `scenario` | `false`, empty, empty | `sim_robot_node` (x30_sim) in place of x30_driver, the LiDARs, the IMU and FAST-LIO, in that world and scenario (empty: mall_loop, none); `site` is drawn from the world unless it has a map; the odometry layer runs with `odometry_method:=external` (`fast_lio` is refused) |
+| `sim`, `world`, `scenario` | `false`, empty, empty | `sim_robot_node` (x30_sim) in place of x30_driver, the LiDARs, the IMU and FAST-LIO, in that world and scenario (empty: mall_loop, none); `site` is drawn from the world unless it has a map (never with `odometry_only`); the odometry layer runs with `odometry_method:=external` (`fast_lio` is refused) |
 | `params_file` | [`x30_driver/config/driver_params.yaml`](../x30_driver/config/driver_params.yaml) | a copy with this robot's settings, e.g. `invert_wz` |
 | `overrides_file` | empty | a few parameters on top, e.g. `x30_driver/config/fake_robot.yaml` |
 | `robot_params` | [`config/robot.yaml`](config/robot.yaml) | the robot profile, loaded as `/robot` |
