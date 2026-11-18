@@ -29,6 +29,26 @@ versions follow [SemVer](https://semver.org).
   from the world and the simulator sends no `/initialpose`. Refused without `localization`.
 - `stack_odometry.test`: on x30_sim, a route taught on the stick without a map and repeated by
   the follower to within 0.15 m of its stop point.
+- Path follower controller `neupan` (x30_navigation): [NeuPAN](https://github.com/hanruihua/NeuPAN)
+  tracks the route ahead and keeps the footprint off the safety scan's points in one MPC,
+  planning forward and sideways speed and the yaw rate (the `holonomic` kinematics patched into
+  NeuPAN for the X30, `tools/neupan`; `diff` for a robot that cannot strafe), within the robot
+  profile's speeds and accelerations; a solve every 0.1 s. Reactive avoidance stands by for it,
+  path shift still picks the side; NeuPAN or its patches missing: the follower says how to
+  install them. `controller:=` for navigation.launch and bringup.launch, `python:=` (default
+  `$X30_PYTHON`) for the follower's interpreter.
+- DUNE for the X30's footprint (`models/dune_x30.pth`, 1.5 mm mean distance error, at most 8 mm
+  too far) with its record (`dune_x30.json`: footprint, training, errors); the controller
+  refuses a model of another footprint or points beyond its training range. `train_dune`
+  trains one for any robot profile (`--measure` re-measures one).
+- `tools/install_neupan.sh`: NeuPAN in a venv beside ROS (PyTorch for the CPU, cvxpy,
+  cvxpylayers, NeuPAN's py38 branch with the X30 patches), online or from wheels `--download`
+  fetched elsewhere; `--check`.
+- Path controllers get the footprint and the accelerations of the robot profile
+  (`ControllerLimits`); a controller that keeps its own clearance (`avoids`) turns reactive
+  avoidance off.
+- `stack_neupan.test` (registered when `X30_PYTHON` is set) and CI's `neupan` job: NeuPAN
+  installed as on the robot, its unit tests and the patrol loop around a box on x30_sim.
 
 ### Fixed
 - `planner_node`: the empty `/map` of a site without a map is no `map not usable` error.
@@ -36,6 +56,9 @@ versions follow [SemVer](https://semver.org).
   TF listener fills.
 - The sim stack tests keep what the nodes remember (site, last route, trip) in their run's
   directory, not in `~/.x30`: parallel and repeated runs no longer share it.
+- `X30Node`: unknown parameters are looked for once the node is built, not 0.5 s after it
+  started: a slow constructor (the path follower with NeuPAN) no longer gets its own, still
+  being declared, reported as typos.
 
 ## [Unreleased] (0.9.0)
 
