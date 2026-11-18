@@ -78,6 +78,9 @@ cmd_check() {
   if [ -z "${ROS_IP:-}" ]; then
     row ros_ip MISS "ROS_IP unset: eval \"\$(bash tools/x30_host.sh env ${role:-perception})\""
     problems=1
+  elif [[ "$ROS_IP" == 127.* ]]; then
+    row ros_ip MISS "ROS_IP $ROS_IP: loopback, the other host cannot reach this one's nodes"
+    problems=1
   elif [[ "$ips" != *" $ROS_IP "* ]]; then
     row ros_ip MISS "ROS_IP $ROS_IP is not an address of this computer"
     problems=1
