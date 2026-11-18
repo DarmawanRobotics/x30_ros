@@ -1,4 +1,4 @@
-"""tools/x30_watchdog.py: a host's roslaunch under systemd's watchdog."""
+"""tools/x30_host.sh and tools/x30_watchdog.py: the two hosts' network, service and watchdog."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -15,6 +16,93 @@ from xmlrpc.server import SimpleXMLRPCServer
 import pytest
 
 TOOLS = Path(__file__).resolve().parents[2] / 'tools'
+
+
+def host(*args: str, env: dict | None = None, timeout: float = 60.0):
+    return subprocess.run(
+        ['bash', str(TOOLS / 'x30_host.sh'), *args],
+        capture_output=True,
+        text=True,
+        env={**os.environ, **(env or {})},
+        timeout=timeout,
+        check=False,
+    )
+
+
+def test_each_host_joins_the_navigation_hosts_master():
+    perception = host('env', 'perception').stdout
+    assert 'export ROS_MASTER_URI=http://192.168.1.106:11311' in perception
+    assert 'export ROS_IP=192.168.1.105' in perception
+    assert 'X30_PYTHON' not in perception
+    navigation = host('env', 'navigation').stdout
+    assert 'export ROS_IP=192.168.1.106' in navigation
+    assert 'unset ROS_HOSTNAME' in navigation and 'PYTHONNOUSERSITE=1' in navigation
+    assert host('env', 'motion').returncode == 2
+
+
+def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp_path):
+    env = {
+        'X30_ETC': str(tmp_path / 'etc'),
+        'X30_SYSTEMD_DIR': str(tmp_path),
+        'X30_SYSTEMCTL': 'true',
+    }
+    out = host('install', 'perception', env=env)
+    assert out.returncode == 0, out.stdout + out.stderr
+    settings = tmp_path / 'etc' / 'perception.env'
+    assert stat.S_IMODE(settings.stat().st_mode) == 0o600  # the passwords
+    text = settings.read_text()
+    assert 'ROS_IP=192.168.1.105' in text and 'HIKMICRO_PASSWORD=' in text
+    unit = (tmp_path / 'x30-perception.service').read_text()
+    for line in ('Type=notify', 'NotifyAccess=main', 'WatchdogSec=60', 'Restart=on-failure'):
+        assert line in unit
+    assert f'ExecStart=/bin/bash {TOOLS}/x30_host.sh start perception' in unit
+    assert f'EnvironmentFile={settings}' in unit
+    settings.write_text('X30_LAUNCH_ARGS="hertzino:=false"\n')
+    assert 'kept' in host('install', 'perception', env=env).stdout
+    assert settings.read_text() == 'X30_LAUNCH_ARGS="hertzino:=false"\n'
+    host('install', 'navigation', env=env)
+    navigation = (tmp_path / 'x30-navigation.service').read_text()
+    assert 'After=network-online.target jy_roscore.service' in navigation
+    assert 'X30_PYTHON=' in (tmp_path / 'etc' / 'navigation.env').read_text()
+
+
+def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
+    bin_dir, ws = tmp_path / 'bin', tmp_path / 'ws'
+    bin_dir.mkdir()
+    (ws / 'devel').mkdir(parents=True)
+    (ws / 'devel' / 'setup.bash').write_text('')
+    (tmp_path / 'ros.bash').write_text('')
+    launched = tmp_path / 'launched'
+    fake = bin_dir / 'roslaunch'
+    fake.write_text(f'#!/bin/sh\necho "$ROS_IP $*" > {launched}\nexit 3\n')
+    fake.chmod(0o755)
+    env = {
+        'PATH': f'{bin_dir}:{os.environ["PATH"]}',
+        'X30_ROS_SETUP': str(tmp_path / 'ros.bash'),
+        'X30_WS': str(ws),
+        'X30_LAUNCH_ARGS': 'hertzino:=false hikmicro_host:=10.0.0.9',
+        'X30_SETTLE_SEC': '0',
+        'ROS_MASTER_URI': 'http://127.0.0.1:9',
+    }
+    out = host('start', 'perception', env=env)
+    assert out.returncode == 3, out.stdout + out.stderr  # the launch's exit, through the watchdog
+    assert launched.read_text().split() == [
+        '192.168.1.105',
+        '--wait',
+        'x30_bringup',
+        'perception_host.launch',
+        'hertzino:=false',
+        'hikmicro_host:=10.0.0.9',
+    ]
+    out = host('start', 'navigation', env={**env, 'X30_LAUNCH_ARGS': 'controller:=neupan'})
+    assert out.returncode == 3, out.stdout + out.stderr
+    assert launched.read_text().split() == [
+        '192.168.1.106',
+        'x30_bringup',
+        'navigation_host.launch',
+        'controller:=neupan',
+    ]
+    assert '/x30/x30_driver' in out.stdout  # the critical nodes, logged by the watchdog
 
 
 class FakeRos:

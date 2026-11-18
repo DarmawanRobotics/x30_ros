@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import subprocess
 
 import yaml
@@ -173,7 +174,7 @@ def test_the_controller_reaches_the_path_follower():
 HOSTS = Path(__file__).resolve().parents[1] / 'launch'
 
 
-def test_the_navigation_host_runs_all_but_the_cameras():
+def test_the_navigation_host_runs_all_but_the_cameras_and_what_its_watchdog_watches():
     nodes = roslaunch('--nodes', str(HOSTS / 'navigation_host.launch')).split()
     for node in (
         '/x30/x30_driver',
@@ -188,6 +189,9 @@ def test_the_navigation_host_runs_all_but_the_cameras():
     ):
         assert node in nodes, node
     assert not [n for n in nodes if n.startswith(('/hikmicro', '/hertzino'))]
+    script = (Path(__file__).resolve().parents[2] / 'tools' / 'x30_host.sh').read_text()
+    critical = re.search(r'^CRITICAL=\((.*)\)$', script, re.MULTILINE).group(1).split()
+    assert critical and set(critical) <= set(nodes)
 
 
 def test_the_navigation_host_passes_its_arguments(tmp_path):
