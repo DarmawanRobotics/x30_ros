@@ -3,6 +3,25 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.9.0)
+
+### Added
+- `x30_inspection`: `inspection_node`, substation inspection at the stop points (HotDog's
+  pattern). `inspection/inspect`, the path follower's hook, finds the site's inspection point
+  where the robot stands (`<site>/inspection.yaml`); per target the HIKMICRO PTZ camera moves
+  there through hikmicro_driver's `ptz/move_to` and is waited for until it has arrived, its
+  regions (strips, boxes in fractions of the frame, or the frame) are measured from the
+  camera's thermometry and judged by the absolute, ambient and similar criteria (NETA MTS), the
+  thermal and visible JPEGs kept; partial discharge from one `detect` goal of hertzino_driver,
+  with its sound map and PRPD photos. A report folder with `report.json` and the day's
+  `findings.csv`, `inspection/report`, `inspection/status` (latched); `inspection/add_target`
+  teaches a target from the camera's view.
+- `x30_msgs`: `InspectionFinding`, `InspectionReport`, `InspectionStatus`, `AddTarget`.
+- `x30_bringup`: `inspection` (and `reports_dir`) starts it on the `sites_dir` as the path
+  follower's `hooks/inspection`, 180 s for a whole point; health does not expect it. The camera
+  passwords are documented from `HIKMICRO_PASSWORD` and `HERTZINO_PASSWORD`, never an argument.
+- CI builds the message packages of hikmicro_driver and hertzino_driver.
+
 ## [Unreleased] (0.8.0)
 
 ### Added

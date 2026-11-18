@@ -355,8 +355,12 @@ def test_tf_static_and_dynamic_roundtrip(ns):
         assert wait_for(lambda: node.tf.static('base_link', f'{ns[1:]}_lidar') is not None, 5.0)
         assert np.allclose(node.tf.static('base_link', f'{ns[1:]}_lidar'), mount)
         odom = make_transform((1.0, 2.0, 0.0), quat_from_yaw(-0.3))
-        node.tf_out.send(odom, f'{ns[1:]}_odom', 'base_link')
-        assert wait_for(lambda: node.tf.fresh(f'{ns[1:]}_odom', 'base_link', 1.0), 5.0)
+
+        def heard() -> bool:  # /tf is not latched: a broadcaster sends until the listener hears
+            node.tf_out.send(odom, f'{ns[1:]}_odom', 'base_link')
+            return node.tf.fresh(f'{ns[1:]}_odom', 'base_link', 1.0)
+
+        assert wait_for(heard, 5.0, period=0.05)
         result = node.tf.lookup(f'{ns[1:]}_odom', 'base_link')
         assert result.pose2d.x == pytest.approx(1.0) and result.pose2d.yaw == pytest.approx(-0.3)
         assert node.tf.lookup('nowhere', 'base_link') is None and node.tf.error

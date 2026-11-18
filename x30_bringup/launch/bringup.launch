@@ -18,8 +18,13 @@
       navigation:   the planner, route loader, path follower, avoidance and docking
                     (x30_navigation), commanding the control mux
       health:       health/status and diagnostics (x30_health), watching what is started here
+      inspection:   thermal and partial discharge inspection at the stop points
+                    (x30_inspection), called by the path follower at each of them; reports_dir:
+                    where the reports go (empty: its file's; with sim: /tmp/x30_sim/reports)
       hikmicro, hertzino: the inspection cameras (hikmicro_driver, hertzino_driver from
-                    x30.repos), at their host with their password
+                    x30.repos) at their host; the passwords from HIKMICRO_PASSWORD and
+                    HERTZINO_PASSWORD in the environment (a *_password argument goes to the
+                    parameter server, which roslaunch prints)
       lidar_frame / lidar_pose: base_link -> the frame of /livox/lidar ("x y z yaw pitch roll",
                     m and rad): check it on the robot (x30_perception README) before relying
                     on the scans
@@ -48,6 +53,8 @@
   <arg name="sites_dir" default="$(eval '/tmp/x30_sim/sites' if arg('sim') else '')"/>
   <arg name="navigation" default="false"/>
   <arg name="health" default="false"/>
+  <arg name="inspection" default="false"/>
+  <arg name="reports_dir" default="$(eval '/tmp/x30_sim/reports' if arg('sim') else '')"/>
   <arg name="hikmicro" default="false"/>
   <arg name="hikmicro_host" default="192.168.1.64"/>
   <arg name="hikmicro_password" default=""/>
@@ -118,7 +125,8 @@
   <group if="$(arg health)">
     <include file="$(find x30_health)/launch/health.launch"/>
     <!-- after its files: the nodes, sensors and states of the layers started here; a missing
-         node is an error (speed scale 0), so never the cameras, which do not drive the robot -->
+         node is an error (speed scale 0), so never the inspection and its cameras, which do
+         not drive the robot -->
     <rosparam param="health_monitor_node/nodes/expected" subst_value="true">$(eval str(
       (['/sim_robot_node'] if arg('sim') else ['/' + arg('namespace') + '/x30_driver'])
       + ['/' + arg('namespace') + '/robot_state_publisher']
@@ -140,6 +148,17 @@
     <param unless="$(arg control)" name="health_monitor_node/state/control_topic" value=""/>
     <param unless="$(arg perception)" name="health_monitor_node/state/safety_scan_topic"
            value=""/>
+  </group>
+
+  <group if="$(arg inspection)">
+    <include file="$(find x30_inspection)/launch/inspection.launch">
+      <arg name="sites_dir" value="$(arg sites_dir)"/>
+      <arg name="reports_dir" value="$(arg reports_dir)"/>
+    </include>
+    <!-- the follower waits at a stop for the whole point: its max_duration_sec (150 s), the
+         camera's park and the report -->
+    <rosparam param="path_follower_node/hooks/inspection">[/inspection/inspect]</rosparam>
+    <param name="path_follower_node/hooks/inspection_timeout_sec" value="180.0"/>
   </group>
 
   <include if="$(arg hikmicro)" file="$(find hikmicro_driver)/launch/hikmicro.launch">

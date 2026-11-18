@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>x30_inspection</name>
+  <version>0.9.0</version>
+  <description>Substation inspection at the stop points of the X30's patrol (the HotDog pattern on ROS Noetic): the HIKMICRO PTZ camera is pointed at each piece of equipment taught there and its temperatures are judged for overheating (absolute, ambient and similar criteria), the Hertzino HZ-FA-371 listens for partial discharge, and a report with the thermal, visible, sound map and PRPD images is kept on the robot and published.</description>
+  <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
+  <license>Apache-2.0</license>
+  <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
+
+  <build_depend>x30_utils</build_depend>
+  <!-- hikmicro_msgs and hertzino_msgs come from x30.repos (hikmicro_driver, hertzino_driver) -->
+  <exec_depend>actionlib</exec_depend>
+  <exec_depend>hertzino_msgs</exec_depend>
+  <exec_depend>hikmicro_msgs</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>x30_msgs</exec_depend>
+  <exec_depend>x30_utils</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>roslaunch</test_depend>
+</package>
