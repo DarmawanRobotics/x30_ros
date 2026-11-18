@@ -17,6 +17,11 @@ versions follow [SemVer](https://semver.org).
   layer on its FAST-LIO; `sites_dir` for localization, mapping and navigation;
   `stack_sim.test` walks the whole stack to a goal in the simulator, corrected by a tag.
 
+### Fixed
+- `x30_localization`: a tag detection the odometry has not reached yet (FAST-LIO's TF lags its
+  scans, the camera does not) waits for it at the next poll instead of being replaced by a newer
+  one, ahead again: with a lagging odometry, tags were almost never fused (found in x30_sim).
+
 ## [Unreleased] (0.7.0)
 
 ### Added
