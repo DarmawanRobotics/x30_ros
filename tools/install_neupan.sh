@@ -25,8 +25,8 @@ NEUPAN_COMMIT=70991f0d96b7a15135ba02ea8ad3f3090ff0926e # py38: "Add python 3.8 c
 TORCH=torch==2.4.1                                      # the last for Python 3.8
 TORCH_INDEX=https://download.pytorch.org/whl/cpu        # CPU only: no CUDA, 200 MB, not 2.5 GB
 PINNED=(
-  numpy==1.24.4 scipy==1.10.1 cvxpy==1.5.2 cvxpylayers==0.1.6 diffcp==1.0.23 ecos==2.0.14
-  gctl==1.2 matplotlib==3.7.5 rich colorama dill pyyaml
+  'numpy==1.24.4' 'scipy==1.10.1' 'cvxpy==1.5.2' 'cvxpylayers==0.1.6' 'diffcp==1.0.23'
+  'ecos==2.0.14' 'gctl==1.2' 'matplotlib==3.7.5' rich colorama dill pyyaml
 )
 # a newer setuptools or numpy in ~/.local must not leak into the venv (check_deps.sh)
 export PYTHONNOUSERSITE=1 PIP_DISABLE_PIP_VERSION_CHECK=1
