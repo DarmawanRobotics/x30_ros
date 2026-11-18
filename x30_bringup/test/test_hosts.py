@@ -98,6 +98,7 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     assert out.returncode == 3, out.stdout + out.stderr
     assert launched.read_text().split() == [
         '192.168.1.106',
+        '--wait',  # Deep Robotics' master: never one of the launch's own
         'x30_bringup',
         'navigation_host.launch',
         'controller:=neupan',

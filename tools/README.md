@@ -86,7 +86,7 @@ at mounting position A, (47.15, −1, 117) at B, (7.15, −1, 117) at C) rather 
 |---|---|
 | `env navigation\|perception` | the exports of that host: `ROS_MASTER_URI=http://192.168.1.106:11311`, its `ROS_IP`, no `ROS_HOSTNAME`, `PYTHONNOUSERSITE=1`, and `X30_PYTHON` when NeuPAN's venv is there; `eval` it |
 | `check` | this host's role, `ROS_IP` one of its addresses, the other host answering ping, the clock synchronized, the master answering, every registered node reachable from here (a name that does not resolve: `/etc/hosts`) |
-| `start navigation\|perception` | what the service runs: ROS and the workspace sourced, the network set (the service's settings win), on the navigation host `dr_services.sh off` until Deep Robotics' boot settled, then the host's launch file with `X30_LAUNCH_ARGS` under `x30_watchdog.py` |
+| `start navigation\|perception` | what the service runs: ROS and the workspace sourced, the network set (the service's settings win), on the navigation host `dr_services.sh off` until Deep Robotics' boot settled, then the host's launch file with `X30_LAUNCH_ARGS` under `x30_watchdog.py`, waiting for Deep Robotics' master (never one of its own: it would go with every restart, and Deep Robotics' LiDAR and IMU drivers with it) |
 | `install navigation\|perception` | with sudo: `/etc/x30/<role>.env` (kept when it exists; mode 600, the cameras' passwords go there) and `/etc/systemd/system/x30-<role>.service` (`Type=notify`, `WatchdogSec=60`, `Restart=on-failure`), enabled |
 
 `X30_NAV_IP` and `X30_PER_IP` change the two addresses. The service's settings:

@@ -163,13 +163,14 @@ cmd_start() { # <role>
   fi
   read -r -a args <<< "${X30_LAUNCH_ARGS:-}"
   say "x30_ros, $role host: master $ROS_MASTER_URI, ROS_IP $ROS_IP, ${args[*]:-no arguments}"
+  # the master is Deep Robotics' roscore on the navigation host: wait for it, never start one
+  # with the launch (it would go with every restart, and Deep Robotics' LiDAR and IMU drivers,
+  # registered with it, with it); its restart restarts the stack on both hosts
   if [ "$role" = navigation ]; then
     settle_dr
-    # a master here starts with the launch when Deep Robotics' is not up
     exec python3 "$HERE/x30_watchdog.py" "${CRITICAL[@]/#/--critical=}" -- \
-      roslaunch x30_bringup navigation_host.launch "${args[@]}"
+      roslaunch --wait x30_bringup navigation_host.launch "${args[@]}"
   fi
-  # the master is the navigation host's: wait for it; its restart restarts this side
   exec python3 "$HERE/x30_watchdog.py" -- \
     roslaunch --wait x30_bringup perception_host.launch "${args[@]}"
 }
