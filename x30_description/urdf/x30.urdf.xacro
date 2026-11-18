@@ -6,9 +6,9 @@
   LICENSE.deep_robotics_model), kept with its names so x30_driver's joint_states fit. Only the
   materials are added (the model has none).
   base_link is the centre of the body (x forward, y left, z up); the official root TORSO hangs
-  on it with an identity joint. imu_link is at base_link too: the API documentation gives no IMU
-  position. No link may be called body, odom, map or camera_init: those frames belong to the
-  odometry and the navigation stack.
+  on it with an identity joint. imu_link is the built-in body IMU of /imu/data, with the body's
+  axes (Application Manual V2.0.4, 6.2): FAST-LIO's body frame. No link may be called body,
+  odom, map or camera_init: those frames belong to the odometry and the navigation stack.
 -->
 <robot name="x30" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:property name="MESH" value="package://x30_description/meshes"/>
@@ -53,7 +53,7 @@
   <joint name="imu_joint" type="fixed">
     <parent link="base_link"/>
     <child link="imu_link"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0.13045 -0.001 0.0149" rpy="0 0 0"/>
   </joint>
 
   <!--

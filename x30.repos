@@ -1,0 +1,20 @@
+# Source dependencies of the X30 stack (vcstool), next to x30_ros in the workspace:
+#   cd ~/catkin_ws/src && vcs import --recursive < x30_ros/x30.repos
+# FAST-LIO2 for ROS 1 needs the Livox SDK (v1) installed first (README.md, "Dependencies").
+repositories:
+  third_party/FAST_LIO:
+    type: git
+    url: https://github.com/hku-mars/FAST_LIO.git
+    version: main
+  third_party/livox_ros_driver:
+    type: git
+    url: https://github.com/Livox-SDK/livox_ros_driver.git
+    version: master
+  drivers/hikmicro_driver:
+    type: git
+    url: https://github.com/DarmawanRobotics/hikmicro_driver.git
+    version: main
+  drivers/hertzino_driver:
+    type: git
+    url: https://github.com/DarmawanRobotics/hertzino_driver.git
+    version: main

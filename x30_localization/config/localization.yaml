@@ -1,0 +1,22 @@
+# localization_node on the X30. Only what differs from the dataclass defaults, plus docs; every
+# parameter with its unit and range: README.md. Frames (map, odom, base_link) and base_height
+# come from the robot profile (robot/).
+sites_dir: ~/x30/map            # localization/load_tags only accepts files inside this directory
+tags_file: ""                   # the site manager hands <site>/tags.json over with load_tags
+
+# the bridge of FAST-LIO into map -> odom -> base_link
+lio_odom_frame: camera_init     # FAST-LIO's world frame = the IMU at its start
+lio_body_frame: body            # FAST-LIO's body frame = the IMU now
+imu_frame: imu_link             # the same physical frame in the URDF (x30_description)
+
+leveling:                       # odom gravity-aligned: the roll and pitch of base_link at start
+  imu_topic: /imu/data          # the body IMU, FAST-LIO's IMU
+
+tag:
+  camera_frame: camera_color_optical_frame
+  frames: [base_map, charging_dock]   # the detector's tag frames recorded by record_tags
+  auto_localize: true           # a known tag in view localizes while NONE
+  auto_correct: true            # while localized, tags in view are fused through the gate
+
+scan_match:
+  enabled: false                # matches /cloud_registered_body against /map when true

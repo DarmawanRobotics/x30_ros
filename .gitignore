@@ -1,9 +1,9 @@
-# catkin
-build/
-devel/
-install/
-log/
-logs/
+# catkin (anchored: a package may have a log/ module)
+/build/
+/devel/
+/install/
+/log/
+/logs/
 
 # python
 __pycache__/

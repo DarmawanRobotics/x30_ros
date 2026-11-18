@@ -43,7 +43,7 @@ identity joint.
 | `LIDAR_FRONT_DOWN` | (0.43297, 0, −0.05519), pitch 0.4363 | model |
 | `LIDAR_REAR_UP` | (−0.46576, 0, 0.03484), pitch −0.8029 | model |
 | `LIDAR_REAR_DOWN` | (−0.41074, 0, −0.05601), pitch −0.8029 | model |
-| `imu_link` | (0, 0, 0) | **assumption**: the API documentation gives no IMU position |
+| `imu_link` | (0.13045, −0.001, 0.0149), the body's axes | the built-in IMU of `/imu/data` (Application Manual V2.0.4, 6.2), FAST-LIO's body |
 
 Joint limits are the model's: HipX −0.323…0.585 rad on the left legs and −0.585…0.323 on the
 right, HipY −2.967…0.262, Knee 0.349…2.531; effort 84 / 84 / 150 N m, velocity 17.5 / 17.5 /

@@ -1,0 +1,26 @@
+<launch>
+  <!--
+    localization_node: map -> odom from an EKF on top of FAST-LIO, and the bridge of FAST-LIO's
+    camera_init -> body into odom -> base_link.
+      params_file:  overrides of config/localization.yaml (empty: none)
+      robot_params: the robot profile, loaded as robot/ here (empty: already on the server)
+      tags_file, sites_dir: override the parameters when set
+  -->
+  <arg name="params_file" default=""/>
+  <arg name="robot_params" default=""/>
+  <arg name="tags_file" default=""/>
+  <arg name="sites_dir" default=""/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
+            file="$(arg robot_params)"/>
+
+  <node pkg="x30_localization" type="localization_node" name="localization_node"
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="2">
+    <rosparam command="load" file="$(find x30_localization)/config/localization.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+    <param if="$(eval arg('tags_file') != '')" name="tags_file" value="$(arg tags_file)"/>
+    <param if="$(eval arg('sites_dir') != '')" name="sites_dir" value="$(arg sites_dir)"/>
+  </node>
+</launch>

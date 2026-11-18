@@ -1,0 +1,61 @@
+line-length = 99
+target-version = "py38"  # Noetic (Python 3.8); annotations stay modern via __future__
+extend-exclude = [
+  "./build", "./devel", "./install", "./log",  # anchored: a package may have a log/ module
+  "./x30_driver", "./x30_description",  # their own style, older than the stack
+]
+
+[format]
+quote-style = "single"
+docstring-code-format = true
+
+[lint]
+select = [
+  "B",    # bugbear
+  "C4",   # comprehensions
+  "C90",  # complexity
+  "D",    # docstrings
+  "E",    # pycodestyle
+  "FA",   # from __future__ import annotations (PEP 604 / 585 hints on 3.8)
+  "F",    # pyflakes
+  "I",    # imports
+  "N",    # naming
+  "NPY",  # numpy
+  "PIE",
+  "PL",   # pylint
+  "PT",   # pytest
+  "RUF",
+  "SIM",
+  "UP",   # pyupgrade
+  "W",
+]
+ignore = [
+  "D100",     # module docstring
+  "D104",     # package docstring
+  "D105",     # magic method docstring
+  "D107",     # __init__ docstring
+  "D203",
+  "D213",
+  "PLC0415",  # imports inside functions (optional dependencies)
+  "PLR0913",  # many arguments
+  "PLR0917",  # many positional arguments
+  "PLR2004",  # magic values
+  "RUF009",   # nested() / param() return dataclass fields
+  "RUF012",
+]
+
+[lint.mccabe]
+max-complexity = 12
+
+[lint.pydocstyle]
+convention = "pep257"
+
+[lint.isort]
+force-sort-within-sections = true
+known-first-party = ["x30_*"]
+required-imports = ["from __future__ import annotations"]
+
+[lint.per-file-ignores]
+"**/test/**" = ["D", "N802", "PLR0915", "PLR2004", "PT011", "PT012", "PT018"]
+"**/test/*_check.py" = ["PT009", "PT027"]  # rostest nodes are unittest test cases
+"**/setup.py" = ["D"]

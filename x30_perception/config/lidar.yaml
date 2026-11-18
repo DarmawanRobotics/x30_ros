@@ -1,0 +1,52 @@
+# x30_perception defaults (private parameters of lidar_sector_node). Every parameter is
+# documented in its configuration class (src/x30_perception/core/config.py); only the important
+# ones are repeated here. The robot (frames, footprint, base_height) comes from the robot
+# profile (robot/).
+input:
+  # livox: Livox CustomMsg on /livox/lidar (the X30's own driver, livox_ros_driver2), read from
+  # the serialized bytes (~1 ms per scan, no Livox package needed here).
+  # pointcloud2: any PointCloud2 in a frame fixed to the robot (the X30's /lidar_points, or
+  # FAST-LIO's /cloud_registered_body: its `blind` radius is cut out, near obstacles are missed).
+  type: livox
+  livox_topic: /livox/lidar
+  frame: livox_frame # used when the cloud header has no frame_id
+  timeout_sec: 0.5 # no usable cloud for this long: every sector BLOCKED
+front: # perception/sector_scan, avoidance
+  num_sectors: 32
+  fov_deg: 180.0 # up to 360: avoidance around the direction of travel, reversing too
+  range_max: 8.0
+  k: 2 # a sector needs 2 points; its range is the 2nd nearest
+safety: # perception/safety_scan, 360 deg protective field
+  num_sectors: 72 # 5 deg sectors
+  range_max: 4.0
+  k: 2
+filter:
+  # The band is measured above the floor in a level frame: roll and pitch of base_link in
+  # odom (TF) are removed first, so the gait never lifts the floor into the band.
+  # Without that TF the scans are BLOCKED; level_source: none trusts a level base.
+  level_source: tf
+  self_margin: 0.05 # m around the footprint: the legs and the body are the robot
+  height_min: 0.10 # m above the floor: lower is floor (raise on uneven floors)
+  height_max: 1.60
+  ground_segmentation: false
+  drop_adhesion_noise: true # Livox tag bits 0-1 low confidence ("glue" between objects)
+  drop_particle_noise: true # Livox tag bits 2-3 low confidence (rain, fog, dust)
+memory: # obstacles below the lowest beam (near-field blind zone) stay in the safety scan
+  enabled: true
+  memory_sec: 10.0
+  lower_fov_deg: -7.0 # Mid-360
+blind:
+  min_points: 100 # fewer points in a cloud (robot body excluded): LiDAR blind
+  regions: 4
+  min_region_points: 0 # > 0: also blind when a quarter of the view is empty (covered)
+depth: # a depth camera pitched down: the low objects near the robot, below the LiDAR
+  enabled: false
+  topic: /camera/depth/color/points
+  timeout_sec: 0.3 # older: not merged, the LiDAR alone (required: true, BLOCKED)
+  required: false
+  range_max: 3.0 # m from the camera: the stereo depth error grows with range squared
+  cell_points: 4 # an obstacle needs 4 points in one 5 cm cell (424 x 240 decimated by 2)
+  confirm_radius: 0.15 # m, and such a cell this close in the previous cloud too
+  floor_fit: true # heights above the floor the camera sees, not the mount's nominal one
+  memory_sec: 6.0 # s, its obstacles out of its view (a box beside the robot) stay this long
+publish_markers: true # perception/obstacles for RViz

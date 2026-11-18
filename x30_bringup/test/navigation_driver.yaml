@@ -1,0 +1,10 @@
+# stack_navigation.test: the driver against fake_robot.py on loopback, on ports of their own
+# (catkin runs the rostests in parallel: stack_base.test has the 48xxx ones).
+motion_host_ip: 127.0.0.1
+motion_host_port: 49893
+local_ip: 127.0.0.1
+local_port: 49897
+perception_host_ip: 127.0.0.1
+elevation_map_port: 49899
+charge_port: 49333
+lio_port: 49600

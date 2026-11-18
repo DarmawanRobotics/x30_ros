@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""docking_node: see x30_navigation.docking_node."""
+
+from x30_navigation.docking_node import main
+
+if __name__ == '__main__':
+    main()

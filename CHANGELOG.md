@@ -3,6 +3,107 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.7.0)
+
+### Added
+- `x30_health`: `health_monitor_node`, one health signal (`health/status`, latched, with a
+  speed scale for the control mux) and diagnostics: sensor rates and header ages read from the
+  raw ROS 1 bytes of any type (the header found in the connection's message definition), the
+  expected nodes from the master, the stack's typed states, the safety scan, the TF edges and
+  the odom chain, the clock, the computer.
+- `x30_bringup`: `health` (told the nodes, sensors and states of the layers it starts), and
+  `hikmicro` / `hertzino` with their hosts and passwords for the inspection cameras.
+- `x30.repos`: FAST-LIO (ROS 1), the Livox message package it is built with, hikmicro_driver
+  and hertzino_driver (`vcs import --recursive`).
+- `x30_utils`: `create_any_subscription()`, raw bytes of any type with rospy's connection
+  header.
+
+### Fixed
+- Tests: the private master is taken only on a port no other process answers on (a port found
+  free can be bound by a parallel test run before rosmaster binds it), and one master serves the
+  process whichever conftest asks for it; status topics are waited for after a service answers
+  instead of read at once.
+
+## [Unreleased] (0.6.0)
+
+### Added
+- `x30_navigation`: `planner_node` (A* on the site map with a footprint costmap, replanning
+  around blockages, a cancel that never waits for a plan), `path_loader_node` (routes from the
+  active site), `path_follower_node` (holonomic, pure pursuit, Stanley, LQR, MPPI and PID
+  controllers; path shifting, backtracking, stop points with inspection hooks; pause reasons),
+  `obstacle_avoidance_node` (VFH, Braitenberg, potential field, follow the gap) and
+  `docking_node` (tag approach and the robot's hooks); every command goes to the control mux.
+- `x30_bringup`: `navigation` argument; `stack_navigation.test` walks the simulated X30 along a
+  route through the follower, the mux and the driver.
+- `x30_utils`: every node writes the values it runs with back to the parameter server
+  (`rosparam get` shows them, and other nodes can read them); `ServiceClient` (readiness, a
+  timeout per call) and `AsyncCall` (answers come back as the node's callbacks); `guard()`;
+  `param_notes`, the newest notes of the parameter polls.
+
+### Changed
+- `x30_mapping`: service calls through x30_utils' `ServiceClient`.
+
+### Fixed
+- `x30_utils`: a read-only value refused on the server came in with the next live change of
+  its section; it now stays at its running value until the restart. A change is noted once even
+  when a test polls beside the node's own poll.
+
+## [Unreleased] (0.5.0)
+
+### Added
+- `x30_odometry`: FAST-LIO2 (ROS 1) on the X30's merged `/livox/lidar` and the body IMU
+  `/imu/data` (`config/fast_lio.yaml`: the IMU mount of the Application Manual, the extrinsic
+  fixed), its parameters kept in `fast_lio/`; `wait_still`, the launch prefix that holds its
+  start and every respawn until the IMU is still and level; `odometry_monitor_node` (INITIALIZING,
+  OK, DEGRADED, LOST; restarts, jumps, z drift, a tilted start, the speed test against the leg
+  odometry) and the trip; `method:=external` for a simulator, an unknown method fails the launch.
+- `x30_localization`: `localization_node`, `map -> odom` from an SE(2) EKF corrected by
+  fiducials, pose estimates and scan matching through a chi-square gate, and the gravity-aligned
+  bridge of FAST-LIO into `odom -> base_link`; `record_tags` runs beside the timers so
+  `map -> odom` keeps flowing while it records.
+- `x30_mapping`: `grid_mapper_node`, `site_manager_node`, `route_recorder_node`: sites in
+  `~/x30/map` (map, fiducials, routes), mapping sessions with x30_localization, route teaching
+  with stop points; service calls between them with a timeout.
+- `x30_bringup`: `odometry`, `odometry_method`, `localization`, `mapping` and `site` arguments;
+  `leg_odom_tf` together with `localization` is refused (two parents for `base_link`).
+- `x30_utils`: `create_service(..., concurrent=True)` for a service that waits for the node's
+  other callbacks, and `destroy_subscription()`.
+
+### Fixed
+- `x30_utils`: rospy latches one `/tf_static` message per process, so a second node in the
+  process replaced the static transforms of the first for late listeners; every node's set now
+  stays in the latched message.
+- `x30_description`: `imu_link` is the body IMU at (130.45, −1, 14.9) mm from the body centre
+  (Application Manual V2.0.4, 6.2); it was at `base_link`.
+
+## [Unreleased] (0.4.0)
+
+### Added
+- The X30 stack, the ROS Noetic port of Dharma, in this repository: every package is Dharma's
+  algorithms (unchanged, tested without ROS) on a rospy layer.
+- `x30_utils`: math, typed configuration, the robot profile, the braking model, file IO, grids,
+  logging, and `X30Node`, the rospy base of every node: parameters validated at start (a bad
+  value stops the node, exit code 2), live fields polled from the parameter server and
+  read-only ones refused with a warning, the robot profile searched up from the node and
+  read-only, callbacks one at a time, steady timers, raw subscriptions with a type check, TF,
+  and a shutdown that runs the hooks while the topics are open and waits until their messages
+  are written. `x30_add_pytests` runs pytest under `catkin_make run_tests`; ROS tests use a
+  private `rosmaster`.
+- `x30_msgs`: the stack's messages and services (Dharma's interfaces; `TripStatus.since` is a
+  ROS 1 `time`).
+- `x30_control`: the control mux, the only publisher of `/x30/cmd_vel`: AUTO or REMOTE, speed
+  envelope, protective field on the 360° safety scan (translation, rotation, combined arc,
+  stale and blind scans), latched e-stop with a hardware input and re-arm, fail-safe on any
+  callback error, zeros on shutdown.
+- `x30_perception`: `lidar_sector_node` reads the X30's `/livox/lidar` as ROS 1 CustomMsg bytes
+  (no Livox package needed, the publisher's type checked) or any PointCloud2, and publishes the
+  front and the fail-safe 360° sector scans; optional depth camera; `aruco_detector_node` with
+  a `topic_tools` throttle.
+- `x30_bringup`: the X30's robot profile (`config/robot.yaml`, loaded as `/robot`), and
+  `control`, `perception`, `leg_odom_tf`, `lidar_frame` / `lidar_pose` arguments;
+  `stack_base.test` drives the simulated X30 through the mux and the scans.
+- `ruff.toml`: lint and format of the stack packages (Python 3.8 target).
+
 ## [0.3.1] - 2026-10-18
 
 ### Fixed (safety)

@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""aruco_detector_node: see x30_perception.aruco_detector_node."""
+
+from x30_perception.aruco_detector_node import main
+
+if __name__ == '__main__':
+    main()

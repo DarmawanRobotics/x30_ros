@@ -1,23 +1,132 @@
 <launch>
   <!--
-    The X30 robot package: x30_driver and robot_state_publisher with the URDF, in one namespace.
+    The X30 robot package: x30_driver and robot_state_publisher with the URDF in one namespace,
+    and the robot profile of the stack (robot/, global).
       params_file / overrides_file: the driver's parameters (see x30_driver/launch/driver.launch)
+      robot_params: the robot profile (config/robot.yaml)
+      control:      the control mux, the only publisher of <namespace>/cmd_vel (x30_control)
+      perception:   the LiDAR sector scans for the protective field (x30_perception)
+      leg_odom_tf:  the driver publishes odom -> base_link (leg odometry, roll and pitch from the
+                    IMU), for the scans' leveling when no other odometry owns that transform
+                    (not with localization: its bridge owns it)
+      odometry:     FAST-LIO behind its start gate, and the odometry monitor (x30_odometry);
+                    odometry_method: fast_lio, or external for a simulator
+      localization: map -> odom and the bridge of FAST-LIO into odom -> base_link
+                    (x30_localization)
+      mapping:      the site maps, mapping sessions and routes (x30_mapping); site: the site at
+                    start (empty: the last run's)
+      navigation:   the planner, route loader, path follower, avoidance and docking
+                    (x30_navigation), commanding the control mux
+      health:       health/status and diagnostics (x30_health), watching what is started here
+      hikmicro, hertzino: the inspection cameras (hikmicro_driver, hertzino_driver from
+                    x30.repos), at their host with their password
+      lidar_frame / lidar_pose: base_link -> the frame of /livox/lidar ("x y z yaw pitch roll",
+                    m and rad): check it on the robot (x30_perception README) before relying
+                    on the scans
       rviz: RViz with the robot model
   -->
   <arg name="namespace" default="x30"/>
   <arg name="params_file" default="$(find x30_driver)/config/driver_params.yaml"/>
   <arg name="overrides_file" default=""/>
+  <arg name="robot_params" default="$(find x30_bringup)/config/robot.yaml"/>
+  <arg name="control" default="false"/>
+  <arg name="perception" default="false"/>
+  <arg name="leg_odom_tf" default="false"/>
+  <arg name="odometry" default="false"/>
+  <arg name="odometry_method" default="fast_lio"/>
+  <arg name="localization" default="false"/>
+  <arg name="mapping" default="false"/>
+  <arg name="site" default=""/>
+  <arg name="navigation" default="false"/>
+  <arg name="health" default="false"/>
+  <arg name="hikmicro" default="false"/>
+  <arg name="hikmicro_host" default="192.168.1.64"/>
+  <arg name="hikmicro_password" default=""/>
+  <arg name="hertzino" default="false"/>
+  <arg name="hertzino_host" default="192.168.2.204"/>
+  <arg name="hertzino_password" default=""/>
+  <arg name="lidar_frame" default="livox_frame"/>
+  <arg name="lidar_pose" default="0 0 0 0 0 0"/>
   <arg name="rviz" default="false"/>
+
+  <!-- base_link has one parent: the driver's leg odometry or the localization bridge -->
+  <arg if="$(eval arg('leg_odom_tf') and arg('localization'))" name="one_parent_for_base_link"
+       value="$(eval {}['leg_odom_tf and localization both publish odom -> base_link'])"/>
+
+  <rosparam command="load" ns="robot" file="$(arg robot_params)"/>
 
   <include file="$(find x30_driver)/launch/driver.launch">
     <arg name="namespace" value="$(arg namespace)"/>
     <arg name="params_file" value="$(arg params_file)"/>
     <arg name="overrides_file" value="$(arg overrides_file)"/>
   </include>
+  <!-- after the driver's files: the last setting of a parameter wins -->
+  <param if="$(arg leg_odom_tf)" name="$(arg namespace)/x30_driver/publish_tf" value="true"/>
 
   <include file="$(find x30_description)/launch/description.launch">
     <arg name="namespace" value="$(arg namespace)"/>
   </include>
+
+  <include if="$(arg control)" file="$(find x30_control)/launch/control.launch">
+    <arg name="cmd_vel_topic" value="/$(arg namespace)/cmd_vel"/>
+  </include>
+
+  <include if="$(arg odometry)" file="$(find x30_odometry)/launch/odometry.launch">
+    <arg name="method" value="$(arg odometry_method)"/>
+    <arg name="leg_odom_topic" value="/$(arg namespace)/odom"/>
+  </include>
+
+  <include if="$(arg localization)" file="$(find x30_localization)/launch/localization.launch"/>
+
+  <include if="$(arg mapping)" file="$(find x30_mapping)/launch/mapping.launch">
+    <arg name="site" value="$(arg site)"/>
+  </include>
+
+  <include if="$(arg navigation)" file="$(find x30_navigation)/launch/navigation.launch">
+    <arg name="battery_topic" value="/$(arg namespace)/battery"/>
+    <arg name="odom_topic" value="/$(arg namespace)/odom"/>
+  </include>
+
+  <group if="$(arg health)">
+    <include file="$(find x30_health)/launch/health.launch"/>
+    <!-- after its files: the nodes, sensors and states of the layers started here; a missing
+         node is an error (speed scale 0), so never the cameras, which do not drive the robot -->
+    <rosparam param="health_monitor_node/nodes/expected" subst_value="true">$(eval str(
+      ['/' + arg('namespace') + '/x30_driver', '/' + arg('namespace') + '/robot_state_publisher']
+      + (['/control_mux_node'] if arg('control') else [])
+      + (['/lidar_sector_node', '/lidar_mount'] if arg('perception') else [])
+      + (['/odometry_monitor_node'] if arg('odometry') else [])
+      + (['/fast_lio/fast_lio'] if arg('odometry') and arg('odometry_method') == 'fast_lio' else [])
+      + (['/localization_node'] if arg('localization') else [])
+      + (['/grid_mapper_node', '/site_manager_node', '/route_recorder_node']
+         if arg('mapping') else [])
+      + (['/planner_node', '/path_loader_node', '/path_follower_node',
+          '/obstacle_avoidance_node', '/docking_node'] if arg('navigation') else [])))</rosparam>
+    <rosparam param="health_monitor_node/sensors/topics" subst_value="true">$(eval str(
+      ['/livox/lidar:5.0', '/imu/data:100.0', '/' + arg('namespace') + '/odom:20.0']
+      + (['/Odometry:8.0'] if arg('odometry') else [])))</rosparam>
+    <param unless="$(arg odometry)" name="health_monitor_node/state/odometry_topic" value=""/>
+    <param unless="$(arg localization)" name="health_monitor_node/state/localization_topic"
+           value=""/>
+    <param unless="$(arg control)" name="health_monitor_node/state/control_topic" value=""/>
+    <param unless="$(arg perception)" name="health_monitor_node/state/safety_scan_topic"
+           value=""/>
+  </group>
+
+  <include if="$(arg hikmicro)" file="$(find hikmicro_driver)/launch/hikmicro.launch">
+    <arg name="host" value="$(arg hikmicro_host)"/>
+    <arg name="password" value="$(arg hikmicro_password)"/>
+  </include>
+  <include if="$(arg hertzino)" file="$(find hertzino_driver)/launch/hertzino.launch">
+    <arg name="host" value="$(arg hertzino_host)"/>
+    <arg name="password" value="$(arg hertzino_password)"/>
+  </include>
+
+  <group if="$(arg perception)">
+    <include file="$(find x30_perception)/launch/perception.launch"/>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="lidar_mount"
+          args="$(arg lidar_pose) base_link $(arg lidar_frame)"/>
+  </group>
 
   <node if="$(arg rviz)" ns="$(arg namespace)" pkg="rviz" type="rviz" name="rviz"
         args="-d $(find x30_description)/rviz/x30.rviz"/>

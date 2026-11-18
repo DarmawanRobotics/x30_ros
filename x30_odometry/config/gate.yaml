@@ -1,0 +1,4 @@
+# odometry_gate (wait_still), the launch prefix of FAST-LIO: holds its start, and every respawn,
+# until the IMU is still and level. Every parameter: README.md.
+imu_topic: /imu/data           # the IMU FAST-LIO initializes its gravity and biases from
+max_tilt_deg: 3.0              # gravity against the IMU z axis at the start; 0: off

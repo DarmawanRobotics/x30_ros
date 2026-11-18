@@ -2,9 +2,11 @@
 
 # x30_ros
 
-**ROS Noetic robot package for the Deep Robotics Jueying X30: the motion host's UDP protocol as
-a driver, the perception host's elevation map and autonomous charging as services, and Deep
-Robotics' own URDF as xacro.**
+**ROS Noetic robot package and autonomy stack for the Deep Robotics Jueying X30: the motion
+host's UDP protocol as a driver, Deep Robotics' own URDF as xacro, and the X30 stack, the ROS
+Noetic port of Dharma: a control mux with a protective field, LiDAR sector scans, FAST-LIO
+odometry, localization on site maps, route and goal navigation, and the building blocks every
+node shares.**
 
 [![CI](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DarmawanRobotics/x30_ros/actions/workflows/ci.yml)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-22314E?logo=ros&logoColor=white)](http://wiki.ros.org/noetic)
@@ -12,7 +14,8 @@ Robotics' own URDF as xacro.**
 ![Python](https://img.shields.io/badge/Python-3.8-3776AB?logo=python&logoColor=white)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-[Packages](#packages) · [Network](#network) · [Quick start](#quick-start) ·
+[Packages](#packages) · [Stack](#stack) · [Network](#network) · [Quick start](#quick-start) ·
+[Dependencies](#dependencies) ·
 [Interface](#interface) · [Verify on the real robot](#verify-on-the-real-robot) ·
 [Safety](#safety) · [Develop](#develop)
 
@@ -27,7 +30,12 @@ it into ROS Noetic topics and `std_srvs/Trigger` services, on a computer on the 
 or on the robot's own computers.
 
 Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/README.md) ·
-[x30_bringup](x30_bringup/README.md) · [CHANGELOG](CHANGELOG.md)
+[x30_bringup](x30_bringup/README.md) · [x30_utils](x30_utils/README.md) ·
+[x30_msgs](x30_msgs/README.md) · [x30_control](x30_control/README.md) ·
+[x30_perception](x30_perception/README.md) · [x30_odometry](x30_odometry/README.md) ·
+[x30_localization](x30_localization/README.md) · [x30_mapping](x30_mapping/README.md) ·
+[x30_navigation](x30_navigation/README.md) · [x30_health](x30_health/README.md) ·
+[CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -35,7 +43,41 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 |---|---|
 | [`x30_driver`](x30_driver/README.md) | the UDP driver: `cmd_vel` → axis commands scaled by the current gait; reports → `odom`, `imu`, `joint_states`, `battery`, `state`, `diagnostics`; every robot command, elevation map mode and charging command as a Trigger service; a simulated robot for tests and trials |
 | [`x30_description`](x30_description/README.md) | URDF: Deep Robotics' X30 model with its meshes (legs, four LiDAR frames), `base_link`, `imu_link`; `description.launch`, `display.launch` |
-| [`x30_bringup`](x30_bringup/README.md) | one launch for the driver and the URDF |
+| [`x30_bringup`](x30_bringup/README.md) | one launch for the driver, the URDF and the stack; the X30's robot profile |
+| [`x30_utils`](x30_utils/README.md) | the stack's toolbox: math, typed configuration, the robot profile, the braking model, logging, `X30Node` (rospy: validated parameters, callbacks one at a time, steady timers, TF, clean shutdown) |
+| [`x30_msgs`](x30_msgs/README.md) | the stack's messages and services: status of every subsystem, sector scans, paths, sites |
+| [`x30_control`](x30_control/README.md) | the control mux: the only publisher of `/x30/cmd_vel`; AUTO or REMOTE, speed envelope, protective field on the 360° safety scan, latched e-stop with re-arm |
+| [`x30_perception`](x30_perception/README.md) | LiDAR sector scans from the X30's `/livox/lidar` (raw bytes, no Livox package needed) or any PointCloud2: front for avoidance, 360° fail-safe for the protective field; optional depth camera; ArUco fiducials |
+| [`x30_odometry`](x30_odometry/README.md) | FAST-LIO2 on the merged `/livox/lidar` and the body IMU behind a start gate that waits for a still and level IMU; the odometry monitor (stale, jumps, restarts, z drift, tilt, a speed mismatch with the leg odometry) and the trip |
+| [`x30_localization`](x30_localization/README.md) | `map` → `odom` from an EKF corrected by fiducials, pose estimates and scan matching through a chi-square gate; the gravity-aligned bridge of FAST-LIO into `odom` → `base_link` |
+| [`x30_mapping`](x30_mapping/README.md) | sites (map, fiducials, routes), the occupancy grid from FAST-LIO's scans, `/map`, mapping sessions and route teaching with stop points |
+| [`x30_navigation`](x30_navigation/README.md) | a planner on the site map with replanning, routes from the active site, a path follower with pluggable controllers, path shifting and stop point inspections, reactive avoidance and tag docking; every command to the control mux |
+| [`x30_health`](x30_health/README.md) | one health signal: sensor rates and header ages (raw, any type), the expected nodes, the stack's states, the safety scan, TF, the clock and the computer; `health/status` with a speed scale for the mux, and diagnostics |
+
+## Stack
+
+The X30 stack is [Dharma](https://github.com/DarmawanRobotics/Dharma), the robot-agnostic
+autonomy stack of the other robots, ported to ROS Noetic in this one repository (the X30 is the
+only robot on Noetic). The algorithms are Dharma's, unchanged and tested without ROS; the ROS
+layer is rospy (`X30Node`), the launch files XML, the messages `x30_msgs`. It does not need the
+robot's own perception and navigation software: the stack drives the robot through x30_driver
+and reads the X30's sensor topics.
+
+```
+ watching     health/status, diagnostics, speed scale  ◄ x30_health
+ navigation   planner · route loader · path follower · avoidance · docking  ◄ x30_navigation
+ world        occupancy grid · sites (map, fiducials, routes)        ◄ x30_mapping
+ estimation   localization (EKF) · FAST-LIO odometry · sector scans
+              ◄ x30_localization · x30_odometry · x30_perception
+ control      control mux: the only /x30/cmd_vel, e-stop, protective field  ◄ x30_control
+ robot        x30_driver (UDP) · x30_description (URDF)
+ base         x30_utils (robot profile, config, math, X30Node) · x30_msgs
+```
+
+Navigation never publishes the robot's `cmd_vel`: it publishes `control/nav_cmd_vel`, and the
+control mux arbitrates it against the operator sources, applies the protective field on the 360°
+safety scan and is the only publisher of `/x30/cmd_vel`. Every node reads the same robot profile
+(`/robot`, [x30_bringup/config/robot.yaml](x30_bringup/config/robot.yaml)).
 
 ## Network
 
@@ -65,6 +107,7 @@ Ubuntu 20.04, ROS Noetic. Connect the computer to the robot's network and add it
 mkdir -p ~/catkin_ws/src && cd ~/catkin_ws/src
 git clone https://github.com/DarmawanRobotics/x30_ros.git
 cd ~/catkin_ws
+vcs import --recursive src < src/x30_ros/x30.repos   # FAST-LIO, Livox msgs, the cameras
 rosdep install --from-paths src --ignore-src -y
 catkin_make && source devel/setup.bash
 
@@ -86,6 +129,38 @@ roslaunch x30_bringup bringup.launch rviz:=true \
 
 Then work through [Verify on the real robot](#verify-on-the-real-robot), including the `cmd_vel`
 signs (step 6), before any autonomy drives the robot.
+
+With the stack's control mux and sector scans (the mux is then the only publisher of
+`/x30/cmd_vel`; check the robot profile and the LiDAR mount first, see
+[x30_bringup](x30_bringup/README.md#robot-profile)):
+
+```bash
+roslaunch x30_bringup bringup.launch control:=true perception:=true leg_odom_tf:=true
+rostopic echo -n 1 /control/status                  # armed, field CLEAR
+rostopic pub -r 20 /control/nav_cmd_vel geometry_msgs/Twist '{linear: {x: 0.2}}'
+rosservice call /control/estop/engage               # stops at once, until released
+```
+
+With FAST-LIO (built from source, see [x30_odometry](x30_odometry/README.md)), the localization
+and the site maps; check the LiDAR frame and the IMU mount first
+([x30_odometry](x30_odometry/README.md#check-on-the-robot)):
+
+```bash
+roslaunch x30_bringup bringup.launch control:=true perception:=true \
+    odometry:=true localization:=true mapping:=true
+rostopic echo -n 1 /odometry/status                 # OK once FAST-LIO runs
+rosservice call /mapping/start "{site: gardu-a, reset: false}"   # walk the site, then
+rosservice call /mapping/save && rosservice call /mapping/stop
+rosservice call /localization/record_tags           # a tag in view anchors the site
+```
+
+And walking on it (add `navigation:=true`): a taught route, or a goal on the map:
+
+```bash
+rosservice call /navigation/load_path "{path: gardu-a/routes/patrol.csv}"
+rosservice call /navigation/start
+rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
+```
 
 ## Interface
 
@@ -218,7 +293,27 @@ On a new robot, in an open area, with someone at the handheld:
 - `command_prefix` other than `0x21` / `0x31` stops the node at start; `heartbeat_hz` below
   2 Hz is raised to 2 Hz.
 
+## Dependencies
+
+[x30.repos](x30.repos) brings the stack's source dependencies next to x30_ros
+(`vcs import --recursive`, `python3-vcstool`):
+
+| | |
+|---|---|
+| `FAST_LIO` (hku-mars, ROS 1) | the LiDAR-inertial odometry of x30_odometry; `--recursive` for its ikd-Tree |
+| `livox_ros_driver` | the Livox `CustomMsg` FAST-LIO is built with (the same md5 as the X30's `livox_ros_driver2`); it needs the [Livox SDK](https://github.com/Livox-SDK/Livox-SDK) installed first: `git clone https://github.com/Livox-SDK/Livox-SDK.git && cd Livox-SDK/build && cmake .. && make && sudo make install` |
+| `hikmicro_driver` | the HIKMICRO thermal + visible PTZ camera (`hikmicro:=true`) |
+| `hertzino_driver` | the Hertzino acoustic camera (`hertzino:=true`) |
+
+Everything else comes from rosdep. Without them the stack still builds and runs: odometry with
+`odometry_method:=external`, the cameras off.
+
 ## Develop
+
+Every Python package of the stack is linted and formatted with ruff ([ruff.toml](ruff.toml),
+Python 3.8 target), and its `test_style.py` checks the conventions: modules under 300 lines,
+ROS-free `core/`, one-line docstrings, nothing Python 3.8 cannot run. Their tests run with pytest
+under `catkin_make run_tests` (`x30_add_pytests`), the ROS ones against a private `rosmaster`.
 
 ```bash
 catkin_make run_tests && catkin_test_results build/test_results --verbose

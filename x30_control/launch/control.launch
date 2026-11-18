@@ -1,0 +1,23 @@
+<launch>
+  <!--
+    The control mux: the only publisher of the robot's cmd_vel.
+      cmd_vel_topic: the robot driver's command topic
+      params_file:   overrides of config/control.yaml (empty: none)
+      robot_params:  the robot profile, loaded as robot/ here (empty: already on the server)
+  -->
+  <arg name="cmd_vel_topic" default="/x30/cmd_vel"/>
+  <arg name="params_file" default=""/>
+  <arg name="robot_params" default=""/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
+            file="$(arg robot_params)"/>
+
+  <node pkg="x30_control" type="control_mux_node" name="control_mux_node"
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="1">
+    <rosparam command="load" file="$(find x30_control)/config/control.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+    <remap from="cmd_vel" to="$(arg cmd_vel_topic)"/>
+  </node>
+</launch>

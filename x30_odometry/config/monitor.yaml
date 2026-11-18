@@ -1,0 +1,5 @@
+# odometry_monitor_node on the X30. Every parameter, its unit and range: README.md (defaults in
+# x30_odometry/core/config.py). Only the X30's own values are spelled out here.
+odom_topic: /Odometry          # FAST-LIO
+imu_topic: /imu/data           # the body IMU, axes of the /Odometry body; "": no tilt check
+leg_odom_topic: /x30/odom      # x30_driver's leg odometry for the speed test; "": off

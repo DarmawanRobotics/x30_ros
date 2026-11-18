@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>x30_odometry</name>
+  <version>0.7.0</version>
+  <description>The LiDAR-inertial odometry of the X30 (the ROS Noetic port of dharma_odometry): FAST-LIO2 on the merged Livox LiDARs and the body IMU behind a start gate that waits for a still and level IMU, and a monitor that says when the odometry can no longer be trusted (stale, jumps, restarts, z drift, a tilted start, a speed mismatch with the leg odometry) and how far the robot went.</description>
+  <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
+  <license>Apache-2.0</license>
+  <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
+
+  <build_depend>x30_utils</build_depend>
+  <!-- FAST-LIO (fast_lio, ROS 1) is built from source, it is not released for Noetic -->
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>rosbash</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>x30_msgs</exec_depend>
+  <exec_depend>x30_utils</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+  <test_depend>roslaunch</test_depend>
+</package>

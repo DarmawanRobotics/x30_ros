@@ -1,0 +1,17 @@
+<launch>
+  <!--
+    The stack's base end to end: the simulated X30 (motion and perception hosts) on loopback,
+    bringup.launch with the driver, the control mux and the LiDAR sector scans; the test feeds
+    Livox scans and navigation commands and watches the robot walk and stop.
+  -->
+  <node pkg="x30_driver" type="fake_robot.py" name="fake_x30" output="screen"
+        args="--motion-port 48893 --report-to 127.0.0.1:48897 --vmap-port 48899
+              --charge-port 48333 --lio-port 48600 --rate 100"/>
+  <include file="$(find x30_bringup)/launch/bringup.launch">
+    <arg name="overrides_file" value="$(find x30_bringup)/test/stack_driver.yaml"/>
+    <arg name="control" value="true"/>
+    <arg name="perception" value="true"/>
+    <arg name="leg_odom_tf" value="true"/>
+  </include>
+  <test test-name="stack_base" pkg="x30_bringup" type="stack_check.py" time-limit="240"/>
+</launch>

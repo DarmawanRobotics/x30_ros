@@ -1,0 +1,12 @@
+# health_monitor_node on the X30. Every parameter, its unit and range: README.md (defaults in
+# x30_health/core/config.py). bringup.launch sets nodes/expected and the state topics for the
+# layers it starts.
+sensors:
+  # "topic:min_hz[:max_age_sec]": below 80 % of min_hz, or header stamps older than max_age_sec
+  # (default sensors/max_age_sec) or ahead of the clock, is a warning. Never a camera image.
+  topics: ["/livox/lidar:5.0", "/imu/data:100.0", "/x30/odom:20.0"]
+system:
+  thermal_zones: ["cpu*", "gpu*", "tj*", "x86_pkg_temp"]
+degradation:
+  # health/status speed_scale while such a warning is active; any error requests 0
+  rules: ["sensor:/livox/lidar=0.5", "sensor:/Odometry=0.5", "tf:*=0.5"]

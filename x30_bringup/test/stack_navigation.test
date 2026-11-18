@@ -1,0 +1,23 @@
+<launch>
+  <!--
+    Route following end to end: the simulated X30 on loopback, bringup.launch with the driver (its
+    leg odometry on TF), the control mux, the sector scans and the navigation; map -> odom is
+    fixed here (no FAST-LIO). The test feeds Livox scans and a localized status, hands the
+    follower a route and watches the robot walk it to the end. Its UDP ports are not
+    stack_base.test's: catkin runs the rostests in parallel.
+  -->
+  <node pkg="x30_driver" type="fake_robot.py" name="fake_x30" output="screen"
+        args="--motion-port 49893 --report-to 127.0.0.1:49897 --vmap-port 49899
+              --charge-port 49333 --lio-port 49600 --rate 100"/>
+  <include file="$(find x30_bringup)/launch/bringup.launch">
+    <arg name="overrides_file" value="$(find x30_bringup)/test/navigation_driver.yaml"/>
+    <arg name="control" value="true"/>
+    <arg name="perception" value="true"/>
+    <arg name="leg_odom_tf" value="true"/>
+    <arg name="navigation" value="true"/>
+  </include>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="map_odom"
+        args="0 0 0 0 0 0 map odom"/>
+  <test test-name="stack_navigation" pkg="x30_bringup" type="navigation_check.py"
+        time-limit="240"/>
+</launch>

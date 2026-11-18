@@ -1,0 +1,31 @@
+# x30_control defaults (private parameters of control_mux_node). Every value is read-only at
+# runtime (safety parameters) and validated at start: the node refuses to start on a bad value.
+# Robot geometry, limits (max_vx, max_vy, max_wz, max_decel, max_yaw_accel, reaction_time),
+# kinematics and frames come from the robot profile (robot/), never from here.
+mode: auto # auto (navigation drives) | remote (an operator source drives)
+remote_sources: [handheld, dashboard] # control/remote/<source>/cmd_vel; the first is the default
+nav_timeout_sec: 0.5 # s, one zero when navigation is silent
+remote_timeout_sec: 0.3 # s, one zero when the operator is silent
+estop_hold_hz: 10.0 # zero commands per second while the e-stop is engaged
+rearm_neutral_count: 3 # neutral commands before a source drives after a release
+neutral_eps: 0.01 # m/s, rad/s: neutral = every axis below
+hw_estop_timeout_sec: 0.0 # s, > 0: engage when control/hw_estop goes silent
+use_health_limit: false # scale commands by health/status speed_scale
+health_timeout_sec: 3.0 # s, older health is ignored (no change)
+status_hz: 2.0 # control/status period (also published on every change)
+
+# Protective field on perception/safety_scan (360 deg, in robot frames.base). AUTO always;
+# REMOTE when field/in_remote. Stale or blind scan: AUTO stops, REMOTE creeps.
+field:
+  in_remote: true
+  margin: 0.15 # m, gap kept to an obstacle in AUTO
+  remote_margin: 0.10 # m, gap kept in REMOTE
+  lateral_margin: 0.10 # m, extra width of the swept path (the follower guard's too)
+  human_speed: 0.5 # m/s, person walking toward the robot (ISO/TS 15066; 1.6 to hurry)
+  yaw_margin: 0.10 # rad, turning kept short of a contact
+  min_speed: 0.02 # m/s, a lower allowed speed stops instead
+  min_yaw_rate: 0.05 # rad/s, a lower allowed yaw rate stops instead
+  remote_degraded_speed: 0.15 # m/s, REMOTE with a stale or blind scan
+  scan_timeout_sec: 0.5 # s since the last scan arrived (monotonic)
+  scan_max_age_sec: 0.5 # s, header stamp age
+  scan_clock_tolerance_sec: 0.1 # s, accepted stamps from the future (clock offset)
