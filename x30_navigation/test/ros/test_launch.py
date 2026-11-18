@@ -59,3 +59,30 @@ def test_the_robot_topics_are_remapped():
         out = roslaunch('--args', node, str(LAUNCH))
         assert 'battery:=/x30/battery' in out, out
     assert 'odom:=/x30/odom' in roslaunch('--args', '/path_follower_node', str(LAUNCH))
+
+
+def test_neupan_gets_the_x30_model_unless_a_params_file_gives_another(tmp_path):
+    model = Path(__file__).resolve().parents[2] / 'models' / 'dune_x30.pth'
+    assert Path(params()['/path_follower_node/neupan/dune_checkpoint']).resolve() == model
+    extra = tmp_path / 'own.yaml'
+    extra.write_text('path_follower_node:\n  neupan:\n    dune_checkpoint: /data/own.pth\n')
+    p = params(f'params_file:={extra}')
+    assert p['/path_follower_node/neupan/dune_checkpoint'] == '/data/own.pth'
+
+
+def test_the_controller_argument_wins_over_the_files(tmp_path):
+    extra = tmp_path / 'own.yaml'
+    extra.write_text('path_follower_node:\n  controller: mppi\n')
+    assert params(f'params_file:={extra}')['/path_follower_node/controller'] == 'mppi'
+    p = params(f'params_file:={extra}', 'controller:=neupan')
+    assert p['/path_follower_node/controller'] == 'neupan'
+
+
+def test_the_follower_runs_with_the_python_of_neupan(monkeypatch):
+    monkeypatch.delenv('X30_PYTHON', raising=False)
+    assert 'launch-prefix' not in roslaunch('--args', '/path_follower_node', str(LAUNCH))
+    out = roslaunch('--args', '/path_follower_node', str(LAUNCH), 'python:=/opt/venv/bin/python')
+    assert out.startswith('/opt/venv/bin/python '), out
+    monkeypatch.setenv('X30_PYTHON', '/home/ysc/x30_ws/neupan/bin/python')
+    out = roslaunch('--args', '/path_follower_node', str(LAUNCH))
+    assert out.startswith('/home/ysc/x30_ws/neupan/bin/python '), out
