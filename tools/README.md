@@ -7,6 +7,7 @@ nothing downloaded on the robot.
 |---|---|---|
 | `dr_services.sh status\|off\|on` | the navigation host (192.168.1.106) | Deep Robotics' own localization, navigation, mapping, URDF and bridge off, now and at boot, and back on |
 | `check_deps.sh [--tests] [--gui]` | the robot | what the build and the stack need, checked offline: the apt packages, the sources of x30.repos, the Livox SDK |
+| `install_neupan.sh [--venv DIR] [--wheels DIR]`, `--download DIR`, `--check` | the navigation host | NeuPAN for the `neupan` controller: a venv with PyTorch (CPU), cvxpy and NeuPAN with the patches of [neupan/](neupan) |
 | `pack_sources.sh [OUT] [--skip PATH]` | a computer with internet | x30_ros, the repositories of x30.repos and the Livox SDK in one archive (about 5 MB) |
 
 ## Deep Robotics' own autonomy
@@ -74,6 +75,27 @@ at mounting position A, (47.15, −1, 117) at B, (7.15, −1, 117) at C) rather 
 [x30_odometry/config/fast_lio.yaml](../x30_odometry/config/fast_lio.yaml) is minus that position
 (the axes are the body's in both cases). Check it before the first map:
 `rosnode info /yesense_imu_node`, and the frame of `rostopic echo -n 1 /imu/data/header`.
+
+## NeuPAN
+
+`install_neupan.sh` puts NeuPAN in a venv on the navigation host, `~/x30_ws/neupan`: the venv
+sees the system's and ROS's packages, PyTorch comes for the CPU only (about 200 MB, no CUDA),
+cvxpy, cvxpylayers and the solvers at versions that still run on Python 3.8, and NeuPAN is
+built from its `py38` branch at a pinned commit with the patches of [neupan/](neupan) (the
+holonomic kinematics). It ends with `--check`: the versions and `NeuPAN with the holonomic
+kinematics: ok`. The path follower runs with the venv's python when `X30_PYTHON` points at it
+(navigation.launch's `launch-prefix`), so the rest of the stack never loads PyTorch.
+
+```bash
+bash tools/install_neupan.sh                       # on the navigation host, with internet
+echo 'export X30_PYTHON=~/x30_ws/neupan/bin/python' >> ~/.bashrc
+bash tools/install_neupan.sh --download ~/wheels   # or: on a computer with internet ...
+bash tools/install_neupan.sh --wheels ~/wheels     # ... then on the robot, no internet
+```
+
+`--download` fetches every wheel for Python 3.8 on x86_64 (any OS with pip and git) and builds
+NeuPAN's own. A `~/.local` setuptools or numpy never leaks in (`PYTHONNOUSERSITE=1`, as for
+catkin). Without `python3-venv` it says so (`sudo apt install python3-venv`).
 
 ## Robot without internet
 
