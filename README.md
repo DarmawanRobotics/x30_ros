@@ -100,6 +100,12 @@ From the API documentation (sections 1.2 to 1.5):
 | command source | the first byte of every code: `0x31` an autonomous module (default, `command_prefix`), `0x21` a remote control terminal (the handheld) |
 | velocity | axis commands `0x31010130` (+ forward), `0x31010131` (+ right), `0x31010135` (+ turn right) at 50 Hz, obeyed in the **stepping** state and **non-manual** mode (`0x21` codes: manual mode) |
 
+**Two hosts.** On the robot the stack runs on the navigation host (192.168.1.106: the driver,
+control, the LiDAR scans, odometry, localization, mapping, navigation, health, inspection), and
+the inspection cameras on the perception host (192.168.1.105), both on the navigation host's ROS
+master: `navigation_host.launch` and `perception_host.launch`, by hand or as services under a
+watchdog with `tools/x30_host.sh` ([x30_bringup](x30_bringup/README.md#two-hosts)).
+
 **This computer must be in the motion host's `network.toml`** (its IP and port 43897, as the
 Application Manual 4.3.2 describes; restart the motion program afterwards). Otherwise the robot
 takes commands but sends no reports, and `state` says `no reports from 192.168.1.103 yet
