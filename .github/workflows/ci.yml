@@ -105,6 +105,7 @@ jobs:
         shell: bash
     env:
       PYTHONUNBUFFERED: '1'
+      PIP_CACHE_DIR: /tmp/pip-cache  # the container's home is not root's
     steps:
       - uses: actions/checkout@v4
         with:
@@ -131,7 +132,7 @@ jobs:
 
       - uses: actions/cache@v4
         with:
-          path: /github/home/.cache/pip
+          path: /tmp/pip-cache
           key: pip-neupan-${{ hashFiles('src/x30_ros/tools/install_neupan.sh') }}
 
       - name: NeuPAN

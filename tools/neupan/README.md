@@ -9,6 +9,7 @@ controller runs it; [`install_neupan.sh`](../install_neupan.sh) installs it from
 |---|---|
 | `0001-feat-holonomic-kinematics-...` | the `holonomic` kinematics: forward and sideways speed in the robot frame and the yaw rate, a heading NeuPAN tracks (its `omni` keeps the heading and moves at a speed and a direction) |
 | `0002-fix-package-the-neupan-modules` | `pyproject.toml` lists the `neupan` package, so a wheel holds it (with `py-modules` it held nothing) |
+| `0003-fix-import-gctl-only-to-generate-a-curve` | `gctl`, which imports tkinter and matplotlib, only when a curve is generated from waypoints: a path given as points (the controller's) needs neither, so a headless robot needs no `python3-tk` |
 
 They apply to the `py38` branch at `70991f0` (Python 3.8, Noetic), pinned in the install script.
 `holonomic` adds a third control value: the state stays (x, y, yaw), the MPC's controls are
