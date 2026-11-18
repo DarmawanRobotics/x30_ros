@@ -23,6 +23,11 @@ from `sites_dir` and a site name, never taken from a request. The map pair is wr
 refused on load and the `.bak` pair is used). Broken site files are notes in `site/status`,
 never a crash.
 
+A site needs no map. `create_site` creates the launch `site` at start when it is missing, an
+empty folder for its routes and tags: odometry only (x30_bringup's `odometry_only`), where the
+map frame is where the odometry started and the grid mapper stays idle. `mapping/start` still
+maps such a site later. `create_site` and `start_mapping` exclude each other.
+
 ## Nodes
 
 | Node | Role |
@@ -89,6 +94,7 @@ rosservice call /route/stop
 | `robot_params` | | the robot profile, loaded as `robot/` |
 | `sites_dir` | | the sites directory of the three nodes |
 | `site`, `start_mapping` | | the site at start; map it at start when it is new |
+| `create_site` | | create `site` at start when it is missing, without a map (odometry only) |
 | `respawn`, `output` | `true`, `screen` | |
 
 Empty arguments override nothing.
@@ -99,4 +105,4 @@ Empty arguments override nothing.
 the site store (unit); the three nodes on a private rosmaster (scans through TF into a grid,
 saving only into the mapped site, routes only while localized with stop points, the site manager
 against fake localization and mapper services: ordering, archives, a timed-out stop, corrupt
-files at boot); and the launch file's parameters.
+files at boot, a site created without a map); and the launch file's parameters.
