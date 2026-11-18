@@ -24,9 +24,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: src/x30_ros
+      # x30_inspection talks to the camera drivers of x30.repos: only their message packages
+      # are built here (the drivers are tested in their own repositories)
+      - uses: actions/checkout@v4
+        with:
+          repository: DarmawanRobotics/hikmicro_driver
+          path: src/drivers/hikmicro_driver
+      - uses: actions/checkout@v4
+        with:
+          repository: DarmawanRobotics/hertzino_driver
+          path: src/drivers/hertzino_driver
 
       - name: Dependencies
         run: |
+          touch src/drivers/hikmicro_driver/hikmicro_driver/CATKIN_IGNORE \
+            src/drivers/hertzino_driver/hertzino_driver/CATKIN_IGNORE
           source /opt/ros/noetic/setup.bash
           apt-get update -qq
           apt-get install -y -qq liburdfdom-tools > /dev/null
