@@ -15,6 +15,10 @@
                     (x30_localization)
       mapping:      the site maps, mapping sessions and routes (x30_mapping); site: the site at
                     start (empty: the last run's)
+      odometry_only: navigation without a map (with localization): FAST-LIO's start is the map
+                    origin, so the robot starts on the same spot (the dock) every time; the site is
+                    created without a map, routes are taught and repeated in that frame, tags
+                    only correct the drift (README, Odometry only)
       navigation:   the planner, route loader, path follower, avoidance and docking
                     (x30_navigation), commanding the control mux
       health:       health/status and diagnostics (x30_health), watching what is started here
@@ -30,7 +34,7 @@
                     on the scans
       sim:          x30_sim's simulated X30 in place of x30_driver, the LiDARs, the IMU and
                     FAST-LIO (odometry_method external); world, scenario: its files; site is drawn
-                    from the world unless it has a map
+                    from the world unless it has a map (never with odometry_only)
       sites_dir:    the sites of localization, mapping and navigation (empty: their files'; with
                     sim: /tmp/x30_sim/sites)
       rviz: RViz with the robot model
@@ -50,6 +54,7 @@
   <arg name="localization" default="false"/>
   <arg name="mapping" default="false"/>
   <arg name="site" default=""/>
+  <arg name="odometry_only" default="false"/>
   <arg name="sites_dir" default="$(eval '/tmp/x30_sim/sites' if arg('sim') else '')"/>
   <arg name="navigation" default="false"/>
   <arg name="health" default="false"/>
@@ -68,6 +73,9 @@
   <!-- base_link has one parent: the driver's leg odometry or the localization bridge -->
   <arg if="$(eval arg('leg_odom_tf') and arg('localization'))" name="one_parent_for_base_link"
        value="$(eval {}['leg_odom_tf and localization both publish odom -> base_link'])"/>
+  <!-- odometry only sets up the localization's frame -->
+  <arg if="$(eval arg('odometry_only') and not arg('localization'))" name="odometry_only_frame"
+       value="$(eval {}['odometry_only:=true is a mode of localization:=true'])"/>
   <!-- the simulator publishes FAST-LIO's outputs itself -->
   <arg if="$(eval arg('sim') and arg('odometry_method') != 'external')" name="sim_without_fast_lio"
        value="$(eval {}['sim:=true stands in for FAST-LIO: odometry_method:=external'])"/>
@@ -87,11 +95,14 @@
     <include file="$(find x30_sim)/launch/sim.launch">
       <arg name="world" value="$(arg world)"/>
       <arg name="scenario" value="$(arg scenario)"/>
-      <arg name="site" value="$(arg site)"/>
+      <!-- a drawn site is in the world's frame, not in the odometry start's -->
+      <arg name="site" value="$(eval '' if arg('odometry_only') else arg('site'))"/>
       <arg name="sites_dir" value="$(arg sites_dir)"/>
     </include>
     <param name="sim_robot_node/driver_ns" value="$(arg namespace)"/>
     <param if="$(arg leg_odom_tf)" name="sim_robot_node/publish_tf" value="true"/>
+    <!-- its /initialpose would put the robot on the world's frame -->
+    <param if="$(arg odometry_only)" name="sim_robot_node/initial_pose_hz" value="0.0"/>
   </group>
 
   <include file="$(find x30_description)/launch/description.launch">
@@ -110,10 +121,19 @@
   <include if="$(arg localization)" file="$(find x30_localization)/launch/localization.launch">
     <arg name="sites_dir" value="$(arg sites_dir)"/>
   </include>
+  <group if="$(arg odometry_only)">
+    <!-- after its files: map -> odom = identity once the bridge is up (never after an
+         odometry restart); nothing but tags corrects the drift, so the state stays LOCALIZED
+         and sigma only reports it -->
+    <param name="localization_node/assume_start_origin" value="true"/>
+    <param name="localization_node/estimator/max_sigma_xy" value="100.0"/>
+    <param name="localization_node/estimator/max_sigma_yaw_deg" value="180.0"/>
+  </group>
 
   <include if="$(arg mapping)" file="$(find x30_mapping)/launch/mapping.launch">
     <arg name="site" value="$(arg site)"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
+    <arg name="create_site" value="$(eval 'true' if arg('odometry_only') else '')"/>
   </include>
 
   <include if="$(arg navigation)" file="$(find x30_navigation)/launch/navigation.launch">

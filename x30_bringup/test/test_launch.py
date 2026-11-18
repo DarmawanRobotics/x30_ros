@@ -121,6 +121,24 @@ def test_sim_with_fast_lio_is_refused():
     assert 'sim:=true stands in for FAST-LIO' in out
 
 
+def test_odometry_only_takes_the_odometry_start_as_the_map_origin(tmp_path):
+    args = ('sim:=true', 'odometry_only:=true', 'site:=yard', f'sites_dir:={tmp_path}', *LAYERS)
+    params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
+    assert params['/localization_node/assume_start_origin'] is True
+    assert params['/localization_node/estimator/max_sigma_xy'] == 100.0  # LOCALIZED all along
+    assert params['/localization_node/estimator/max_sigma_yaw_deg'] == 180.0
+    assert params['/site_manager_node/create_site'] is True
+    assert params['/site_manager_node/site'] == 'yard'
+    assert params['/sim_robot_node/initial_pose_hz'] == 0.0  # not on the world's frame
+    assert not (tmp_path / 'yard').exists()  # nothing drawn from the world
+    normal = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *LAYERS))
+    assert '/localization_node/assume_start_origin' not in normal  # the dataclass default
+    assert '/localization_node/estimator/max_sigma_xy' not in normal
+    assert normal['/site_manager_node/create_site'] is False
+    out = roslaunch('--nodes', str(LAUNCH), 'odometry_only:=true', 'mapping:=true')
+    assert 'odometry_only:=true is a mode of localization:=true' in out
+
+
 def test_sites_dir_reaches_every_layer(tmp_path):
     layers = ('localization:=true', 'mapping:=true', 'navigation:=true', 'inspection:=true')
     args = ('sim:=true', 'site:=lobby', f'sites_dir:={tmp_path}', *layers)
