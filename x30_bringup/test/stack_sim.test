@@ -20,5 +20,10 @@
     <arg name="navigation" value="true"/>
     <arg name="health" value="true"/>
   </include>
+  <!-- what the nodes keep across runs (site, last route, trip) stays in this run's directory:
+       catkin runs the rostests in parallel -->
+  <param name="site_manager_node/state_file" value="$(arg sites_dir)/state/site"/>
+  <param name="path_loader_node/remember_file" value="$(arg sites_dir)/state/last_route"/>
+  <param name="odometry_monitor_node/trip/file" value="$(arg sites_dir)/state/trip.json"/>
   <test test-name="stack_sim" pkg="x30_bringup" type="sim_check.py" time-limit="300"/>
 </launch>
