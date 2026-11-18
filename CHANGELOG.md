@@ -3,6 +3,20 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.10.0)
+
+### Added
+- `tools/dr_services.sh status|off|on`: Deep Robotics' own localization, navigation and mapping
+  on the navigation host off, now (its `kill_nav.sh` / `kill_mapping.sh`, then what is left)
+  and at boot (`autorun_slam` false, the original kept), and back on; the sensor drivers, the
+  ROS master and the robot server kept, the motion and perception hosts never touched.
+- `tools/check_deps.sh`: every apt package, x30.repos source package and the Livox SDK the stack
+  needs, checked offline on the robot, with one `apt install` line for what is missing.
+- `tools/pack_sources.sh`: x30_ros, x30.repos and the Livox SDK in one archive (about 5 MB) for
+  a robot without internet; `tools/README.md` on bringing in the packages (`ssh -R` proxy,
+  `--print-uris`) and on the navigation host's IMU.
+- CI runs shellcheck on `tools/`.
+
 ## [Unreleased] (0.9.0)
 
 ### Added
