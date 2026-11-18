@@ -71,6 +71,16 @@ class Rig:
             self.cmd_pub.publish(command)
             time.sleep(0.05)
 
+    def place(self, pose: Pose2D):
+        """Put the body at pose between two simulation steps, never inside one."""
+
+        # a step running meanwhile integrates from the pose before and writes it back over
+        # this one: run as one of the node's callbacks, one at a time with the steps
+        def put():
+            self.node.sim.body.pose = pose
+
+        self.node.guard(put)()
+
     def call(self, name: str):
         """Call a Trigger service of the driver namespace (or an absolute one)."""
         name = name if name.startswith('/') else f'{self.driver}/{name}'
@@ -209,7 +219,7 @@ def test_inspect_answers_clear(rig):
 def test_driver_services_and_the_dock_tag_on_tf(rig):
     """The tag camera on TF; sit_down, charge_start, stand_up as x30_driver's (walking: no)."""
     station = rig.node.sim.station
-    rig.node.sim.body.pose = Pose2D(-4.5, 0.0, math.pi)  # facing the dock tag on the west wall
+    rig.place(Pose2D(-4.5, 0.0, math.pi))  # facing the dock tag on the west wall
     tf = rig.probe.tf
     assert wait_for(lambda: tf.lookup('base_link', 'charging_dock') is not None, 5.0)
     assert tf.lookup('base_link', 'charging_dock').matrix[0, 3] == pytest.approx(1.5, abs=0.02)
@@ -222,7 +232,7 @@ def test_driver_services_and_the_dock_tag_on_tf(rig):
     assert not rig.call('charge_start').success  # standing
     assert rig.call('sit_down').success and station.sitting
     assert not rig.call('charge_start').success  # not on the contacts
-    rig.node.sim.body.pose = station.contact
+    rig.place(station.contact)
     assert rig.call('charge_start').success and station.charging
     assert not rig.call('stand_up').success  # charging
     assert rig.call('charge_stop').success and rig.call('stand_up').success
@@ -235,7 +245,7 @@ def test_driver_services_and_the_dock_tag_on_tf(rig):
 def test_charging_is_reported_when_asked(make):
     r = make(**{'battery.report_charging': True})
     station = r.node.sim.station
-    r.node.sim.body.pose = station.contact
+    r.place(station.contact)
     assert r.call('sit_down').success and r.call('charge_start').success
     charging = BatteryState.POWER_SUPPLY_STATUS_CHARGING
     last = lambda: r.battery.last  # noqa: E731
