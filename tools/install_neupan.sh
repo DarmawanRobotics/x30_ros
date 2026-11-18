@@ -67,7 +67,7 @@ EOF
 }
 
 download() { # <dir>
-  local dir=$1 tags=(--only-binary=:all: --python-version 3.8 --implementation cp --abi cp38)
+  local dir=$1 tags=('--only-binary=:all:' --python-version 3.8 --implementation cp --abi cp38)
   mkdir -p "$dir"
   python3 -m pip download -q -d "$dir" "${tags[@]}" --platform manylinux2014_x86_64 \
     'pip<25' setuptools wheel "${PINNED[@]}"
