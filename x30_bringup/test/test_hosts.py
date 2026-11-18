@@ -63,7 +63,8 @@ def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp
     host('install', 'navigation', env=env)
     navigation = (tmp_path / 'x30-navigation.service').read_text()
     assert 'After=network-online.target jy_roscore.service' in navigation
-    assert 'X30_PYTHON=' in (tmp_path / 'etc' / 'navigation.env').read_text()
+    # no NeuPAN venv beside this checkout: X30_PYTHON stays a comment
+    assert '# X30_PYTHON=' in (tmp_path / 'etc' / 'navigation.env').read_text()
 
 
 def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
@@ -94,8 +95,10 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
         'hertzino:=false',
         'hikmicro_host:=10.0.0.9',
     ]
-    out = host('start', 'navigation', env={**env, 'X30_LAUNCH_ARGS': 'controller:=neupan'})
+    nowhere = {'X30_LAUNCH_ARGS': 'controller:=neupan', 'X30_PYTHON': str(tmp_path / 'none')}
+    out = host('start', 'navigation', env={**env, **nowhere})
     assert out.returncode == 3, out.stdout + out.stderr
+    assert 'path follower runs with the system' in out.stdout  # never a missing launch-prefix
     assert launched.read_text().split() == [
         '192.168.1.106',
         '--wait',  # Deep Robotics' master: never one of the launch's own

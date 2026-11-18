@@ -161,6 +161,11 @@ cmd_start() { # <role>
   if [ "$role" = navigation ] && [ -z "${X30_PYTHON:-}" ] && [ -x "$ws/neupan/bin/python" ]; then
     export X30_PYTHON=$ws/neupan/bin/python
   fi
+  if [ -n "${X30_PYTHON:-}" ] && [ ! -x "$X30_PYTHON" ]; then
+    # the follower's launch-prefix: a missing one would keep the follower from starting at all
+    say "no $X30_PYTHON: the path follower runs with the system's python (no NeuPAN)"
+    unset X30_PYTHON
+  fi
   read -r -a args <<< "${X30_LAUNCH_ARGS:-}"
   say "x30_ros, $role host: master $ROS_MASTER_URI, ROS_IP $ROS_IP, ${args[*]:-no arguments}"
   # the master is Deep Robotics' roscore on the navigation host: wait for it, never start one
@@ -190,7 +195,11 @@ env_file() { # <role> <user> <ws>
   say "ROS_IP=$(role_ip "$role")"
   if [ "$role" = navigation ]; then
     say "# the NeuPAN venv (tools/install_neupan.sh), for controller:=neupan"
-    say "X30_PYTHON=$ws/neupan/bin/python"
+    if [ -x "$ws/neupan/bin/python" ]; then
+      say "X30_PYTHON=$ws/neupan/bin/python"
+    else
+      say "# X30_PYTHON=$ws/neupan/bin/python"
+    fi
   else
     say "# the cameras' passwords: this file is readable by root and $2 only"
     say "HIKMICRO_PASSWORD="
