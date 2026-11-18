@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Deep Robotics' own autonomy on the X30's navigation host (192.168.1.106, ~/jy_cog): its
 # localization, navigation (move_base and the local planner) and mapping take the CPU x30_ros
-# needs and clash with it (/map, /initialpose, TF, /cmd_vel), and its URDF publisher sends the
-# frames x30_description does. Turns them off and on again; offline, on the navigation host.
+# needs and clash with it (/map, /initialpose, TF, /cmd_vel), its URDF publisher sends the
+# frames x30_description does, and its bridge (transfer) holds the UDP port of the motion host's
+# reports and drives the robot from /cmd_vel. Turns them off and on again; offline, on the
+# navigation host.
 # Kept: the sensor drivers (/livox/lidar, /imu/data), the ROS master and the robot server
 # (the controller app). Never touched: the motion host (.103) and the perception host (.105:
 # elevation map, autonomous charging and their drivers).
@@ -12,7 +14,7 @@ usage() {
   cat <<'EOF'
 usage: dr_services.sh status|off|on [--dry-run] [--force]
   status   autorun_slam, the Deep Robotics processes, the busiest, the report port, boot starters
-  off      stop the localization, navigation, mapping and URDF now, and keep them off at boot
+  off      stop the localization, navigation, mapping, URDF and bridge now; autorun_slam false
   on       autorun_slam as it was before off (back from the next boot)
   --dry-run  print what would be done, change nothing
 from a laptop: ssh ysc@192.168.1.106 'bash -s -- off' < tools/dr_services.sh
@@ -35,7 +37,7 @@ RECORDER=$JY/rosbag_recorder/scripts
 # shell runs, the launch file), never by its arguments; lower case, KEEP wins over STOP, the
 # rest is only listed. A process with no program there (the robot_state_publisher a wrapper
 # script runs, a roslaunch's nodes) belongs to its nearest ancestor that has one.
-STOP='^(localization|nav|planner|mapping|slam)/|locali[sz]ation|location|navigation|move_base|planner|slam|mapping|player|record|rviz|pcd2map|occ_|(^|/)urdf'
+STOP='^(localization|nav|planner|mapping|slam|transfer)/|locali[sz]ation|location|navigation|move_base|planner|slam|mapping|player|record|rviz|pcd2map|occ_|(^|/)urdf|message_transformer'
 KEEP='livox|lidar|yesense|(^|[/_])imu|robot_server|broker|rosmaster|roscore|rosout'
 REPORT_PORT=43897  # x30_driver's local_port, where the motion host's reports arrive
 DRY=0
@@ -242,7 +244,7 @@ cmd_status() {
   [ -f "$BACKUP" ] && before=" (before x30_ros: $(tr -d ' \t\r\n' < "$BACKUP"))"
   say "jy_cog: $JY"
   say "autorun_slam: $(autorun)$before"
-  list stop "Deep Robotics autonomy and URDF (stopped by off)"
+  list stop "Deep Robotics autonomy, URDF and bridge (stopped by off)"
   list keep "kept (sensor drivers, ROS master, robot server)"
   list other "other jy_cog processes (left alone)"
   say "load $(cut -d' ' -f1-3 /proc/loadavg) on $(nproc) cores; busiest:"

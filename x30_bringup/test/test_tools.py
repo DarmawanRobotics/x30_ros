@@ -90,7 +90,7 @@ def test_status_sorts_the_jy_cog_processes(jy):
 
 
 def test_the_program_decides_never_its_arguments(jy):
-    """A wrapper's arguments (livox) never keep it; the planner and the URDF are autonomy."""
+    """A wrapper's arguments (livox) never keep it; planner, URDF and bridge are autonomy."""
     root, _, spawn = jy
     wrapper = spawn('localization/scripts/localization.sh', 'false', 'livox')
     lidar = spawn('drivers/scripts/lidar_driver.sh', 'livox')
@@ -104,10 +104,9 @@ def test_the_program_decides_never_its_arguments(jy):
     assert out.returncode == 0, out.stdout + out.stderr
     autonomy, rest = out.stdout.split('kept (')
     kept, other = rest.split('other jy_cog')
-    for process in (wrapper, planner, plan, urdf):
+    for process in (wrapper, planner, plan, urdf, bridge):
         assert f'{process.pid} ' in autonomy, out.stdout
     assert f'{lidar.pid} ' in kept and f'{imu.pid} ' in kept, out.stdout
-    assert f'{bridge.pid} ' in other.split('load ')[0], out.stdout
     assert f'{monitor.pid} ' in other.split('load ')[0], out.stdout
     assert re.search(r"udp 43897 \(x30_driver's reports\): (free|in use|unknown)", out.stdout)
 
@@ -127,9 +126,9 @@ def test_off_stops_the_autonomy_now_and_at_boot_and_keeps_the_drivers(jy):
     assert (conf / 'autorun_slam').read_text() == 'false\n'  # the file's own format kept
     assert (conf / 'autorun_slam.x30_backup').read_text() == 'true\n'
     assert log.read_text().split() == ['kill_nav.sh', 'kill_mapping.sh']  # Deep Robotics' own
-    stopped = (nav, mapping, wrapper, planner)
+    stopped = (nav, mapping, wrapper, planner, bridge)
     assert wait_until(lambda: all(p.poll() is not None for p in stopped))
-    assert driver.poll() is None and bridge.poll() is None and monitor.poll() is None
+    assert driver.poll() is None and monitor.poll() is None
     assert 'still running:\n  none' in out.stdout
 
 
