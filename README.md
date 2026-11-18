@@ -178,6 +178,17 @@ rosservice call /navigation/start
 rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
 ```
 
+Or without a map, like HotDog and Pashupati: the odometry start (the dock) is the map origin,
+routes are taught and repeated in that frame, tags only correct the drift
+([Odometry only](x30_bringup/README.md#odometry-only)):
+
+```bash
+roslaunch x30_bringup bringup.launch control:=true perception:=true odometry:=true \
+    localization:=true mapping:=true navigation:=true odometry_only:=true site:=gardu-a
+rosservice call /route/start                        # walk the route, then
+rosservice call /route/stop
+```
+
 ## Interface
 
 Under the namespace (`/x30/` by default). Details in [x30_driver](x30_driver/README.md).

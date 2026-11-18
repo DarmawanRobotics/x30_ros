@@ -22,6 +22,9 @@ roslaunch x30_bringup bringup.launch params_file:=$HOME/x30_driver_params.yaml r
 roslaunch x30_bringup bringup.launch control:=true perception:=true leg_odom_tf:=true
 roslaunch x30_bringup bringup.launch control:=true perception:=true \
     odometry:=true localization:=true mapping:=true site:=gardu-a navigation:=true
+# navigation without a map: the odometry start (the dock) is the origin (Odometry only)
+roslaunch x30_bringup bringup.launch control:=true perception:=true odometry:=true \
+    localization:=true mapping:=true navigation:=true odometry_only:=true site:=gardu-a
 # the same stack on the simulated X30, its site drawn from the world
 roslaunch x30_bringup bringup.launch sim:=true site:=mall control:=true perception:=true \
     odometry:=true localization:=true mapping:=true navigation:=true health:=true rviz:=true
@@ -53,6 +56,7 @@ else may publish the driver's `cmd_vel` any more.
 | `odometry`, `odometry_method` | `false`, `fast_lio` (`external` with `sim`) | FAST-LIO behind its start gate and the odometry monitor (x30_odometry); `external`: another estimator publishes `/Odometry` |
 | `localization` | `false` | `map` → `odom` and the bridge of FAST-LIO into `odom` → `base_link` (x30_localization) |
 | `mapping`, `site` | `false`, empty | the site maps, mapping sessions and routes (x30_mapping); the site at start |
+| `odometry_only` | `false` | navigation without a map, with `localization` ([Odometry only](#odometry-only)): FAST-LIO's start is the map origin, `site` is created without a map, the state stays `LOCALIZED`; with `sim` nothing is drawn from the world and the simulator sends no `/initialpose` |
 | `sites_dir` | empty (`/tmp/x30_sim/sites` with `sim`) | the sites of localization, mapping and navigation; empty: their files' (`~/x30/map`) |
 | `navigation` | `false` | the planner, route loader, path follower, avoidance and docking (x30_navigation), commanding the control mux; the robot's battery and odometry under `namespace` |
 | `health` | `false` | `health_monitor_node` (x30_health), told the nodes, sensors and states of the layers started here; a missing node is an error (speed scale 0), so the inspection and its cameras are not among them |
@@ -84,6 +88,52 @@ The driver publishes no TF by default (`publish_tf: false`): `odom` → `base_li
 the odometry or localization in use; `leg_odom_tf:=true` hands it to the driver. With
 `localization:=true` the tree is `map` → `odom` → `camera_init` → `body` → `base_link`, and the
 launch refuses `leg_odom_tf:=true` (`base_link` would have two parents).
+
+## Odometry only
+
+`odometry_only:=true` walks taught routes without a map, like HotDog and Pashupati. FAST-LIO's
+start is the map origin (localization's `assume_start_origin`), the site is created without a
+map (the site manager's `create_site`), routes are taught and repeated in that frame, and
+nothing is mapped: the grid mapper stays idle. It is a mode of `localization:=true`.
+
+```bash
+roslaunch x30_bringup bringup.launch control:=true perception:=true odometry:=true \
+    localization:=true mapping:=true navigation:=true health:=true \
+    odometry_only:=true site:=gardu-a
+rostopic echo -n 1 /localization/status    # LOCALIZED, source origin, once FAST-LIO runs
+# teach: walk the route, a stop point wherever the robot inspects
+rosservice call /route/start
+rosservice call /route/mark_stop_point "{dwell_sec: 10.0}"
+rosservice call /route/stop                # <sites_dir>/gardu-a/routes/<date>_<time>.csv
+# repeat: on the route's start, in AUTO
+rosservice call /navigation/load_path "{path: gardu-a/routes/<date>_<time>.csv}"
+rosservice call /navigation/start
+```
+
+Walk the route on the X30's handheld (manual mode is a takeover the driver latches: hand back
+with `rosservice call /x30/non_manual_mode` before the repeat) or through the control mux
+(`control/set_mode` remote, `control/remote/<source>/cmd_vel`, then `control/set_mode` auto).
+
+- **Start on the same spot.** The map frame is where FAST-LIO started: boot the robot, and so
+  start FAST-LIO behind its gate, on the same spot every time (the dock), facing the same way.
+  One degree off at the start is 1.7 cm per metre on every route (0.5 m at 30 m).
+- **Only tags correct the drift.** Without a map the error grows with the distance walked; the
+  state stays `LOCALIZED` (`max_sigma_xy` 100 m, `max_sigma_yaw_deg` 180°) and
+  `localization/status` reports the drift as sigma. Keep the rounds short, or record tags along
+  the routes with a tag detector running (x30_perception's `fiducials` on a calibrated camera):
+  `localization/record_tags` with a tag in view, best near the start where the drift is small;
+  seen again on later rounds, they correct `map` → `odom`.
+- **An odometry restart moves the origin.** FAST-LIO starting over (`odometry/restarted`) drops
+  localization to `NONE` and pauses the follower. Walk the robot back to the start spot and give
+  that spot as the origin:
+  `rostopic pub -1 /initialpose geometry_msgs/PoseWithCovarianceStamped '{header: {frame_id: map}, pose: {pose: {orientation: {w: 1.0}}}}'`
+  (a recorded tag in view relocalizes too). `localization/assume_origin` takes FAST-LIO's start
+  as the origin, which is right only while FAST-LIO has run since the start spot; a respawned
+  `localization_node` does the same.
+- **No planner.** `planner/go_to` plans on a map and refuses without one. Routes, stop points
+  with their inspection, avoidance, the protective field and docking need none.
+
+A site can still be mapped later (`mapping/start`), in this frame.
 
 ## Robot profile
 
@@ -127,11 +177,19 @@ simulator's `/initialpose`, walks to a goal around a corner (`planner/go_to`), i
 detector sees the tag on the east wall on the way, and it arrives within 0.15 m of the goal by
 its true pose (0.25 m without the tag), without touching anything.
 
+`stack_odometry.test` runs the same stack with `odometry_only:=true`: the site is created
+without a map and the robot is localized at the odometry start (the map origin, not the world's
+frame); the operator teaches a 3 m route on the stick in REMOTE with a stop point at its end,
+walks back, and the follower repeats it in AUTO to within 0.15 m of the taught stop by the true
+poses, localized all along. Both sim tests keep what the nodes remember across runs (site, last
+route, trip) in their run's directory.
+
 `test_launch.py` checks the layers behind their arguments (`roslaunch --nodes`, `--dump-params`):
 the robot alone by default, every layer when asked, the leg odometry topic following the
 namespace, `leg_odom_tf` with `localization` refused, health expecting exactly the nodes
-started, the inspection as the follower's hook and not expected by health, and `sim` in place of
-the driver and FAST-LIO with `sites_dir` and `reports_dir` reaching every layer.
+started, the inspection as the follower's hook and not expected by health, `sim` in place of
+the driver and FAST-LIO with `sites_dir` and `reports_dir` reaching every layer, and
+`odometry_only`'s parameters (refused without `localization`).
 
 `test_tools.py` checks the robot tools of [tools/](../tools/README.md): Deep Robotics' autonomy
 off and on against a fake jy_cog, the offline dependency check and its package lists, and the

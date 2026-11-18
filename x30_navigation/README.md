@@ -11,7 +11,7 @@ and e-stop always apply.
 
 | Node | Role |
 |---|---|
-| `planner_node` | `planner/go_to {x, y, yaw}`: plan on `/map` with a footprint costmap, hand the path to the follower (`navigation/set_path`, `navigation/start`), replan around blockages |
+| `planner_node` | `planner/go_to {x, y, yaw}`: plan on `/map` with a footprint costmap, hand the path to the follower (`navigation/set_path`, `navigation/start`), replan around blockages; refused for a site without a map (an empty `/map`) |
 | `path_loader_node` | `navigation/load_path`: read a route CSV inside `sites_dir`, resample and smooth it (stop points never move), publish it latched |
 | `path_follower_node` | follow the route: join it, follow, final x / y / yaw approach, stop points with inspection hooks, pause reasons; publishes `control/nav_cmd_vel` |
 | `obstacle_avoidance_node` | a reactive policy on `perception/sector_scan` around the direction of travel → `navigation/avoidance` (heading offset, speed scale, emergency stop) |
