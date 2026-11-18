@@ -19,7 +19,7 @@ TF, and its `/cmd_vel` reaches the motion host through the perception host's ele
 navigation mode.
 
 ```bash
-bash tools/dr_services.sh status   # autorun_slam, what runs, the busiest processes
+bash tools/dr_services.sh status   # autorun_slam, what runs, the busiest, port 43897, boot starters
 bash tools/dr_services.sh off      # stop it now, and not again at boot
 bash tools/dr_services.sh on       # autorun_slam back as it was (then reboot, or start_nav.sh)
 ssh ysc@192.168.1.106 'bash -s -- off' < tools/dr_services.sh   # the same from a laptop
@@ -28,24 +28,37 @@ ssh ysc@192.168.1.106 'bash -s -- off' < tools/dr_services.sh   # the same from 
 `off` sets `~/jy_cog/system/conf/autorun_slam` to `false` (the original kept as
 `autorun_slam.x30_backup`; read at the next boot of the navigation host, manual 3.2), runs Deep
 Robotics' own `kill_nav.sh` and `kill_mapping.sh` (`stop_record.sh` while a recording runs), and
-stops what of jy_cog still runs of localization, navigation, mapping, the player, the recorder
-or RViz: SIGINT, then TERM, then KILL. `--dry-run` prints all of it and changes nothing; `on`
-restores `autorun_slam` from the backup.
+stops what of jy_cog still runs of localization, navigation (`move_base` and the local planner:
+`plan.sh`, `local_planner.sh`, `pcl_concatenate`, `localPlanner`), mapping, the player, the
+recorder, RViz and Deep Robotics' URDF publisher (`drivers/scripts/urdf.sh`: x30_description
+publishes those frames, and a frame with two publishers jumps between them). All of them at
+once: SIGINT, then TERM, then KILL, so no wrapper script restarts its node. A process is judged
+by its program inside jy_cog (the binary, the script a shell runs, the launch file), never by
+its arguments: `localization.sh false livox` is the localization. `--dry-run` prints all of it
+and changes nothing; `on` restores `autorun_slam` from the backup.
 
 Kept: the navigation host's sensor drivers (`/livox_lidar_publisher2`, `/yesense_imu_node`:
 `/livox/lidar`, `/lidar_points`, `/imu/data`), its ROS master and the robot server
-(`robot_server`, formerly `broker`: the controller app). Never touched: the motion host
-(192.168.1.103: the walking) and the perception host (192.168.1.105: the elevation map,
-autonomous charging on UDP 3333 and their drivers); x30_driver uses both, and the script
-refuses to run there.
+(`robot_server`, formerly `broker`: the controller app). Listed under "other", left running:
+`transfer` (`udp_receiver`, `udp_sender`: Deep Robotics' bridge between ROS and the robot) and
+`cpu_monitor`; `rosnode info /udp_sender` shows what the bridge takes to the robot, so publish
+nothing there that Deep Robotics' navigation used to (`/cmd_vel`): it would pass the control
+mux. Never touched: the motion host (192.168.1.103: the walking) and the perception host
+(192.168.1.105: the elevation map, autonomous charging on UDP 3333 and their drivers);
+x30_driver uses both, and the script refuses to run there.
+
+`status` also tells who holds UDP 43897, where x30_driver takes the motion host's reports
+(`free`, or the process: then give the driver another `local_port` and list that port in the
+motion host's `network.toml`), and which files start jy_cog at boot (`file:` lines).
 
 After `off`:
 
 1. `rostopic hz /livox/lidar /imu/data`: still 10 Hz and 200 Hz.
 2. `rostopic info /map` and `rostopic info /initialpose`: no Deep Robotics node left among the
    publishers and subscribers.
-3. `dr_services.sh status` again: nothing under "Deep Robotics autonomy". A heavy process still
-   listed under "other jy_cog processes" is left alone on purpose: look at it first.
+3. `dr_services.sh status` again: nothing under "Deep Robotics autonomy and URDF". A heavy
+   process still listed under "other jy_cog processes" is left alone on purpose: look at it
+   first.
 4. The controller app's navigation recorder needs Deep Robotics' navigation; x30_mapping's
    routes replace it. Charging (`charge_start`) belongs to the perception host and stays.
 
@@ -84,7 +97,10 @@ at mounting position A, (47.15, −1, 117) at B, (7.15, −1, 117) at C) rather 
    lists every missing package with one `apt install` line, a source package missing or there
    twice (a copy of hikmicro_driver next to the archive's: catkin builds one), and the Livox
    SDK. Where the robot has a rosdep cache, `rosdep check` runs too. `--tests` adds what
-   `catkin_make run_tests` needs, `--gui` RViz.
+   `catkin_make run_tests` needs, `--gui` RViz. A setuptools that `pip install --user` put in
+   `~/.local` stops catkin (`module 'importlib_metadata' has no attribute 'EntryPoints'`):
+   `check_deps.sh` warns, and its build line then starts with `PYTHONNOUSERSITE=1`, which leaves
+   `~/.local` out without touching it.
 
 3. Missing packages: borrow the laptop's internet through SSH (the cable is enough, no Wi-Fi):
 
