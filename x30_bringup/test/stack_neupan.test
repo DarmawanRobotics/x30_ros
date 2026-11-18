@@ -1,0 +1,26 @@
+<launch>
+  <!--
+    The patrol loop with the NeuPAN controller on the simulated X30 (x30_sim): the person
+    crossing scenario puts a box on the route in the east corridor, which NeuPAN walks around by
+    itself. Needs NeuPAN: the path follower runs with $X30_PYTHON (tools/install_neupan.sh), and
+    CMake registers this test only when X30_PYTHON is set. Every run draws its site anew.
+  -->
+  <arg name="sites_dir" default="/tmp/x30_stack_neupan/$(anon sites)"/>
+  <include file="$(find x30_bringup)/launch/bringup.launch">
+    <arg name="sim" value="true"/>
+    <arg name="scenario" value="person_crossing"/>
+    <arg name="site" value="mall"/>
+    <arg name="sites_dir" value="$(arg sites_dir)"/>
+    <arg name="control" value="true"/>
+    <arg name="perception" value="true"/>
+    <arg name="odometry" value="true"/>
+    <arg name="localization" value="true"/>
+    <arg name="mapping" value="true"/>
+    <arg name="navigation" value="true"/>
+    <arg name="controller" value="neupan"/>
+  </include>
+  <param name="site_manager_node/state_file" value="$(arg sites_dir)/state/site"/>
+  <param name="path_loader_node/remember_file" value="$(arg sites_dir)/state/last_route"/>
+  <param name="odometry_monitor_node/trip/file" value="$(arg sites_dir)/state/trip.json"/>
+  <test test-name="stack_neupan" pkg="x30_bringup" type="neupan_check.py" time-limit="420"/>
+</launch>
