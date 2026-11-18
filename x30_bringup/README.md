@@ -39,6 +39,59 @@ With `control:=true` the control mux is the only publisher of `/x30/cmd_vel`: na
 publishes `control/nav_cmd_vel`, an operator `control/remote/<source>/cmd_vel`, and nothing
 else may publish the driver's `cmd_vel` any more.
 
+## Two hosts
+
+The X30 Pro has two computers for software (Application Manual chapter 1): the **navigation
+host** (192.168.1.106, the intelligent controller on the back, x86 with an NVIDIA GPU) and the
+**perception host** (192.168.1.105, inside the body, an RK3588). Both are on the robot's switch
+(192.168.1.x) and on the LiDAR switch (192.168.2.x), and both run Deep Robotics' LiDAR and IMU
+drivers. The stack is split by what each part needs to be next to:
+
+| | navigation host (.106): `navigation_host.launch` | perception host (.105): `perception_host.launch` |
+|---|---|---|
+| runs | the driver, `robot_state_publisher`, the control mux, the LiDAR scans, FAST-LIO, localization, mapping, navigation (NeuPAN with `controller:=neupan`), health, the inspection with its sites and reports | the inspection cameras: hikmicro_driver (PTZ, RTSP video), hertzino_driver |
+| why | the motion host reports to its UDP 43897; the protective field stays on the same computer as the LiDAR driver and the mux, so the network between the hosts never blinds it; FAST-LIO and NeuPAN want its x86 cores | decoding the cameras' video off the computer that drives; the inspection calls the cameras' services, small messages |
+| ROS | the robot's master (Deep Robotics' roscore, kept by `dr_services.sh`), `ROS_IP=192.168.1.106` | the navigation host's master, `ROS_IP=192.168.1.105`; Deep Robotics' own master here stays for its own nodes |
+| Deep Robotics | `tools/dr_services.sh off`: its autonomy, URDF and bridge off | untouched: the elevation map, charging and its drivers |
+| build | the whole workspace | `tools/check_deps.sh --perception` prints the build line: x30_utils, x30_bringup and the drivers only |
+
+`tools/x30_host.sh` sets each host's ROS network (`env`), checks that the two see each other
+(`check`: the master, the other host, every registered node's address, the clock), and runs
+each host's launch file by hand or as a systemd service under a watchdog (`start`, `install`):
+
+```bash
+# both hosts: ~/x30_ws with x30_ros and x30.repos in src
+eval "$(bash ~/x30_ws/src/x30_ros/tools/x30_host.sh env navigation)"   # .105: perception
+bash ~/x30_ws/src/x30_ros/tools/x30_host.sh check
+roslaunch x30_bringup navigation_host.launch odometry_only:=true site:=gardu controller:=neupan
+roslaunch --wait x30_bringup perception_host.launch                    # on .105, after the env
+
+# or as a service, started at boot: settings in /etc/x30/<role>.env
+sudo bash ~/x30_ws/src/x30_ros/tools/x30_host.sh install navigation    # .105: perception
+sudo systemctl start x30-navigation && journalctl -u x30-navigation -f
+```
+
+**The watchdog** (`tools/x30_watchdog.py`, the service's main process): it starts the launch
+file, tells systemd ready once the master answers and the critical nodes do (on the navigation
+host: the driver, the control mux, the LiDAR scans and the path follower), then checks them every
+5 s and pings systemd's watchdog (`WatchdogSec=60`). The service restarts (`Restart=on-failure`)
+when the master restarted (its nodes are lost with it: the perception host follows the
+navigation host's restarts this way), when the master or a critical node stays away longer than
+45 s (a respawn takes seconds), when the start takes over 4 min, when roslaunch exits, or when
+the watchdog itself hangs. Meanwhile the robot stands: the control mux stops a command that is
+not renewed, and the motion host stops taking commands without the driver's heartbeat. On the navigation
+host the service first runs `dr_services.sh off` until Deep Robotics' boot has settled (a round
+30 s after the first finds nothing to stop).
+
+Not tried on the robot yet: the boot order against Deep Robotics' services (`systemctl cat
+jy_roscore.service jy_core.service jy_cog.service` shows what they start) and the clocks of the
+two hosts (`check`'s `clock` line).
+
+Nodes started by others without `ROS_IP` (Deep Robotics' drivers on the navigation host
+register as `ysc-perception`) are reachable from the other host only if that name resolves
+there: `check` lists them, and a line `192.168.1.106 ysc-perception` in the perception host's
+`/etc/hosts` fixes it.
+
 ## Launch
 
 `launch/bringup.launch`:
@@ -188,9 +241,20 @@ route, trip) in their run's directory.
 the robot alone by default, every layer when asked, the leg odometry topic following the
 namespace, `leg_odom_tf` with `localization` refused, health expecting exactly the nodes
 started, the inspection as the follower's hook and not expected by health, `sim` in place of
-the driver and FAST-LIO with `sites_dir` and `reports_dir` reaching every layer, and
-`odometry_only`'s parameters (refused without `localization`).
+the driver and FAST-LIO with `sites_dir` and `reports_dir` reaching every layer,
+`odometry_only`'s parameters (refused without `localization`), the controller reaching the path
+follower, and each host's launch file: the navigation host all but the cameras (and every node
+its watchdog watches), the perception host the cameras at their addresses (stand-in packages
+for the drivers).
+
+`stack_neupan.test` (registered when `X30_PYTHON` points at NeuPAN's venv) walks the patrol loop
+of x30_sim with `controller:=neupan`: the person crossing scenario puts a box on the route, which
+the robot walks around (path shift picks the side, NeuPAN keeps the clearance) back to the
+loop's end within 0.3 m, without touching anything.
 
 `test_tools.py` checks the robot tools of [tools/](../tools/README.md): Deep Robotics' autonomy
-off and on against a fake jy_cog, the offline dependency check and its package lists, and the
-source archive.
+off and on against a fake jy_cog, the offline dependency check (the perception host's too) and
+its package lists, and the source archive. `test_hosts.py`: `x30_host.sh`'s network, service
+file and start, and the watchdog against a fake master and node: ready once the nodes answer,
+a restart when the master restarts, when a critical node stays away longer than the grace or
+the start never comes up, and the launch's exit passed on.
