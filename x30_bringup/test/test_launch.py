@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import subprocess
 
@@ -167,3 +168,66 @@ def test_the_controller_reaches_the_path_follower():
     )
     assert chosen['/path_follower_node/controller'] == 'neupan'
     assert chosen['/path_follower_node/neupan/dune_checkpoint'].endswith('models/dune_x30.pth')
+
+
+HOSTS = Path(__file__).resolve().parents[1] / 'launch'
+
+
+def test_the_navigation_host_runs_all_but_the_cameras():
+    nodes = roslaunch('--nodes', str(HOSTS / 'navigation_host.launch')).split()
+    for node in (
+        '/x30/x30_driver',
+        '/control_mux_node',
+        '/lidar_sector_node',
+        '/fast_lio/fast_lio',
+        '/localization_node',
+        '/site_manager_node',
+        '/path_follower_node',
+        '/health_monitor_node',
+        '/inspection_node',
+    ):
+        assert node in nodes, node
+    assert not [n for n in nodes if n.startswith(('/hikmicro', '/hertzino'))]
+
+
+def test_the_navigation_host_passes_its_arguments(tmp_path):
+    args = ('odometry_only:=true', 'site:=gardu', 'controller:=neupan', 'inspection:=false')
+    out = roslaunch('--dump-params', str(HOSTS / 'navigation_host.launch'), *args)
+    params = yaml.safe_load(out)
+    assert params['/path_follower_node/controller'] == 'neupan'
+    assert params['/site_manager_node/site'] == 'gardu'
+    assert params['/site_manager_node/create_site'] is True
+    assert params['/localization_node/assume_start_origin'] is True
+    assert '/inspection_node/sites_dir' not in params
+
+
+def fake_driver(root: Path, name: str, node: str):
+    """A package with a launch file like the driver's: one node, its host as a parameter."""
+    package = root / name
+    (package / 'launch').mkdir(parents=True)
+    (package / 'package.xml').write_text(
+        f'<package format="3"><name>{name}</name><version>0.0.0</version>'
+        '<description>fake</description><maintainer email="a@b.c">a</maintainer>'
+        '<license>Apache-2.0</license></package>'
+    )
+    namespace = name.split('_', maxsplit=1)[0]
+    (package / 'launch' / f'{namespace}.launch').write_text(
+        f'<launch><arg name="host" default=""/><arg name="password" default=""/>'
+        f'<node pkg="{name}" type="{node}" name="{node}" ns="{namespace}">'
+        '<param name="host" value="$(arg host)"/></node></launch>'
+    )
+
+
+def test_the_perception_host_runs_the_cameras_at_their_addresses(tmp_path, monkeypatch):
+    fake_driver(tmp_path, 'hikmicro_driver', 'hikmicro_ptz_node')
+    fake_driver(tmp_path, 'hertzino_driver', 'hertzino_node')
+    monkeypatch.setenv('ROS_PACKAGE_PATH', f'{tmp_path}:{os.environ["ROS_PACKAGE_PATH"]}')
+    launch = str(HOSTS / 'perception_host.launch')
+    nodes = roslaunch('--nodes', launch).split()
+    assert nodes == ['/hikmicro/hikmicro_ptz_node', '/hertzino/hertzino_node']
+    params = yaml.safe_load(roslaunch('--dump-params', launch, 'hikmicro_host:=10.0.0.9'))
+    assert params['/hikmicro/hikmicro_ptz_node/host'] == '10.0.0.9'
+    assert params['/hertzino/hertzino_node/host'] == '192.168.2.204'
+    assert roslaunch('--nodes', launch, 'hertzino:=false').split() == [
+        '/hikmicro/hikmicro_ptz_node'
+    ]
