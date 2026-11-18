@@ -107,6 +107,7 @@ def test_the_program_decides_never_its_arguments(jy):
         assert f'{process.pid} ' in autonomy, out.stdout
     assert f'{lidar.pid} ' in kept and f'{imu.pid} ' in kept, out.stdout
     assert f'{bridge.pid} ' in other.split('load ')[0], out.stdout
+    assert re.search(r"udp 43897 \(x30_driver's reports\): (free|in use|unknown)", out.stdout)
 
 
 def test_off_stops_the_autonomy_now_and_at_boot_and_keeps_the_drivers(jy):

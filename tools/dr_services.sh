@@ -11,7 +11,7 @@ set -u
 usage() {
   cat <<'EOF'
 usage: dr_services.sh status|off|on [--dry-run] [--force]
-  status   autorun_slam, the Deep Robotics processes, the busiest processes
+  status   autorun_slam, the Deep Robotics processes, the busiest, the report port, boot starters
   off      stop the localization, navigation, mapping and URDF now, and keep them off at boot
   on       autorun_slam as it was before off (back from the next boot)
   --dry-run  print what would be done, change nothing
@@ -36,6 +36,7 @@ RECORDER=$JY/rosbag_recorder/scripts
 # rest is only listed
 STOP='^(localization|nav|planner|mapping|slam)/|locali[sz]ation|location|navigation|move_base|planner|slam|mapping|player|record|rviz|pcd2map|occ_|(^|/)urdf'
 KEEP='livox|lidar|yesense|(^|[/_])imu|robot_server|broker|rosmaster|roscore|rosout'
+REPORT_PORT=43897  # x30_driver's local_port, where the motion host's reports arrive
 DRY=0
 FORCE=0
 FAILED=0
@@ -128,6 +129,19 @@ stop_all() {  # the autonomy at once: SIGINT (a roslaunch shuts its nodes down),
   FAILED=1
 }
 
+udp_holder() {  # <port>: free, or the process that has it
+  local line
+  command -v ss > /dev/null || { printf 'unknown (no ss)'; return 0; }
+  line=$(ss -H -ulpn "sport = :$1" 2>/dev/null | head -n 1)
+  if [ -z "$line" ]; then
+    printf 'free'
+  elif [[ $line == *users:* ]]; then
+    printf 'in use by %s' "$(sed 's/.*users:((//; s/)).*//' <<< "$line")"
+  else
+    printf 'in use by another user (sudo ss -ulpn)'
+  fi
+}
+
 check_host() {
   if [ ! -d "$JY" ]; then
     say "no $JY: run this on the navigation host (192.168.1.106), or set JY_COG"
@@ -156,12 +170,16 @@ cmd_status() {
   list other "other jy_cog processes (left alone)"
   say "load $(cut -d' ' -f1-3 /proc/loadavg) on $(nproc) cores; busiest:"
   ps -eo pid,pcpu,pmem,comm --sort=-pcpu | head -n 9 | sed 's/^/  /'
+  say "udp $REPORT_PORT (x30_driver's reports): $(udp_holder "$REPORT_PORT")"
   starters=$({
     systemctl list-units --type=service --state=running --no-pager --no-legend 2>/dev/null |
       grep -iE 'jy|ysc|robot|deep|slam|nav' | awk '{print "  systemd: " $1}'
     find "$(home_of_user)/.config/autostart" -maxdepth 1 -name '*.desktop' \
       -printf '  autostart: %f\n' 2>/dev/null
     crontab -l 2>/dev/null | grep '@reboot' | sed 's/^/  cron: /'
+    grep -rlsI jy_cog /etc/systemd/system /lib/systemd/system /etc/xdg/autostart /etc/rc.local \
+      /etc/profile.d "$(home_of_user)/.config/autostart" "$(home_of_user)/.config/systemd" |
+      sed 's/^/  file: /'
   })
   if [ -n "$starters" ]; then say "started at boot by:"; say "$starters"; fi
   return 0
