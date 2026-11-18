@@ -161,7 +161,7 @@ def test_pure_pursuit_steers_toward_the_carrot():
     assert left.wz > 0.0 and left.vx == pytest.approx(0.4)
 
 
-def test_a_controller_that_avoids_takes_over_from_path_shift_and_reactive():
+def test_a_controller_that_avoids_takes_over_from_reactive_not_from_path_shift():
     from x30_navigation.core.config.follower import FollowerConfig
     from x30_navigation.core.controllers.holonomic import HolonomicController
     from x30_navigation.core.follower.tracker import Tracker
@@ -177,5 +177,5 @@ def test_a_controller_that_avoids_takes_over_from_path_shift_and_reactive():
         assert plain.shifting == (mode == 'path_shift')
         assert plain.reacting == (mode == 'reactive')
         avoiding = Tracker(route, RobotProfile(), config, Avoiding(None, LIMITS))
-        assert not avoiding.shifting and not avoiding.reacting
-        assert avoiding.offset == 0.0
+        assert avoiding.shifting == (mode == 'path_shift')  # the side to pass on
+        assert not avoiding.reacting  # its own clearance, no heading biases on top

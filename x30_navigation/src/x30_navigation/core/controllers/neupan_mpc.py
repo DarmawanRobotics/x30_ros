@@ -9,8 +9,9 @@ strafe uses NeuPAN's 'diff'.
 
 NeuPAN is an optional dependency (tools/install_neupan.sh): this module imports it only when the
 controller is built, and the build fails with the reason when NeuPAN or a model for the
-footprint is missing. The controller avoids by itself, so the follower's path shift and reactive
-avoidance stand by; the guard and the control mux's protective field stay as they are.
+footprint is missing. The controller keeps its own clearance, so reactive avoidance stands by;
+path shift still picks the side to pass an obstacle on (NeuPAN alone stands before one right on
+the route, with no side to prefer). The guard and the control mux's protective field stay.
 """
 
 from __future__ import annotations

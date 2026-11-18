@@ -168,3 +168,31 @@ def test_neupan_without_strafing_plans_like_a_differential_robot():
     _, commands, _, _, finished = drive(route_of(straight_route(0.0, 4.0)), limits=diff)
     assert finished
     assert all(c.vy == 0.0 for c in commands)
+
+
+def test_the_follower_with_neupan_passes_a_box_on_the_route_on_path_shifts_side():
+    need_neupan()
+    from rig import Rig, person
+    from sim import line
+
+    from x30_navigation.core.config.follower import FollowerConfig
+    from x30_utils.robot import Footprint, Limits, RobotProfile
+
+    robot = RobotProfile(
+        name='x30',
+        footprint=Footprint(front=0.5, rear=0.5, half_width=0.235),
+        limits=Limits(max_vx=0.75, max_vy=0.15, max_wz=0.45, max_accel=0.5, max_yaw_accel=1.5),
+    )
+    config = FollowerConfig(require_localization=False, controller='neupan')
+    rig = Rig(route_of(straight_route(-3.0, 4.0)), config=config, robot=robot)
+    controller = CONTROLLERS.create('neupan', NeupanConfig(dune_checkpoint=MODEL), X30)
+    rig.follower.set_controller('neupan', controller)
+    rig.sectors = 72  # the safety scan's 5 deg sectors
+    corridor = np.vstack([line(-4.0, 5.0, -1.5), line(-4.0, 5.0, 1.5)])  # 3 m wide
+    rig.obstacles = np.vstack([person(0.0, 0.0, r=0.3, n=24), corridor])  # right on the route
+    assert rig.follower.start(rig.pose)[0]
+    rig.run(40.0, until=lambda d: d.report.state.name in ('GOAL_REACHED', 'FAILED'))
+    assert rig.state.name == 'GOAL_REACHED'
+    assert rig.t < 30.0  # walked around it, no detour after standing
+    reports = [d.report.message for d in rig.decisions]
+    assert any('| neupan | offset +' in m or '| neupan | offset -' in m for m in reports)
