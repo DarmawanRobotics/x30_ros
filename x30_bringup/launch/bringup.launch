@@ -20,7 +20,9 @@
                     created without a map, routes are taught and repeated in that frame, tags
                     only correct the drift (README, Odometry only)
       navigation:   the planner, route loader, path follower, avoidance and docking
-                    (x30_navigation), commanding the control mux
+                    (x30_navigation), commanding the control mux; controller: the path
+                    follower's (empty: navigation.yaml's holonomic; neupan: NeuPAN, which avoids
+                    by itself, from the venv of tools/install_neupan.sh through X30_PYTHON)
       health:       health/status and diagnostics (x30_health), watching what is started here
       inspection:   thermal and partial discharge inspection at the stop points
                     (x30_inspection), called by the path follower at each of them; reports_dir:
@@ -57,6 +59,7 @@
   <arg name="odometry_only" default="false"/>
   <arg name="sites_dir" default="$(eval '/tmp/x30_sim/sites' if arg('sim') else '')"/>
   <arg name="navigation" default="false"/>
+  <arg name="controller" default=""/>
   <arg name="health" default="false"/>
   <arg name="inspection" default="false"/>
   <arg name="reports_dir" default="$(eval '/tmp/x30_sim/reports' if arg('sim') else '')"/>
@@ -140,6 +143,7 @@
     <arg name="battery_topic" value="/$(arg namespace)/battery"/>
     <arg name="odom_topic" value="/$(arg namespace)/odom"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
+    <arg name="controller" value="$(arg controller)"/>
   </include>
 
   <group if="$(arg health)">

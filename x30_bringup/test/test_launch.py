@@ -157,3 +157,13 @@ def test_sites_dir_reaches_every_layer(tmp_path):
         roslaunch('--dump-params', str(LAUNCH), 'inspection:=true', 'reports_dir:=/data/r')
     )
     assert chosen['/inspection_node/reports_dir'] == '/data/r'
+
+
+def test_the_controller_reaches_the_path_follower():
+    params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), 'navigation:=true'))
+    assert params['/path_follower_node/controller'] == 'holonomic'
+    chosen = yaml.safe_load(
+        roslaunch('--dump-params', str(LAUNCH), 'navigation:=true', 'controller:=neupan')
+    )
+    assert chosen['/path_follower_node/controller'] == 'neupan'
+    assert chosen['/path_follower_node/neupan/dune_checkpoint'].endswith('models/dune_x30.pth')
