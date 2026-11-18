@@ -179,14 +179,29 @@ class SiteManagerNode(MappingServices, X30Node):
             return
         site = self.config.site.strip() or self.remembered()
         if not site:
-            self.log.info('no site yet: mapping/start creates one')
+            if self.config.create_site:
+                self.log.warning('create_site: no site given (site:=), routes are refused')
+            else:
+                self.log.info('no site yet: mapping/start creates one')
             return
-        if not self.store.exists(site):
+        if not self.store.exists(site) and not self._create_at_start(site):
             self.message = f'site {site!r} not found in {self.store.root}'
             self.log.warning(self.message)
             self.publish_status(force=True)
             return
         self.site_message('loaded', self.activate(site, reset_localization=False))
+
+    def _create_at_start(self, site: str) -> bool:
+        """Create the launch site without a map (odometry only); False: not asked or invalid."""
+        if not self.config.create_site or site != self.config.site.strip() or not valid_name(site):
+            return False
+        try:
+            self.store.create(site)
+        except OSError as error:
+            self.log.error('site not created', site=site, error=str(error))
+            return False
+        self.log.info('site created: no map, its routes and tags', site=site)
+        return True
 
     def _start_mapping_soon(self) -> bool:
         """Map the launch site at start (mapping mode); False when it is not a new site."""

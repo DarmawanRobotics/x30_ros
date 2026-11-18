@@ -166,6 +166,11 @@ class Rig:
         delete_params(self.ns)
 
 
+def says(rig: Rig, text: str):
+    """Return a check that the last site/status message holds text."""
+    return lambda: rig.status.last is not None and text in rig.status.last.message
+
+
 @pytest.fixture
 def make_rig(ros, tmp_path):
     rigs = []
@@ -274,6 +279,21 @@ def test_corrupt_site_files_do_not_crash_the_boot(make_rig):
     assert not status.has_map and status.tags == 0
     assert 'map not loaded' in status.message and 'tags.json' in status.message
     assert rig.call(ListSites, 'site/list').active == 'lobby'
+
+
+def test_odometry_only_creates_its_launch_site_without_a_map(make_rig):
+    """create_site: the launch site as an empty folder for routes and tags; never a bad name."""
+    rig = make_rig(site='gardu', create_site=True)
+    assert wait_for(lambda: rig.status.last and rig.status.last.site == 'gardu', 5.0)
+    assert os.path.isdir(os.path.join(rig.sites, 'gardu', 'routes'))
+    assert not rig.status.last.has_map and 'loaded gardu' in rig.status.last.message
+    assert rig.robot.names().count('reset') == 0  # the origin localization stays
+    rig.close()
+    for site, create in (('Bad Name', True), ('missing', False)):
+        refused = make_rig(site=site, create_site=create)
+        assert wait_for(says(refused, 'not found'), 5.0)
+        assert not os.path.exists(os.path.join(refused.sites, site))
+        refused.close()
 
 
 def test_site_load_switches_and_resets_localization(make_rig):

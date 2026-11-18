@@ -24,6 +24,7 @@ grid_mapper_node:
 site_manager_node:
   site: ""                      # site loaded at start; empty: the one of the last run
   start_mapping: false          # true (mapping mode): map `site` at start when it is new
+  create_site: false            # true (odometry only): create `site` at start, no map
 
 route_recorder_node:
   min_spacing_m: 0.2            # a waypoint after this much motion

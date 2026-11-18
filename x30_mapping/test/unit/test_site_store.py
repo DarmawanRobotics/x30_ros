@@ -1,4 +1,4 @@
-"""Sites on disk: tolerant loads (#7), map backup fallback, archive uniqueness (#13)."""
+"""Sites on disk: tolerant loads (#7), map backup fallback, archive uniqueness (#13), modes."""
 
 from __future__ import annotations
 
@@ -8,7 +8,9 @@ import numpy as np
 import pytest
 
 from x30_mapping.core import map_io
+from x30_mapping.core.config import SiteConfig
 from x30_mapping.core.site_store import SiteStore
+from x30_utils.config import ConfigError, build
 from x30_utils.io import PathError
 
 
@@ -94,3 +96,9 @@ def test_archive_twice_in_one_second_never_nests(tmp_path):
     assert os.listdir(os.path.join(first, 'routes')) == ['2026-10-24_10-00-00.csv']
     assert store.archive('lobby') is None  # nothing left: no empty backup directory
     assert store.list_sites() == ['lobby']
+
+
+def test_odometry_only_and_mapping_mode_exclude_each_other():
+    assert build(SiteConfig, {'create_site': True}).create_site
+    with pytest.raises(ConfigError, match='one of them'):
+        build(SiteConfig, {'create_site': True, 'start_mapping': True})
