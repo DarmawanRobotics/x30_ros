@@ -72,7 +72,8 @@ and reads the X30's sensor topics.
  inspection   thermal and partial discharge at the stop points  ◄ x30_inspection
               (hikmicro_driver, hertzino_driver of x30.repos)
  watching     health/status, diagnostics, speed scale  ◄ x30_health
- navigation   planner · route loader · path follower · avoidance · docking  ◄ x30_navigation
+ navigation   planner · route loader · path follower (NeuPAN optional) · avoidance · docking
+              ◄ x30_navigation
  world        occupancy grid · sites (map, fiducials, routes)        ◄ x30_mapping
  estimation   localization (EKF) · FAST-LIO odometry · sector scans
               ◄ x30_localization · x30_odometry · x30_perception
@@ -346,6 +347,13 @@ On a new robot, in an open area, with someone at the handheld:
 | `livox_ros_driver` | the Livox `CustomMsg` FAST-LIO is built with (the same md5 as the X30's `livox_ros_driver2`); it needs the [Livox SDK](https://github.com/Livox-SDK/Livox-SDK) installed first: `git clone https://github.com/Livox-SDK/Livox-SDK.git && cd Livox-SDK/build && cmake .. && make && sudo make install` |
 | `hikmicro_driver` | the HIKMICRO thermal + visible PTZ camera (`hikmicro:=true`); its `hikmicro_msgs` for x30_inspection |
 | `hertzino_driver` | the Hertzino acoustic camera (`hertzino:=true`); its `hertzino_msgs` for x30_inspection |
+
+**NeuPAN**, for the path follower's `neupan` controller (an MPC that walks around the safety
+scan's points, heading included; [x30_navigation](x30_navigation/README.md#neupan)), is
+installed apart, in a venv beside ROS: `bash tools/install_neupan.sh` on the navigation host
+(PyTorch for the CPU, cvxpy, NeuPAN with the X30's patches; internet, or wheels fetched with
+`--download` elsewhere), then `export X30_PYTHON=~/x30_ws/neupan/bin/python`. NeuPAN is GPL-3.0
+and stays out of this repository: the controller imports it at run time.
 
 Everything else comes from rosdep. Without them the stack still builds and runs: odometry with
 `odometry_method:=external`, the cameras and the inspection off (x30_inspection needs the two
