@@ -1,0 +1,13 @@
+# Teach an inspection target where the robot stands: the PTZ camera's current pan, tilt and
+# zoom are stored with the robot's position (map frame) in <sites_dir>/<site>/inspection.yaml.
+string name               # a-z, 0-9, _ and -, unique per point
+string point              # inspection point; empty: the one within match_radius_m, else a new one
+bool thermal              # overheat analysis with the HIKMICRO camera
+bool acoustic             # partial discharge detection with the Hertzino HZ-FA-371
+uint8 strips              # thermal: compare N side-by-side strips (3 for three phases); 0: none
+float32 max_temp_c        # thermal: own absolute limit (degC); 0: the configured limits
+---
+bool success
+string point
+uint32 targets            # targets of that point now
+string message

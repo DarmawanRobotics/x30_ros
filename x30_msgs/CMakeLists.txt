@@ -9,6 +9,7 @@ add_message_files(
   ControlStatus.msg
   DockingStatus.msg
   HealthStatus.msg
+  InspectionStatus.msg
   LocalizationStatus.msg
   MappingStatus.msg
   NavigationStatus.msg
@@ -16,8 +17,10 @@ add_message_files(
   PlannerStatus.msg
   SiteStatus.msg
   TripStatus.msg
-  # perception and navigation data
+  # perception, navigation and inspection data
   AvoidanceCommand.msg
+  InspectionFinding.msg
+  InspectionReport.msg
   SectorScan.msg
   StopPointEvent.msg
   Waypoint.msg
@@ -26,6 +29,7 @@ add_message_files(
 
 add_service_files(
   FILES
+  AddTarget.srv
   GoTo.srv
   ListSites.srv
   LoadFile.srv

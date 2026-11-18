@@ -24,6 +24,7 @@ rosmsg show x30_msgs/ControlStatus
 | `DockingStatus` | `docking/status` | IDLE, SEARCHING ... DOCKED / FAILED, tag visibility, errors to the dock, attempt, charging |
 | `ControlStatus` | `control/status` | AUTO / REMOTE, e-stop and its reasons, re-arm, protective field state, clearance, speed scale |
 | `HealthStatus` | `health/status` | OK / WARN / ERROR, issues, speed scale requested from the control mux |
+| `InspectionStatus` | `inspection/status` | IDLE, INSPECTING, DISABLED; points and targets of the site, cameras connected, the last point and its severity, the ambient temperature |
 
 **Data**
 
@@ -33,6 +34,7 @@ rosmsg show x30_msgs/ControlStatus
 | `AvoidanceCommand` | reactive avoidance: heading offset (rad), yaw-rate bias (rad/s), lateral bias, speed scale, emergency |
 | `Waypoint`, `WaypointPath` | a path in the map frame (yaw in rad, `dwell_sec > 0`: stop point) |
 | `StopPointEvent` | ARRIVED, INSPECTED, DEPARTED, SKIPPED at a stop point |
+| `InspectionReport`, `InspectionFinding` | `inspection/report`: everything measured at an inspection point (DONE, PARTIAL, FAILED, NO_TARGETS), its findings (thermal criteria, partial discharge) with NORMAL ... CRITICAL and the evidence files |
 
 **Services**
 
@@ -44,6 +46,7 @@ rosmsg show x30_msgs/ControlStatus
 | `SetMode` | `control/set_mode` | `auto` or `remote` with the operator source |
 | `ListSites`, `LoadSite`, `StartMapping` | `site/list`, `site/load`, `mapping/start` | sites and mapping sessions |
 | `LoadFile` | `localization/load_tags` | switch to a file inside the sites directory |
+| `AddTarget` | `inspection/add_target` | teach an inspection target from the PTZ camera's current view where the robot stands |
 
 ## Conventions
 
