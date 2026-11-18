@@ -149,7 +149,7 @@ cmd_status() {
 }
 
 cmd_off() {
-  local script pid _cpu args
+  local script pid args
   say "at boot:"
   case "$(autorun)" in
     true | True | TRUE)
@@ -171,7 +171,7 @@ cmd_off() {
     say "  stop_record.sh"
     run_quiet bash "$RECORDER/stop_record.sh"
   fi
-  while read -r pid _cpu args; do
+  while read -r pid _ args; do
     [ -n "$pid" ] || continue
     say "  stop $pid ${args:0:100}"
     [ "$DRY" = 1 ] || stop_pid "$pid"
