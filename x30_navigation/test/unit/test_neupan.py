@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 import sys
+import types
 
 import numpy as np
 import pytest
@@ -64,9 +65,17 @@ def test_neupan_keeps_the_points_where_the_model_was_trained(tmp_path):
 
 
 def test_neupan_says_how_to_install_it(tmp_path, monkeypatch):
+    model = fake_model(tmp_path)
     monkeypatch.setitem(sys.modules, 'neupan', None)
     with pytest.raises(ImportError, match=r'install_neupan\.sh'):
-        CONTROLLERS.create('neupan', NeupanConfig(dune_checkpoint=fake_model(tmp_path)), X30)
+        CONTROLLERS.create('neupan', NeupanConfig(dune_checkpoint=model), X30)
+    unpatched = types.ModuleType('neupan.robot')
+    unpatched.robot = type('robot', (), {})
+    monkeypatch.setitem(sys.modules, 'neupan', types.SimpleNamespace(neupan=object))
+    monkeypatch.setitem(sys.modules, 'neupan.robot', unpatched)
+    monkeypatch.setitem(sys.modules, 'torch', types.ModuleType('torch'))
+    with pytest.raises(ImportError, match='without the X30 patches'):
+        CONTROLLERS.create('neupan', NeupanConfig(dune_checkpoint=model), X30)
 
 
 def need_neupan():

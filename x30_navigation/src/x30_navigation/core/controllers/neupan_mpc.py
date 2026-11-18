@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 import time
+import warnings
 
 import numpy as np
 
@@ -147,11 +148,17 @@ class NeupanController(PathController):
         """Return NeuPAN for the robot (ImportError: NeuPAN is not installed)."""
         try:
             from neupan import neupan
+            from neupan.robot import robot
             import torch
         except ImportError as error:
             raise ImportError(
                 f'controller neupan needs NeuPAN ({error}): run tools/install_neupan.sh'
             ) from error
+        if not hasattr(robot, 'linear_holonomic_model'):
+            raise ImportError(
+                'NeuPAN without the X30 patches (no holonomic kinematics): '
+                'run tools/install_neupan.sh'
+            )
         cfg, lim = self.config, self.limits
         if cfg.threads > 0:
             torch.set_num_threads(cfg.threads)
@@ -163,7 +170,14 @@ class NeupanController(PathController):
             kinematics = 'diff'
             max_speed = [lim.max_vx, lim.max_wz]
             max_acce = [lim.max_accel, lim.max_yaw_accel]
-        planner = neupan(
+        with warnings.catch_warnings():  # NeuPAN loads our own model, weights only
+            warnings.filterwarnings('ignore', message='You are using `torch.load`')
+            return self._neupan(neupan, kinematics, max_speed, max_acce)
+
+    def _neupan(self, neupan, kinematics: str, max_speed: list, max_acce: list):
+        """Return NeuPAN built with this controller's parameters."""
+        cfg, lim = self.config, self.limits
+        return neupan(
             receding=cfg.horizon_steps,
             step_time=cfg.step_sec,
             ref_speed=max(lim.max_vx, 0.01),
@@ -200,12 +214,6 @@ class NeupanController(PathController):
             },
             train_kwargs={},
         )
-        if self.holonomic and getattr(planner.robot, 'control_dim', 2) != 3:
-            raise ImportError(
-                'NeuPAN has no holonomic kinematics: install the patched one '
-                '(tools/install_neupan.sh)'
-            )
-        return planner
 
     def reset(self):
         """Forget the plan and NeuPAN's warm start (new route, restart)."""
