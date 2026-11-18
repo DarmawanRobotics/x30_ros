@@ -58,12 +58,16 @@ class PlannerNode(X30Node):
         self.publish_status()
 
     def on_map(self, msg: OccupancyGrid):
-        """Keep the map; the costmap is rebuilt on the next plan."""
-        try:
-            self.grid = conv.map_grid(msg)
-        except ValueError as error:
+        """Keep the map (empty: the site has none); the costmap is rebuilt on the next plan."""
+        if not msg.data and msg.info.width == msg.info.height == 0:
             self.grid = None
-            self.log.error('map not usable', error=str(error))
+            self.log.info('the site has no map: planner/go_to refuses until one is loaded')
+        else:
+            try:
+                self.grid = conv.map_grid(msg)
+            except ValueError as error:
+                self.grid = None
+                self.log.error('map not usable', error=str(error))
         self.invalidate()
 
     def on_nav(self, msg: NavigationStatus):
