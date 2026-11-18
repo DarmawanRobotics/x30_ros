@@ -49,6 +49,20 @@ versions follow [SemVer](https://semver.org).
   avoidance off.
 - `stack_neupan.test` (registered when `X30_PYTHON` is set) and CI's `neupan` job: NeuPAN
   installed as on the robot, its unit tests and the patrol loop around a box on x30_sim.
+- Two hosts (x30_bringup): `navigation_host.launch` for the navigation host (192.168.1.106: the
+  driver, control, the LiDAR scans, FAST-LIO, localization, mapping, navigation, health, the
+  inspection) and `perception_host.launch` for the perception host (192.168.1.105: the
+  inspection cameras), on the navigation host's ROS master.
+- `tools/x30_host.sh env|check|start|install`: each host's ROS network, a check that the two see
+  each other (master, ping, every node's address, clock), each host's launch file by hand or as
+  the systemd service `x30-<role>` with its settings in `/etc/x30/<role>.env`; on the navigation
+  host Deep Robotics' autonomy goes off until its boot settled.
+- `tools/x30_watchdog.py`: the service's main process, under systemd's watchdog; it restarts the
+  host's stack when the master restarted, the master or a critical node (driver, control mux,
+  LiDAR scans, path follower) stays away past a grace, the start never comes up or roslaunch
+  exits.
+- `tools/check_deps.sh --perception`: the perception host's camera drivers only, with a build
+  line for them; on the navigation host a row for NeuPAN's venv.
 
 ### Fixed
 - `planner_node`: the empty `/map` of a site without a map is no `map not usable` error.
