@@ -1,0 +1,27 @@
+From 14b36f92134adc401f4a33e67e34f9f13d2d0096 Mon Sep 17 00:00:00 2001
+From: Agus Darmawan <99527506+agus-darmawan@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 00:56:25 +0700
+Subject: [PATCH 2/2] fix: package the neupan modules
+
+---
+ pyproject.toml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/pyproject.toml b/pyproject.toml
+index 22a8197..0ca1293 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -27,8 +27,8 @@ dependencies = [
+ irsim = ['ir-sim>=2.4.0']
+ all = ['ir-sim>=2.4.0']
+ 
+-[tool.setuptools]
+-py-modules = ['neupan']
++[tool.setuptools.packages.find]
++include = ['neupan*']
+ 
+ 
+ 
+-- 
+2.43.0
+
