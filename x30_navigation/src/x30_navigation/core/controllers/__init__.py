@@ -1,7 +1,6 @@
-"""Path controllers, registered in CONTROLLERS (entry point group 'x30.controllers').
+"""Path controllers, registered in CONTROLLERS (entry point group 'x30.controllers')."""
 
-neupan needs NeuPAN (an optional dependency), imported only when that controller is built.
-"""
+# neupan needs NeuPAN (an optional dependency), imported only when that controller is built.
 
 from __future__ import annotations
 
