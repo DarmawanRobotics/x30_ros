@@ -99,6 +99,7 @@ def test_the_program_decides_never_its_arguments(jy):
     plan = spawn('nav/scripts/plan.sh', 'false')
     urdf = spawn('drivers/scripts/urdf.sh')
     bridge = spawn('transfer/lib/message_transformer_cpp/udp_receiver')
+    monitor = spawn('cpu_monitor/lib/cpu_monitor/cpu_monitor_node')
     out = services(root, 'status')
     assert out.returncode == 0, out.stdout + out.stderr
     autonomy, rest = out.stdout.split('kept (')
@@ -107,6 +108,7 @@ def test_the_program_decides_never_its_arguments(jy):
         assert f'{process.pid} ' in autonomy, out.stdout
     assert f'{lidar.pid} ' in kept and f'{imu.pid} ' in kept, out.stdout
     assert f'{bridge.pid} ' in other.split('load ')[0], out.stdout
+    assert f'{monitor.pid} ' in other.split('load ')[0], out.stdout
     assert re.search(r"udp 43897 \(x30_driver's reports\): (free|in use|unknown)", out.stdout)
 
 
@@ -116,6 +118,7 @@ def test_off_stops_the_autonomy_now_and_at_boot_and_keeps_the_drivers(jy):
     wrapper, planner = spawn('nav/scripts/plan.sh', 'false'), spawn('planner/lib/x/localPlanner')
     driver = spawn('drivers/livox_lidar_publisher2')
     bridge = spawn('transfer/lib/message_transformer_cpp/udp_sender')
+    monitor = spawn('cpu_monitor/lib/cpu_monitor/cpu_monitor_node')
     began = time.monotonic()
     out = services(root, 'off')
     assert out.returncode == 0, out.stdout + out.stderr
@@ -126,8 +129,48 @@ def test_off_stops_the_autonomy_now_and_at_boot_and_keeps_the_drivers(jy):
     assert log.read_text().split() == ['kill_nav.sh', 'kill_mapping.sh']  # Deep Robotics' own
     stopped = (nav, mapping, wrapper, planner)
     assert wait_until(lambda: all(p.poll() is not None for p in stopped))
-    assert driver.poll() is None and bridge.poll() is None
+    assert driver.poll() is None and bridge.poll() is None and monitor.poll() is None
     assert 'still running:\n  none' in out.stdout
+
+
+def children(pid: int) -> list[int]:
+    out = subprocess.run(['ps', '-o', 'pid=', '--ppid', str(pid)], capture_output=True,
+                         text=True, check=False)  # fmt: skip
+    return [int(p) for p in out.stdout.split()]
+
+
+def script(root: Path, path: str, body: str) -> subprocess.Popen:
+    """Run a script of jy_cog that runs body in the foreground, as a wrapper does."""
+    file = root / path
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(f'{body}\n')
+    process = subprocess.Popen(['bash', str(file)], stderr=subprocess.DEVNULL)
+    assert wait_until(lambda: children(process.pid))
+    return process
+
+
+def test_off_stops_what_a_wrapper_started_and_leaves_what_it_shares_with_kept(jy):
+    """urdf.sh's robot_state_publisher goes with it; a script that runs a driver too stays."""
+    root, _, _ = jy
+    urdf = script(root, 'drivers/scripts/urdf.sh', 'sleep 60')  # a node from outside jy_cog
+    node = children(urdf.pid)[0]
+    lidar_node = f"bash -c 'exec -a {root}/drivers/lidar_node sleep 60'"  # a kept child
+    shared = script(root, 'nav/scripts/bringup.sh', lidar_node)
+    lidar = children(shared.pid)[0]
+    try:
+        status = services(root, 'status').stdout.split('kept (')
+        assert f'{node} ' in status[0] and f'{lidar} ' in status[1]
+        out = services(root, 'off')
+        assert out.returncode == 0, out.stdout + out.stderr
+        assert f'left {shared.pid} ' in out.stdout, out.stdout
+        assert wait_until(lambda: urdf.poll() is not None and not Path(f'/proc/{node}').exists())
+        assert shared.poll() is None and Path(f'/proc/{lidar}').exists()
+    finally:
+        for pid in (node, lidar):
+            subprocess.run(['kill', str(pid)], check=False)
+        for process in (urdf, shared):
+            process.kill()
+            process.wait()
 
 
 def test_on_restores_what_off_changed(jy):
