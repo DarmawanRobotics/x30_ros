@@ -73,6 +73,8 @@ def run(node_factory, name: str, *, argv=None, exit_deadline_sec=EXIT_DEADLINE_S
         # rosnode kill and a master shutdown: the hooks run before rospy closes the topics
         rospy.core.add_preshutdown_hook(finish)
         finish.node = node_factory()
+        # not from the constructor: a slow one would still be declaring its sections
+        finish.node.check_parameters()
         stop.interrupt = False
         while not stop.requested and not rospy.is_shutdown():
             stop.event.wait(WAKE_UP_SEC)
