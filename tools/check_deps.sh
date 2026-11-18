@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # What x30_ros needs on a robot without internet, checked offline: the Ubuntu 20.04 / ROS Noetic
-# packages (dpkg), the source packages of x30.repos in the workspace and the Livox SDK. Prints
-# what is missing and one apt line for it; installs nothing (README.md, "Robot without internet").
+# packages (dpkg), the source packages of x30.repos in the workspace and the Livox SDK, and
+# whether NeuPAN's venv is there (optional); with --perception only what the perception host
+# builds, its camera drivers. Prints what is missing and one apt line for it; installs nothing
+# (README.md, "Robot without internet").
 set -u
 
 usage() {
   cat <<'EOF'
-usage: check_deps.sh [--tests] [--gui] [--src DIR]
-  --tests   also what catkin_make run_tests needs
-  --gui     also RViz and the joint state publisher GUI (display.launch)
-  --src     the workspace's src (default: the folder holding x30_ros)
+usage: check_deps.sh [--perception] [--tests] [--gui] [--src DIR]
+  --perception  the perception host (192.168.1.105): its camera drivers only
+  --tests       also what catkin_make run_tests needs
+  --gui         also RViz and the joint state publisher GUI (display.launch)
+  --src         the workspace's src (default: the folder holding x30_ros)
 EOF
   exit 2
 }
@@ -42,6 +45,25 @@ SOURCES=(
   "hertzino_msgs drivers/hertzino_driver"
   "hertzino_driver drivers/hertzino_driver"
 )
+# the perception host builds the camera drivers and what launches them (x30_bringup README,
+# "Two hosts"): their rosdep keys on focal, the build line's whitelist
+PERCEPTION_BUILD=(
+  build-essential cmake git pkg-config python3-setuptools
+  ros-noetic-catkin ros-noetic-roscpp ros-noetic-roslaunch ros-noetic-message-generation
+  ros-noetic-message-runtime ros-noetic-std-msgs ros-noetic-std-srvs ros-noetic-geometry-msgs
+  ros-noetic-sensor-msgs ros-noetic-actionlib ros-noetic-actionlib-msgs ros-noetic-cv-bridge
+  ros-noetic-image-transport ros-noetic-image-transport-plugins
+  libcurl4-openssl-dev libssl-dev libopencv-dev libtinyxml2-dev nlohmann-json3-dev
+  gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
+)
+PERCEPTION_SOURCES=(
+  "hikmicro_msgs drivers/hikmicro_driver"
+  "hikmicro_driver drivers/hikmicro_driver"
+  "hertzino_msgs drivers/hertzino_driver"
+  "hertzino_driver drivers/hertzino_driver"
+)
+PERCEPTION_PACKAGES='x30_utils;x30_bringup;hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
+ROLE=navigation
 LIVOX_SDK_LIB=${LIVOX_SDK_LIB:-/usr/local/lib/liblivox_sdk_static.a}
 ROS_DIR=${ROS_DIR:-/opt/ros/noetic}
 
@@ -114,6 +136,7 @@ check_sources() {
       row sources ok "$name ($dirs)"
     fi
   done
+  [ "$ROLE" = navigation ] || return 0
   dirs=$(package_dirs fast_lio)
   if [ "$(grep -c . <<< "$dirs")" = 1 ] && [ ! -f "${dirs/#src/$SRC}/include/ikd-Tree/ikd_Tree.cpp" ]
   then
@@ -144,11 +167,28 @@ check_python() {  # pip --user packages shadow the system's: a newer setuptools 
   fi
 }
 
+check_neupan() {  # optional: only the neupan controller needs it
+  local venv
+  venv=$(dirname "$SRC")/neupan
+  if [ ! -x "$venv/bin/python" ]; then
+    row neupan -- "no $venv: for controller neupan, tools/install_neupan.sh (optional)"
+  elif bash "$HERE/install_neupan.sh" --check --venv "$venv" > /dev/null 2>&1; then
+    row neupan ok "$venv (X30_PYTHON=$venv/bin/python)"
+  else
+    row neupan WARN "$venv incomplete: tools/install_neupan.sh again"
+  fi
+}
+
 check_rosdep() {  # authoritative when the robot has a rosdep cache already (it reads no network)
   command -v rosdep > /dev/null || return 0
   [ -d "${ROS_HOME:-$HOME/.ros}/rosdep/sources.cache" ] || return 0
-  local out line
-  if out=$(rosdep check --from-paths "$SRC" --ignore-src -r 2>&1); then
+  local out line paths=("$SRC")
+  if [ "$ROLE" = perception ]; then  # what this host builds: the drivers and their launch
+    mapfile -t paths < <(for entry in "${SOURCES[@]}"; do package_dirs "${entry%% *}"; done |
+      sed "s|^src/|$SRC/|" | sort -u)
+    paths+=("$HERE/../x30_bringup")
+  fi
+  if out=$(rosdep check --from-paths "${paths[@]}" --ignore-src -r 2>&1); then
     row rosdep ok "rosdep check: every dependency of src installed"
   else
     row rosdep MISS "rosdep check:"
@@ -160,6 +200,11 @@ check_rosdep() {  # authoritative when the robot has a rosdep cache already (it 
 main() {
   while [ $# -gt 0 ]; do
     case "$1" in
+      --perception)
+        ROLE=perception
+        PACKAGES=("${PERCEPTION_BUILD[@]}")
+        SOURCES=("${PERCEPTION_SOURCES[@]}")
+        ;;
       --tests) PACKAGES+=("${TESTS[@]}") ;;
       --gui) PACKAGES+=("${GUI[@]}") ;;
       --src) SRC=${2:?--src needs a folder}; shift ;;
@@ -168,16 +213,23 @@ main() {
     shift
   done
   SRC=$(cd "$SRC" && pwd) || exit 2
-  printf 'x30_ros dependencies, checked offline (src: %s)\n' "$SRC"
+  printf 'x30_ros dependencies of the %s host, checked offline (src: %s)\n' "$ROLE" "$SRC"
   check_system
   check_apt
   check_sources
-  check_livox_sdk
+  if [ "$ROLE" = navigation ]; then
+    check_livox_sdk
+  fi
   check_python
+  if [ "$ROLE" = navigation ]; then
+    check_neupan
+  fi
   check_rosdep
   if [ "$PROBLEMS" = 0 ]; then
-    printf 'everything there: %scatkin_make -DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release\n' \
-      "$BUILD_ENV"
+    local only=''
+    [ "$ROLE" = perception ] && only="-DCATKIN_WHITELIST_PACKAGES='$PERCEPTION_PACKAGES' "
+    printf 'everything there: %scatkin_make %s-DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release\n' \
+      "$BUILD_ENV" "$only"
     return 0
   fi
   printf 'missing: README.md, "Robot without internet", tells how to bring it in\n'

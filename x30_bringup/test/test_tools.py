@@ -297,6 +297,31 @@ def test_check_deps_builds_past_a_user_site_that_breaks_setuptools(system, tmp_p
     assert 'everything there: PYTHONNOUSERSITE=1 catkin_make' in out.stdout
 
 
+def test_check_deps_for_the_perception_host_checks_its_camera_drivers_only(system):
+    src, env, installed, sdk = system
+    sdk.unlink()  # no FAST-LIO there: neither the SDK nor its sources
+    shutil.rmtree(src / 'fast_lio')
+    shutil.rmtree(src / 'livox_ros_driver')
+    out = run('check_deps.sh', '--perception', '--src', str(src), env=env)
+    assert out.returncode == 0, out.stdout
+    assert 'of the perception host' in out.stdout and 'livox' not in out.stdout
+    assert 'neupan' not in out.stdout
+    whitelist = 'x30_utils;x30_bringup;hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
+    assert f"-DCATKIN_WHITELIST_PACKAGES='{whitelist}'" in out.stdout
+    script = TOOLS / 'check_deps.sh'
+    assert set(array(script, 'PERCEPTION_BUILD')) <= set(array(script, 'BUILD'))
+    installed.write_text(installed.read_text().replace('libtinyxml2-dev\n', ''))
+    missing = run('check_deps.sh', '--perception', '--src', str(src), env=env)
+    assert missing.returncode == 1 and 'sudo apt install -y libtinyxml2-dev' in missing.stdout
+
+
+def test_check_deps_tells_whether_neupan_is_there(system):
+    src, env, _, _ = system
+    out = run('check_deps.sh', '--src', str(src), env=env)
+    assert re.search(r'neupan\s+--\s+no .*/neupan: for controller neupan', out.stdout)
+    assert out.returncode == 0  # optional
+
+
 def test_check_deps_adds_the_test_packages_when_asked(system):
     src, env, _, _ = system
     out = run('check_deps.sh', '--tests', '--src', str(src), env=env)
