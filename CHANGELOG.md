@@ -3,6 +3,25 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.8.0)
+
+### Added
+- `x30_sim`: the X30 in software for the whole stack (the port of dharma_sim). A kinematic body
+  behind x30_driver's topics and services (`cmd_vel`, `odom`, `battery`, `sit_down`,
+  `stand_up`, `charge_*`); the four Mid-360 of the application manual, tilted as mounted,
+  ray-cast into `/livox/lidar` as `livox_ros_driver2/CustomMsg` bytes; the body IMU's specific
+  force on `/imu/data`; FAST-LIO per scan (`/Odometry`, `camera_init -> body`,
+  `/cloud_registered_body`) and the leg odometry, drifting; a tag camera with its optical frame;
+  seeded scenarios (drift, people, dropouts, restarts), the mall world and `draw_site`.
+- `x30_bringup`: `sim:=true` (with `world`, `scenario`) runs the stack on x30_sim, the odometry
+  layer on its FAST-LIO; `sites_dir` for localization, mapping and navigation;
+  `stack_sim.test` walks the whole stack to a goal in the simulator, corrected by a tag.
+
+### Fixed
+- `x30_localization`: a tag detection the odometry has not reached yet (FAST-LIO's TF lags its
+  scans, the camera does not) waits for it at the next poll instead of being replaced by a newer
+  one, ahead again: with a lagging odometry, tags were almost never fused (found in x30_sim).
+
 ## [Unreleased] (0.7.0)
 
 ### Added

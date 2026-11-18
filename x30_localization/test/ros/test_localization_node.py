@@ -17,7 +17,8 @@ from tf2_msgs.msg import TFMessage
 
 from x30_msgs.msg import LocalizationStatus
 from x30_msgs.srv import LoadFile
-from x30_utils.math import Pose2D, tilt_of
+from x30_utils.io import write_tags
+from x30_utils.math import Pose2D, quat_from_rpy, tilt_of
 from x30_utils.testing.harness import Collector, connected, wait_for
 
 NONE, LOCALIZED = LocalizationStatus.NONE, LocalizationStatus.LOCALIZED
@@ -178,5 +179,28 @@ def test_assume_start_origin_only_at_the_first_start(ros, tmp_path):
         assert wait_for(lambda: not harness.node.relevel, 5.0)  # bridge leveled again
         time.sleep(0.3)
         assert harness.state() == NONE
+    finally:
+        harness.close()
+
+
+def test_a_tag_is_fused_while_fast_lio_lags_the_camera(ros, tmp_path):
+    """Detections always newer than the odometry's TF: each waits for it, none is dropped."""
+    tags = tmp_path / 'tags.json'
+    at = TAG_IN_MAP[:3, 3] - (0.0, 0.0, BASE_HEIGHT)  # map z from base_link at start
+    write_tags(str(tags), {'base_map': (*at, *quat_from_rpy(-math.pi / 2, 0.0, math.pi / 2))})
+    harness = Harness(
+        {
+            'sites_dir': str(tmp_path),
+            'tags_file': str(tags),
+            'leveling.window_sec': 0.3,
+            'tag.frames': ['base_map'],
+        }
+    )
+    try:
+        harness.robot.lio_lag = 0.15  # longer than a poll (tag/update_hz 10)
+        assert harness.bridge_up()
+        harness.robot.tag_visible = True
+        assert wait_for(lambda: harness.state() == LOCALIZED, 5.0), harness.status.last
+        assert harness.status.last.source == 'tag:base_map'
     finally:
         harness.close()

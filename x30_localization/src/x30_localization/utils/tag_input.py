@@ -34,6 +34,7 @@ class TagInput:
     def __init__(self, node, camera_frame: str):
         self.node = node
         self.camera = camera_frame
+        self.waiting: dict[str, Detection] = {}  # per frame: ahead of the odometry at its poll
 
     def detections(self, frames) -> list[Detection]:
         """Return every fresh detection among frames."""
@@ -55,6 +56,20 @@ class TagInput:
             return None
         return node.tf.static(node.base, self.camera)
 
+    def due(self, frames) -> list[Detection]:
+        """Return per frame the fresh detection that waits for the odometry, else the newest."""
+        max_age = self.node.config.tag.max_age_sec
+        now = self.node.now()
+        newest = {seen.frame: seen for seen in self.detections(frames)}
+        out = []
+        for frame in sorted(frames):
+            waiting = self.waiting.pop(frame, None)
+            if waiting is not None and now - waiting.stamp <= max_age:
+                out.append(waiting)
+            elif frame in newest:
+                out.append(newest[frame])
+        return out
+
     def poll(self):
         """Record and fuse every fresh detection (timer)."""
         node, loc = self.node, self.node.localizer
@@ -63,11 +78,14 @@ class TagInput:
             return
         session = loc.session
         frames = set(loc.tags) | (set(session.frames) if session is not None else set())
-        for seen in self.detections(frames):
+        for seen in self.due(frames):
             frame = seen.frame
             m_odom_base = node.odom_base_matrix(seen.stamp_msg)
             if m_odom_base is None:
-                continue  # odometry not there yet for this stamp: retried at the next poll
+                # the odometry is behind the camera (FAST-LIO's TF lags its scans): this
+                # detection again at the next poll, not a newer one that is ahead again
+                self.waiting[frame] = seen
+                continue
             with node.lock:
                 if loc.session is not None and frame in loc.session.frames:
                     loc.record_sample(frame, m_odom_base, base_cam, seen.matrix, seen.stamp)

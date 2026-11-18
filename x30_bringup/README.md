@@ -7,8 +7,11 @@ namespace, the robot profile every node of the stack reads, and optionally the c
 ([x30_perception](../x30_perception/README.md)), FAST-LIO and its monitor
 ([x30_odometry](../x30_odometry/README.md)), the localization
 ([x30_localization](../x30_localization/README.md)), the site maps
-([x30_mapping](../x30_mapping/README.md)) and the navigation
-([x30_navigation](../x30_navigation/README.md)).
+([x30_mapping](../x30_mapping/README.md)), the navigation
+([x30_navigation](../x30_navigation/README.md)), the health monitor
+([x30_health](../x30_health/README.md)) and the inspection cameras. With `sim:=true` the
+simulated X30 of [x30_sim](../x30_sim/README.md) takes the driver's place, and the LiDARs', the
+IMU's and FAST-LIO's.
 
 ## Usage
 
@@ -18,6 +21,9 @@ roslaunch x30_bringup bringup.launch params_file:=$HOME/x30_driver_params.yaml r
 roslaunch x30_bringup bringup.launch control:=true perception:=true leg_odom_tf:=true
 roslaunch x30_bringup bringup.launch control:=true perception:=true \
     odometry:=true localization:=true mapping:=true site:=gardu-a navigation:=true
+# the same stack on the simulated X30, its site drawn from the world
+roslaunch x30_bringup bringup.launch sim:=true site:=mall control:=true perception:=true \
+    odometry:=true localization:=true mapping:=true navigation:=true health:=true rviz:=true
 ```
 
 With `control:=true` the control mux is the only publisher of `/x30/cmd_vel`: navigation
@@ -31,15 +37,17 @@ else may publish the driver's `cmd_vel` any more.
 | Argument | Default | |
 |---|---|---|
 | `namespace` | `x30` | driver topics and services, `robot_description` |
+| `sim`, `world`, `scenario` | `false`, empty, empty | `sim_robot_node` (x30_sim) in place of x30_driver, the LiDARs, the IMU and FAST-LIO, in that world and scenario (empty: mall_loop, none); `site` is drawn from the world unless it has a map; the odometry layer runs with `odometry_method:=external` (`fast_lio` is refused) |
 | `params_file` | [`x30_driver/config/driver_params.yaml`](../x30_driver/config/driver_params.yaml) | a copy with this robot's settings, e.g. `invert_wz` |
 | `overrides_file` | empty | a few parameters on top, e.g. `x30_driver/config/fake_robot.yaml` |
 | `robot_params` | [`config/robot.yaml`](config/robot.yaml) | the robot profile, loaded as `/robot` |
 | `control` | `false` | the control mux (x30_control), publishing `/<namespace>/cmd_vel` |
 | `perception` | `false` | `lidar_sector_node` (x30_perception) and the LiDAR mount TF |
 | `leg_odom_tf` | `false` | the driver publishes `odom` → `base_link` (leg odometry, roll and pitch from the IMU): the scans' leveling, while no other odometry owns that transform; refused together with `localization` |
-| `odometry`, `odometry_method` | `false`, `fast_lio` | FAST-LIO behind its start gate and the odometry monitor (x30_odometry); `external` for a simulator |
+| `odometry`, `odometry_method` | `false`, `fast_lio` (`external` with `sim`) | FAST-LIO behind its start gate and the odometry monitor (x30_odometry); `external`: another estimator publishes `/Odometry` |
 | `localization` | `false` | `map` → `odom` and the bridge of FAST-LIO into `odom` → `base_link` (x30_localization) |
 | `mapping`, `site` | `false`, empty | the site maps, mapping sessions and routes (x30_mapping); the site at start |
+| `sites_dir` | empty (`/tmp/x30_sim/sites` with `sim`) | the sites of localization, mapping and navigation; empty: their files' (`~/x30/map`) |
 | `navigation` | `false` | the planner, route loader, path follower, avoidance and docking (x30_navigation), commanding the control mux; the robot's battery and odometry under `namespace` |
 | `health` | `false` | `health_monitor_node` (x30_health), told the nodes, sensors and states of the layers started here; a missing node is an error (speed scale 0), so the cameras are not among them |
 | `hikmicro`, `hikmicro_host`, `hikmicro_password` | `false`, `192.168.1.64`, empty | the HIKMICRO thermal PTZ camera (hikmicro_driver, from x30.repos) |
@@ -52,6 +60,7 @@ else may publish the driver's `cmd_vel` any more.
 | Node | Namespace | |
 |---|---|---|
 | `x30_driver` | `x30` | `cmd_vel` in; `odom`, `imu`, `joint_states`, `battery`, `state`, `diagnostics`; Trigger services |
+| `sim_robot_node` (`sim:=true`, instead) | `/` | `/<namespace>/cmd_vel` in; `/<namespace>/odom`, `battery`, `sit_down`, `stand_up`, `charge_*`; `/livox/lidar`, `/imu/data`, `/Odometry`, `/cloud_registered_body`, `sim/*` |
 | `robot_state_publisher` | `x30` | TF `base_link` → `TORSO` → legs, `imu_link`, `LIDAR_*` from `joint_states` |
 | `control_mux_node` (`control:=true`) | `/` | `control/*` in, `/<namespace>/cmd_vel` out |
 | `lidar_sector_node`, `lidar_mount` (`perception:=true`) | `/` | `/livox/lidar` in, `perception/sector_scan`, `perception/safety_scan` out |
@@ -103,6 +112,14 @@ odometry on TF), the mux, the scans and the navigation, `map` -> `odom` fixed; `
 and `navigation/start` take the robot through the follower, the mux and the driver to the end of a
 1.2 m route.
 
+`stack_sim.test` runs the whole stack on x30_sim: control, perception, the odometry monitor on
+the simulated FAST-LIO, localization, mapping on a site drawn from the world, navigation and
+health. The drift scenario makes FAST-LIO 1 % long with a yaw bias; the robot localizes from the
+simulator's `/initialpose`, walks to a goal around a corner (`planner/go_to`), its camera's
+detector sees the tag on the east wall on the way, and it arrives within 0.15 m of the goal by
+its true pose (0.25 m without the tag), without touching anything.
+
 `test_launch.py` checks the layers behind their arguments (`roslaunch --nodes`, `--dump-params`):
 the robot alone by default, every layer when asked, the leg odometry topic following the
-namespace, and `leg_odom_tf` with `localization` refused.
+namespace, `leg_odom_tf` with `localization` refused, health expecting exactly the nodes
+started, and `sim` in place of the driver and FAST-LIO with `sites_dir` reaching every layer.

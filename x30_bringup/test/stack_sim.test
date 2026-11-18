@@ -1,0 +1,24 @@
+<launch>
+  <!--
+    The whole stack end to end on the simulated X30 (x30_sim): bringup.launch with sim:=true,
+    the control mux, the sector scans, the odometry monitor on the simulator's FAST-LIO,
+    localization on the site drawn from the world, mapping, navigation and health. The drift
+    scenario makes FAST-LIO 1 % long with a yaw bias: the tag on the east wall, seen on the way by
+    the simulated camera, corrects it. Every run draws its site in a new directory.
+  -->
+  <arg name="sites_dir" default="/tmp/x30_stack_sim/$(anon sites)"/>
+  <include file="$(find x30_bringup)/launch/bringup.launch">
+    <arg name="sim" value="true"/>
+    <arg name="scenario" value="drift"/>
+    <arg name="site" value="mall"/>
+    <arg name="sites_dir" value="$(arg sites_dir)"/>
+    <arg name="control" value="true"/>
+    <arg name="perception" value="true"/>
+    <arg name="odometry" value="true"/>
+    <arg name="localization" value="true"/>
+    <arg name="mapping" value="true"/>
+    <arg name="navigation" value="true"/>
+    <arg name="health" value="true"/>
+  </include>
+  <test test-name="stack_sim" pkg="x30_bringup" type="sim_check.py" time-limit="300"/>
+</launch>
