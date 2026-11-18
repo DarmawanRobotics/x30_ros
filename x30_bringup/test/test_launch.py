@@ -87,6 +87,18 @@ def test_health_watches_the_states_and_sensors_of_the_layers_started():
     assert '/health_monitor_node' not in roslaunch('--nodes', str(LAUNCH)).split()
 
 
+def test_inspection_is_the_followers_hook_and_left_out_of_health():
+    args = ('inspection:=true', 'navigation:=true', 'health:=true')
+    nodes = set(roslaunch('--nodes', str(LAUNCH), *args).split())
+    params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
+    assert params['/path_follower_node/hooks/inspection'] == ['/inspection/inspect']
+    assert params['/path_follower_node/hooks/inspection_timeout_sec'] == 180.0
+    expected = set(params['/health_monitor_node/nodes/expected'])
+    assert expected == nodes - {'/health_monitor_node', '/inspection_node'}  # not driving
+    assert '/inspection_node' in nodes
+    assert '/inspection_node' not in roslaunch('--nodes', str(LAUNCH)).split()
+
+
 def test_leg_odom_tf_and_localization_together_are_refused():
     out = roslaunch('--dump-params', str(LAUNCH), 'leg_odom_tf:=true', 'localization:=true')
     assert 'both publish odom -> base_link' in out
@@ -110,12 +122,20 @@ def test_sim_with_fast_lio_is_refused():
 
 
 def test_sites_dir_reaches_every_layer(tmp_path):
-    layers = ('localization:=true', 'mapping:=true', 'navigation:=true')
+    layers = ('localization:=true', 'mapping:=true', 'navigation:=true', 'inspection:=true')
     args = ('sim:=true', 'site:=lobby', f'sites_dir:={tmp_path}', *layers)
     params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
-    for node in ('localization_node', 'site_manager_node', 'grid_mapper_node', 'path_loader_node'):
+    nodes = ('localization_node', 'site_manager_node', 'grid_mapper_node', 'path_loader_node')
+    for node in (*nodes, 'inspection_node'):
         assert params[f'/{node}/sites_dir'] == str(tmp_path), node
+    assert params['/inspection_node/reports_dir'] == '/tmp/x30_sim/reports'
     assert (tmp_path / 'lobby' / 'map.yaml').is_file()  # drawn while the launch file was read
     real = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *layers))
     assert real['/localization_node/sites_dir'] == '~/x30/map'  # the layers' own files
     assert real['/path_loader_node/sites_dir'] == '~/x30/map'
+    assert real['/inspection_node/sites_dir'] == '~/x30/map'
+    assert real['/inspection_node/reports_dir'] == '~/x30/reports'
+    chosen = yaml.safe_load(
+        roslaunch('--dump-params', str(LAUNCH), 'inspection:=true', 'reports_dir:=/data/r')
+    )
+    assert chosen['/inspection_node/reports_dir'] == '/data/r'
