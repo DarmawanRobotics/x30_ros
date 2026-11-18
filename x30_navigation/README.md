@@ -81,10 +81,61 @@ tag approach should take over has to be decided on the robot. Two values to set 
 [config/navigation.yaml](config/navigation.yaml) has the X30's values, one section per node, on
 top of the dataclass defaults in [core/config](src/x30_navigation/core/config). The robot's
 footprint, limits and frames come from the robot profile (`robot/`). The path controllers
-(`holonomic`, `pure_pursuit`, `stanley`, `lqr`, `mppi`, `pid`) and the avoidance policies
+(`holonomic`, `pure_pursuit`, `stanley`, `lqr`, `mppi`, `pid`, `neupan`) and the avoidance policies
 (`vfh`, `braitenberg`, `potential_field`, `follow_gap`) each have their own section
 (`<name>/...`); `controller` and `policy` switch them live. Every node validates its values at
 start and applies live changes within a second (all or none; read-only values until restart).
+
+## NeuPAN
+
+`controller: neupan` runs [NeuPAN](https://github.com/hanruihua/NeuPAN) (Han et al., T-RO
+2025): one MPC that tracks the route ahead and keeps the footprint off the safety scan's points
+directly, no costmap and no map (odometry only works). DUNE, a small network trained for the
+footprint, gives the distance from the body to every point at every planned pose. On the X30 the
+MPC plans the forward and sideways speed and the yaw rate: the `holonomic` kinematics patched
+into NeuPAN for the X30 ([tools/neupan](../tools/neupan)), so the body turns with the route and
+steps aside when that pays; a robot profile that cannot strafe plans with NeuPAN's `diff`.
+
+```bash
+bash tools/install_neupan.sh                    # once: a venv in ~/x30_ws/neupan (internet)
+export X30_PYTHON=~/x30_ws/neupan/bin/python     # the path follower runs with it
+roslaunch x30_bringup bringup.launch navigation:=true controller:=neupan ...
+```
+
+- **It keeps its own clearance**: reactive avoidance stands by. Path shift (`avoidance_mode:
+  path_shift`, the default) still picks the side to pass an obstacle on: NeuPAN alone stands
+  before one right on the route, with no side to prefer, until the follower's detour. The
+  follower's guard, its BLOCKED state (the planner replans, the detours) and the control mux's
+  protective field stay as they are and keep the last word.
+- **Its model**: [models/dune_x30.pth](models/dune_x30.pth), trained for the X30's footprint
+  (1000 x 470 mm) on points up to 8 m away, with its record
+  [dune_x30.json](models/dune_x30.json): the footprint, the training, 1.5 mm mean distance error,
+  at most 8 mm too far (the errors near the corners are on the safe side). The controller
+  refuses a model of another footprint: after changing `robot/footprint`, train one (about
+  30 min on one core) and give it as `dune_checkpoint:=` (navigation.launch) or
+  `neupan/dune_checkpoint`:
+
+  ```bash
+  $X30_PYTHON $(rospack find x30_navigation)/scripts/train_dune \
+      --robot-params $(rospack find x30_bringup)/config/robot.yaml --out ~/x30/dune_mine.pth
+  ```
+
+- **Without NeuPAN** (no venv, `X30_PYTHON` unset, or NeuPAN without the patches) the follower
+  does not start with `controller: neupan` and says how to install it; the other controllers
+  never need it.
+- **Timing**: one solve every `step_sec` (0.1 s), 15 to 40 ms on one core; between solves the
+  follower keeps the plan's first command. All its parameters are read at start.
+
+| `neupan/...` | X30 | |
+|---|---|---|
+| `obstacle_range` | 4.0 m | the safety scan's points it plans around (DUNE's range minus what the horizon travels) |
+| `max_clearance` | 0.25 m | clearance it seeks; a passage narrower than the body plus twice this stalls it |
+| `min_clearance` | 0.1 m | clearance it keeps from every point |
+| `weight_speed` | 2.0 | the speed error's weight: below 2 it rather stands before an obstacle than walks around it |
+| `weight_xy`, `weight_yaw`, `weight_lateral` | 1.0, 0.5, 1.0 | position, heading and sideways walking costs |
+| `horizon_steps`, `step_sec` | 10, 0.1 s | the horizon: 1 s ahead |
+| `stop_distance` | 0.05 m | a point this near the body: it stands |
+| `max_reverse_speed` | 0.15 m/s | backward speed cap |
 
 ## Launch
 
@@ -102,6 +153,9 @@ rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
 | `battery_topic`, `odom_topic` | `/x30/battery`, `/x30/odom` | x30_driver's battery and leg odometry |
 | `sites_dir`, `route` | | `path_loader_node`'s, when set |
 | `docking` | `true` | start `docking_node` |
+| `controller` | | the path follower's, when set (else navigation.yaml's `holonomic`) |
+| `dune_checkpoint` | `models/dune_x30.pth` | NeuPAN's DUNE model (a `params_file` may give another) |
+| `python` | `$X30_PYTHON` | the path follower's interpreter: the NeuPAN venv |
 | `respawn`, `output` | `true`, `screen` | |
 
 ## Tests
@@ -111,4 +165,7 @@ backtracking, stop points), avoidance policies, docking and path processing (uni
 nodes on a private rosmaster (following with pauses, e-stop and re-arm, start waiting for the
 pose, cancel never blocked by a slow send, replanning and a blind scan, routes inside the sites
 directory, docking with its hooks, a clean SIGINT while ticking); and the launch file's
-parameters and remaps.
+parameters and remaps. NeuPAN's checks and its model's record always; its driving (a pole on
+the route, a 1 m passage, a wall across, the turn of an L, a robot without strafing) needs NeuPAN:
+`$X30_PYTHON -m pytest test/unit/test_neupan.py test/unit/test_dune_model.py`, as CI's `neupan`
+job does along with x30_bringup's `stack_neupan.test` (the patrol loop on x30_sim).
