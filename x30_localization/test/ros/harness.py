@@ -41,6 +41,7 @@ class FakeRobot(X30Node):
         self.world_start = compose(make_transform((0.0, 0.0, BASE_HEIGHT)), tilt)  # base at start
         self.robot = Pose2D()  # true planar pose of base in the (level) world = map
         self.tag_visible = False
+        self.lio_lag = 0.0  # s: FAST-LIO's TF stamped this much behind the camera's
         self.every(0.02, self.publish, steady=True)
 
     def world_base(self) -> np.ndarray:
@@ -52,7 +53,8 @@ class FakeRobot(X30Node):
         stamp = self.stamp()
         world_base = self.world_base()
         init_body = inverse(self.world_start @ BASE_IMU) @ world_base @ BASE_IMU
-        self.tf_out.send(init_body, 'camera_init', 'body', stamp)
+        lio_stamp = stamp - rospy.Duration.from_sec(self.lio_lag)  # the robot stands still then
+        self.tf_out.send(init_body, 'camera_init', 'body', lio_stamp)
         if self.tag_visible:
             cam_tag = inverse(world_base @ BASE_CAM) @ TAG_IN_MAP
             self.tf_out.send(cam_tag, 'camera_color_optical_frame', 'base_map', stamp)
