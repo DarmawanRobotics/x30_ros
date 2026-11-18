@@ -20,6 +20,7 @@ from x30_msgs.srv import GoTo
 GOAL = (4.5, 0.0, math.pi / 2)  # up the east corridor of mall_loop, from the start at (-4.5, -3)
 ARRIVED_WITHIN = 0.15  # m, the true pose from the goal (0.25 m without the tag corrections)
 LOCALIZED_WITHIN = 0.10  # m, map -> base_link from the true pose
+STARTS_WITHIN = 0.30  # m, map -> base_link from the true pose before the goal is sent
 
 
 class StackSim(unittest.TestCase):
@@ -63,9 +64,29 @@ class StackSim(unittest.TestCase):
             time.sleep(0.1)
         self.fail(f'{topic}: condition not met in {timeout} s, last: {self.last(topic)}')
 
+    def off_truth(self) -> float:
+        """Return how far map -> base_link is from the true pose (inf: not known yet)."""
+        truth = self.last('/sim/ground_truth')
+        try:
+            seen = self.tf.lookup_transform('map', 'base_link', rospy.Time(0))
+        except tf2_ros.TransformException:
+            return math.inf
+        if truth is None:
+            return math.inf
+        p, t = seen.transform.translation, truth.pose.position
+        return math.hypot(p.x - t.x, p.y - t.y)
+
     def test_localizes_and_walks_to_the_goal(self):
         """/initialpose from the simulator, go_to around a corner, a tag on the way, arrival."""
         self.wait('/localization/status', lambda s: s.state == LocalizationStatus.LOCALIZED, 60.0)
+        # the planner plans from map -> base_link, which shows the pose estimate a little later
+        # (FAST-LIO's TF lags): planned from the pose before, the start was inside the shops
+        end = time.monotonic() + 30.0
+        while self.off_truth() > STARTS_WITHIN:
+            self.assertLess(
+                time.monotonic(), end, f'map -> base_link {self.off_truth():.2f} m off'
+            )
+            time.sleep(0.1)
         self.wait(
             '/control/status', lambda s: s.armed and s.field == ControlStatus.FIELD_CLEAR, 30
         )
