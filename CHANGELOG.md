@@ -3,32 +3,9 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
-## [Unreleased] (0.10.0)
+## [Unreleased] (0.12.0)
 
 ### Added
-- `tools/dr_services.sh status|off|on`: Deep Robotics' own localization, navigation (with its
-  local planner), mapping, URDF publisher and bridge (`transfer`: UDP 43897 and `/cmd_vel` to
-  the robot) on the navigation host off, now (its `kill_nav.sh` / `kill_mapping.sh`, then what
-  is left, all at once) and at boot (`autorun_slam` false, the original kept), and back on; a
-  process judged by its program in jy_cog, never its arguments, and what a wrapper script
-  started goes with it unless it also runs a kept process; the sensor drivers, the ROS master
-  and the robot server kept, the motion and perception hosts never touched. `status` also
-  shows who holds UDP 43897 (the driver's reports) and the files that start jy_cog at boot.
-- `tools/check_deps.sh`: every apt package, x30.repos source package and the Livox SDK the stack
-  needs, checked offline on the robot, with one `apt install` line for what is missing; a
-  setuptools in `~/.local` that stops catkin puts `PYTHONNOUSERSITE=1` in its build line.
-- `tools/pack_sources.sh`: x30_ros, x30.repos and the Livox SDK in one archive (about 5 MB) for
-  a robot without internet; `tools/README.md` on bringing in the packages (`ssh -R` proxy,
-  `--print-uris`) and on the navigation host's IMU.
-- CI runs shellcheck on `tools/`.
-- `odometry_only:=true` (x30_bringup): navigation without a map, like HotDog and Pashupati.
-  FAST-LIO's start is the map origin (localization's `assume_start_origin`, the state kept
-  `LOCALIZED` while only tags correct the drift), the launch site is created without a map
-  (x30_mapping's `create_site`, also a mapping.launch argument, exclusive with
-  `start_mapping`), routes are taught and repeated in that frame; with `sim` nothing is drawn
-  from the world and the simulator sends no `/initialpose`. Refused without `localization`.
-- `stack_odometry.test`: on x30_sim, a route taught on the stick without a map and repeated by
-  the follower to within 0.15 m of its stop point.
 - Path follower controller `neupan` (x30_navigation): [NeuPAN](https://github.com/hanruihua/NeuPAN)
   tracks the route ahead and keeps the footprint off the safety scan's points in one MPC,
   planning forward and sideways speed and the yaw rate (the `holonomic` kinematics patched into
@@ -49,6 +26,12 @@ versions follow [SemVer](https://semver.org).
   avoidance off.
 - `stack_neupan.test` (registered when `X30_PYTHON` is set) and CI's `neupan` job: NeuPAN
   installed as on the robot, its unit tests and the patrol loop around a box on x30_sim.
+- NeuPAN's latest solve time in `navigation/status` (`| neupan 23 ms |`); a warning from the
+  follower (every 30 s) while more than one solve in ten of the last 50 overruns the step.
+- `bench_neupan` (x30_navigation): NeuPAN's solves timed on this computer, the follower's
+  controller from the robot profile and navigation.yaml on an open route and in a corridor past
+  a box, the robot standing still; exit 1 when the slow ones overrun the step. CI's `neupan` job
+  runs it on the runner.
 - Two hosts (x30_bringup): `navigation_host.launch` for the navigation host (192.168.1.106: the
   driver, control, the LiDAR scans, FAST-LIO, localization, mapping, navigation, health, the
   inspection) and `perception_host.launch` for the perception host (192.168.1.105: the
@@ -65,14 +48,47 @@ versions follow [SemVer](https://semver.org).
   line for them; on the navigation host a row for NeuPAN's venv.
 
 ### Fixed
+- `X30Node`: unknown parameters are looked for once the node is built, not 0.5 s after it
+  started: a slow constructor (the path follower with NeuPAN) no longer gets its own, still
+  being declared, reported as typos.
+
+## [Unreleased] (0.11.0)
+
+### Added
+- `odometry_only:=true` (x30_bringup): navigation without a map, like HotDog and Pashupati.
+  FAST-LIO's start is the map origin (localization's `assume_start_origin`, the state kept
+  `LOCALIZED` while only tags correct the drift), the launch site is created without a map
+  (x30_mapping's `create_site`, also a mapping.launch argument, exclusive with
+  `start_mapping`), routes are taught and repeated in that frame; with `sim` nothing is drawn
+  from the world and the simulator sends no `/initialpose`. Refused without `localization`.
+- `stack_odometry.test`: on x30_sim, a route taught on the stick without a map and repeated by
+  the follower to within 0.15 m of its stop point.
+
+### Fixed
 - `planner_node`: the empty `/map` of a site without a map is no `map not usable` error.
 - `route_recorder_node`: no `no fresh map->base TF` warning at the first `route/start` while its
   TF listener fills.
 - The sim stack tests keep what the nodes remember (site, last route, trip) in their run's
   directory, not in `~/.x30`: parallel and repeated runs no longer share it.
-- `X30Node`: unknown parameters are looked for once the node is built, not 0.5 s after it
-  started: a slow constructor (the path follower with NeuPAN) no longer gets its own, still
-  being declared, reported as typos.
+
+## [Unreleased] (0.10.0)
+
+### Added
+- `tools/dr_services.sh status|off|on`: Deep Robotics' own localization, navigation (with its
+  local planner), mapping, URDF publisher and bridge (`transfer`: UDP 43897 and `/cmd_vel` to
+  the robot) on the navigation host off, now (its `kill_nav.sh` / `kill_mapping.sh`, then what
+  is left, all at once) and at boot (`autorun_slam` false, the original kept), and back on; a
+  process judged by its program in jy_cog, never its arguments, and what a wrapper script
+  started goes with it unless it also runs a kept process; the sensor drivers, the ROS master
+  and the robot server kept, the motion and perception hosts never touched. `status` also
+  shows who holds UDP 43897 (the driver's reports) and the files that start jy_cog at boot.
+- `tools/check_deps.sh`: every apt package, x30.repos source package and the Livox SDK the stack
+  needs, checked offline on the robot, with one `apt install` line for what is missing; a
+  setuptools in `~/.local` that stops catkin puts `PYTHONNOUSERSITE=1` in its build line.
+- `tools/pack_sources.sh`: x30_ros, x30.repos and the Livox SDK in one archive (about 5 MB) for
+  a robot without internet; `tools/README.md` on bringing in the packages (`ssh -R` proxy,
+  `--print-uris`) and on the navigation host's IMU.
+- CI runs shellcheck on `tools/`.
 
 ## [Unreleased] (0.9.0)
 

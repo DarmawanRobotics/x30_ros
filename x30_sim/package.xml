@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_sim</name>
-  <version>0.10.0</version>
+  <version>0.12.0</version>
   <description>The X30 in software for the whole stack (the ROS Noetic port of dharma_sim): a kinematic body behind x30_driver's topics and services, the four Livox Mid-360 ray-cast into /livox/lidar, the body IMU, a drifting FAST-LIO stand-in and leg odometry, latency and dropouts from seeded scenarios, worlds and ready sites for end-to-end tests. No Gazebo, no GPU.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

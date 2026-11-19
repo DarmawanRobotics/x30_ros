@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import re
 import threading
 import time
 import unittest
@@ -90,7 +91,7 @@ class StackNeupan(unittest.TestCase):
         error = math.hypot(truth.x - start[0], truth.y - start[1])
         with self.lock:
             touched, closest = self.touched, self.closest
-            following = [m for m in self.messages if '| neupan |' in m]
+            following = [m for m in self.messages if re.search(r'\| neupan \d+ ms \|', m)]
         rospy.loginfo('loop ended %.3f m from its end, %.3f m from the box', error, closest)
         self.assertTrue(following, 'the follower never reported the neupan controller')
         self.assertFalse(touched, 'the robot touched something')

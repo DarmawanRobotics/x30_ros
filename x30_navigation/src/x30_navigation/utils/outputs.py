@@ -38,6 +38,9 @@ class FollowerOutputs:
         """Publish a decision: command, status, events, markers."""
         if decision.command is not None:
             self.command(decision.command)
+        warning = follower.controller.warning
+        if warning:  # e.g. NeuPAN's solves longer than its step
+            self.node.log.warning(warning, throttle=30.0, key='controller_warning')
         header = self.header()
         self.status.publish(conv.status_msg(decision.report, header.frame_id, header.stamp))
         self.events(decision.events)

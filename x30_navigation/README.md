@@ -124,7 +124,16 @@ roslaunch x30_bringup bringup.launch navigation:=true controller:=neupan ...
   does not start with `controller: neupan` and says how to install it; the other controllers
   never need it.
 - **Timing**: one solve every `step_sec` (0.1 s), 15 to 40 ms on one core; between solves the
-  follower keeps the plan's first command. All its parameters are read at start.
+  follower keeps the plan's first command. All its parameters are read at start. The latest
+  solve is in `navigation/status` (`lap 1 | neupan 23 ms | ...`); when more than one solve in
+  ten of the last 50 takes longer than the step, the follower logs a warning (every 30 s).
+  `bench_neupan` times the solves on a computer before the robot walks: the follower's
+  controller from the robot profile and navigation.yaml on an open route and in a corridor past
+  a box (a few seconds, the robot never moves; exit 1 when the slow ones overrun the step):
+
+  ```bash
+  $X30_PYTHON $(rospack find x30_navigation)/scripts/bench_neupan     # --threads 2 to compare
+  ```
 
 | `neupan/...` | X30 | |
 |---|---|---|

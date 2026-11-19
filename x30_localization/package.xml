@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_localization</name>
-  <version>0.10.0</version>
+  <version>0.12.0</version>
   <description>Where the X30 is on its site map (the ROS Noetic port of dharma_localization): map -> odom from an SE(2) EKF on top of FAST-LIO, corrected by fiducials in view, operator pose estimates and optional scan matching through a chi-square gate that grows with the uncertainty, and the bridge of FAST-LIO's frames into a gravity-aligned odom -> base_link.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

@@ -84,6 +84,7 @@ class PathController(ABC):
         self.config = config if config is not None else self.Config()
         self.limits = limits or ControllerLimits()
         self.debug: dict = {}
+        self.warning = ''  # a standing problem the follower logs (solves too slow), '' when none
 
     def reset(self):
         """Forget internal state (new route, restart)."""
