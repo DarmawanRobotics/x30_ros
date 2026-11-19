@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+import re
 import sys
 import types
 
@@ -194,4 +195,4 @@ def test_the_follower_with_neupan_passes_a_box_on_the_route_on_path_shifts_side(
     assert rig.state.name == 'GOAL_REACHED'
     assert rig.t < 30.0  # walked around it, no detour after standing
     reports = [d.report.message for d in rig.decisions]
-    assert any('| neupan | offset +' in m or '| neupan | offset -' in m for m in reports)
+    assert any(re.search(r'\| neupan \d+ ms \| offset [+-]', m) for m in reports)

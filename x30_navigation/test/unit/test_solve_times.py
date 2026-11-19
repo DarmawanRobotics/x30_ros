@@ -1,7 +1,13 @@
-"""Solve times: a warning while too many overrun."""
+"""Solve times: the latest in the follower's status, a warning while too many overrun."""
 
 from __future__ import annotations
 
+from rig import Rig
+from sim import route_of, straight_route
+
+from x30_navigation.core.config.follower import FollowerConfig
+from x30_navigation.core.controllers import ControllerLimits
+from x30_navigation.core.controllers.holonomic import HolonomicController
 from x30_navigation.core.controllers.solve_times import SolveTimes
 
 
@@ -28,3 +34,25 @@ def test_one_overrun_in_ten_is_no_warning():
         times.add(0.15 if i % 10 == 0 else 0.03)
     assert not times.late  # 10 %: a pause now and then
 
+
+class Timed(HolonomicController):
+    """A controller that reports a solve time and a standing warning."""
+
+    def compute(self, request):
+        command = super().compute(request)
+        self.debug['solve_ms'] = 23.4
+        self.warning = 'solves too slow'
+        return command
+
+
+def test_the_status_shows_the_latest_solve():
+    rig = Rig(
+        route_of(straight_route(0.0, 4.0)), config=FollowerConfig(require_localization=False)
+    )
+    controller = Timed(None, ControllerLimits(0.8, 0.4, 1.0))
+    rig.follower.set_controller('timed', controller)
+    assert rig.follower.start(rig.pose)[0]
+    rig.run(2.0)
+    reports = [d.report.message for d in rig.decisions]
+    assert any('| timed 23 ms |' in m for m in reports), reports[-1]
+    assert rig.follower.controller.warning == 'solves too slow'  # the node logs it, throttled

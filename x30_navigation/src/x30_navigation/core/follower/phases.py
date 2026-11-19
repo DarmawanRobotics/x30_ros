@@ -48,8 +48,10 @@ class Phases:
         self.debug.update(out.debug, offset=tracker.offset)
         search = ' searching' if tracker.shifting and tracker.shift.searching else ''
         offset = f'offset {tracker.offset:+.2f} m{search} | ' if tracker.shifting else ''
+        solve = out.debug.get('solve_ms')  # an optimising controller's latest solve
+        name = self.controller_name if solve is None else f'{self.controller_name} {solve:.0f} ms'
         message = (
-            f'lap {self.lap} | {self.controller_name} | {offset}speed {out.speed:.2f} m/s'
+            f'lap {self.lap} | {name} | {offset}speed {out.speed:.2f} m/s'
             f' | next stop {self.stops.next}'
         )
         return out.command, message
