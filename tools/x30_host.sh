@@ -11,7 +11,8 @@ usage() {
   cat <<'EOF'
 usage: x30_host.sh env navigation|perception      the ROS network of this shell:
                                                  eval "$(bash tools/x30_host.sh env perception)"
-       x30_host.sh check                          the network, the master, every node, the clocks
+       x30_host.sh check                          the network, the master, every node, the clocks;
+                                                 the cameras (perception host)
        x30_host.sh start navigation|perception    the host's launch file (what the service runs)
        sudo bash x30_host.sh install navigation|perception
                                                  the service x30-<role>, its settings in
@@ -63,8 +64,17 @@ local_ips() { hostname -I 2>/dev/null || ip -o -4 addr show 2>/dev/null | awk '{
 
 row() { printf '%-8s %-5s %s\n' "$1" "$2" "$3"; }
 
+launch_args() { # <role>: X30_LAUNCH_ARGS here, else the service's
+  if [ -n "${X30_LAUNCH_ARGS:-}" ]; then
+    say "$X30_LAUNCH_ARGS"
+  elif [ -r "$ETC/$1.env" ]; then
+    # systemd's quotes around the value, not around one word of it
+    sed -n 's/^X30_LAUNCH_ARGS=//p' "$ETC/$1.env" | tail -n 1 | sed 's/^"\(.*\)"$/\1/'
+  fi
+}
+
 cmd_check() {
-  local ips role='' other problems=0
+  local ips role='' other problems=0 cameras=()
   ips=" $(local_ips | tr '\n' ' ') "
   case "$ips" in
     *" $NAV_IP "*) role=navigation other=$PER_IP ;;
@@ -100,8 +110,11 @@ cmd_check() {
       *) row ntp WARN "not synchronized: the clock row says how far the hosts are apart" ;;
     esac
   fi
+  if [ "$role" = perception ]; then
+    cameras=(--cameras --launch-args "$(launch_args perception)")
+  fi
   python3 "$HERE/x30_check.py" --master "${ROS_MASTER_URI:-http://$NAV_IP:$MASTER_PORT}" \
-    --other "$other" || problems=1
+    --other "$other" "${cameras[@]}" || problems=1
   return "$problems"
 }
 

@@ -1,4 +1,4 @@
-"""tools/x30_host.sh check and x30_check.py: the master, the nodes, the clocks."""
+"""tools/x30_host.sh check and x30_check.py: the master, the nodes, the clocks, the cameras."""
 
 from __future__ import annotations
 
@@ -132,6 +132,42 @@ def test_no_clock_from_a_latched_or_unstamped_topic(other_host, capsys):
     assert plain.startswith('clock    -     nothing stamped'), plain
 
 
+def test_cameras_answer_or_say_where_to_look(monkeypatch, capsys):
+    listening = socket.create_server(('127.0.0.1', 0))
+    port = listening.getsockname()[1]
+    with socket.socket() as spare:
+        spare.bind(('127.0.0.1', 0))
+        closed = spare.getsockname()[1]  # nobody listens there once this closes
+    monkeypatch.setattr(
+        x30_check,
+        'CAMERAS',
+        {'hikmicro': (('ISAPI', port),), 'hertzino': (('HTTP', closed),)},
+    )
+    args = 'hikmicro_host:=127.0.0.1 "hertzino_host:=127.0.0.1"'
+    try:
+        code = x30_check.main(
+            ['--master', 'http://127.0.0.1:9', '--cameras', '--launch-args', args]
+        )
+    finally:
+        listening.close()
+        socket.setdefaulttimeout(None)
+    rows = capsys.readouterr().out.splitlines()
+    assert code == 1
+    assert rows[0].startswith('master   MISS  http://127.0.0.1:9')  # the cameras all the same
+    assert rows[1] == f'hikmicro ok    127.0.0.1: ISAPI {port} open'
+    assert rows[2].startswith(f'hertzino MISS  127.0.0.1: HTTP {closed}: '), rows[2]
+    assert rows[2].endswith('(its cable and address, this host on 127.0.0.x)')
+
+
+def test_a_camera_left_out_and_the_launch_files_addresses(capsys):
+    assert x30_check.cameras('hikmicro:=false hertzino_host:=127.0.0.1') >= 0
+    socket.setdefaulttimeout(None)
+    rows = capsys.readouterr().out.splitlines()
+    assert rows[0] == 'hikmicro -     not started here (launch arguments)'
+    assert rows[1].startswith('hertzino ')  # 127.0.0.1 from the argument, not 192.168.2.204
+    assert '127.0.0.1' in rows[1]
+
+
 def test_check_on_a_laptop_with_a_loopback_ros_ip_and_no_master():
     env = {**os.environ, 'ROS_IP': '127.0.0.1', 'ROS_MASTER_URI': 'http://127.0.0.1:9'}
     out = subprocess.run(
@@ -145,3 +181,32 @@ def test_check_on_a_laptop_with_a_loopback_ros_ip_and_no_master():
     assert out.returncode == 1, out.stdout + out.stderr
     assert 'ros_ip   MISS  ROS_IP 127.0.0.1: loopback' in out.stdout
     assert 'master   MISS  http://127.0.0.1:9' in out.stdout
+
+
+def test_check_on_the_perception_host_reads_its_service_settings(tmp_path):
+    words = subprocess.run(['hostname', '-I'], capture_output=True, text=True, check=False)
+    here = (words.stdout.split() or [''])[0]
+    if not here:
+        pytest.skip('no address of this computer to play the perception host')
+    (tmp_path / 'perception.env').write_text(
+        'X30_LAUNCH_ARGS="hertzino:=false hikmicro_host:=127.0.0.1"\n'
+    )
+    env = {
+        **os.environ,
+        'X30_PER_IP': here,
+        'ROS_IP': here,
+        'ROS_MASTER_URI': 'http://127.0.0.1:9',
+        'X30_ETC': str(tmp_path),
+    }
+    env.pop('X30_LAUNCH_ARGS', None)
+    out = subprocess.run(
+        ['bash', str(TOOLS / 'x30_host.sh'), 'check'],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+        check=False,
+    )
+    assert 'host     ok    the perception host' in out.stdout, out.stdout + out.stderr
+    assert 'hertzino -     not started here' in out.stdout  # systemd's quotes gone
+    assert 'hikmicro MISS  127.0.0.1: ISAPI 80' in out.stdout

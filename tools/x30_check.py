@@ -2,17 +2,21 @@
 """x30_check: the ROS rows of tools/x30_host.sh check (standard library only, no ROS needed).
 
 The master and every node's address from here; the other host's clock against this one's, from
-the stamps of a topic it publishes. Exit 1 when the master or a node cannot be reached.
+the stamps of a topic it publishes; on the perception host the inspection cameras' ports. Exit 1
+when the master, a node or a camera cannot be reached.
 """
 
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+import shlex
 import socket
 import struct
 import sys
 import time
 from urllib.parse import urlparse
+import xml.etree.ElementTree as ET
 import xmlrpc.client
 
 CALLER = '/x30_host_check'
@@ -31,6 +35,9 @@ LARGE = (
     'livox_ros_driver2/CustomMsg', 'hertzino_msgs/RawFrame', 'hertzino_msgs/Spectrum',
     'nav_msgs/OccupancyGrid', 'nav_msgs/Path', 'visualization_msgs/MarkerArray',
 )  # fmt: skip
+# the inspection cameras (perception_host.launch's arguments) and their drivers' ports
+CAMERAS = {'hikmicro': (('ISAPI', 80), ('RTSP', 554)), 'hertzino': (('HTTP', 80), ('RTSP', 443))}
+LAUNCH = Path(__file__).resolve().parents[1] / 'x30_bringup' / 'launch' / 'perception_host.launch'
 
 
 def row(name: str, status: str, text: str):
@@ -178,11 +185,53 @@ def nodes(master, state) -> int:
     return unreachable
 
 
+def closed(host: str, port: int) -> str:
+    """Return why a TCP port does not answer ('' when it does)."""
+    try:
+        socket.create_connection((host, port), TIMEOUT).close()
+    except OSError as error:
+        return str(error) or type(error).__name__
+    return ''
+
+
+def cameras(launch_args: str) -> int:
+    """Print whether each started camera's ports answer; return how many do not."""
+    try:
+        values = {a.get('name'): a.get('default', '') for a in ET.parse(LAUNCH).iter('arg')}
+    except (OSError, ET.ParseError):
+        values = {}
+    for word in shlex.split(launch_args):
+        key, given, value = word.partition(':=')
+        if given:
+            values[key] = value
+    missing = 0
+    for name, ports in CAMERAS.items():
+        host = values.get(f'{name}_host', '')
+        if values.get(name, 'true').lower() in ('false', '0') or not host:
+            row(name, '-', 'not started here (launch arguments)')
+            continue
+        shut = [(label, port, closed(host, port)) for label, port in ports]
+        if not any(why for _, _, why in shut):
+            row(
+                name,
+                'ok',
+                f'{host}: {", ".join(f"{label} {port}" for label, port, _ in shut)} open',
+            )
+            continue
+        missing += 1
+        why = '; '.join(f'{label} {port}: {reason}' for label, port, reason in shut if reason)
+        net = host.rsplit('.', 1)[0]
+        row(name, 'MISS', f'{host}: {why} (its cable and address, this host on {net}.x)')
+    return missing
+
+
 def main(argv: list | None = None) -> int:
     """Print the rows; 1 when something cannot be reached."""
     parser = argparse.ArgumentParser(prog='x30_check', description=__doc__.splitlines()[0])
     parser.add_argument('--master', required=True)
     parser.add_argument('--other', default='', help="the other host's address")
+    parser.add_argument('--cameras', action='store_true', help='check the inspection cameras')
+    parser.add_argument('--launch-args', default='', help="the host's launch arguments")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     socket.setdefaulttimeout(TIMEOUT)
     master, problems = proxy(args.master), 0
@@ -196,6 +245,8 @@ def main(argv: list | None = None) -> int:
         problems += nodes(master, state)
         if args.other:
             clock(master, state, args.other)
+    if args.cameras:  # with or without the master
+        problems += cameras(args.launch_args)
     return 1 if problems else 0
 
 
