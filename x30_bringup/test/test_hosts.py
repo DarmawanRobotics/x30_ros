@@ -111,6 +111,7 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
         'lidar_pose:=0.3 0 0.1 0 0 0',  # one argument
     ]
     assert '/x30/x30_driver' in out.stdout  # the critical nodes, logged by the watchdog
+    assert 'dr_services.sh sweep' in out.stdout  # Deep Robotics' autonomy kept off meanwhile
 
 
 class FakeRos:

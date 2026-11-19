@@ -149,7 +149,7 @@ settle_dr() { # stop Deep Robotics' autonomy until a round, 30 s after the first
 }
 
 cmd_start() { # <role>
-  local role=$1 ws args=() setup
+  local role=$1 ws args=() setup sweep
   role_ip "$role" > /dev/null
   ws=${X30_WS:-$(workspace)}
   # shellcheck disable=SC1090 # the ROS and workspace setup, sourced as on the robot
@@ -178,7 +178,9 @@ cmd_start() { # <role>
   # registered with it, with it); its restart restarts the stack on both hosts
   if [ "$role" = navigation ]; then
     settle_dr
-    exec python3 "$HERE/x30_watchdog.py" "${CRITICAL[@]/#/--critical=}" -- \
+    # Deep Robotics' autonomy started again later (by a service of its own) goes again
+    printf -v sweep 'bash %q sweep' "$HERE/dr_services.sh"
+    exec python3 "$HERE/x30_watchdog.py" "${CRITICAL[@]/#/--critical=}" --sweep="$sweep" -- \
       roslaunch --wait x30_bringup navigation_host.launch "${args[@]}"
   fi
   exec python3 "$HERE/x30_watchdog.py" -- \
