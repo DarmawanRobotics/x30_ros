@@ -80,7 +80,8 @@ def test_the_navigation_host_starts_after_deep_robotics_services_and_the_masters
     proc.mkdir(parents=True)
     (proc / 'cgroup').write_text('0::/system.slice/ros_master.service\n')
     units = 'jy_core.service enabled enabled\\njy_cog.service enabled enabled'
-    systemctl = fake(bin_dir / 'systemctl', f'[ "$1" = list-unit-files ] && printf "{units}\\n"; true')
+    listed = f'[ "$1" = list-unit-files ] && printf "{units}\\n"; true'
+    systemctl = fake(bin_dir / 'systemctl', listed)
     listen = 'LISTEN 0 128 0.0.0.0:11311 0.0.0.0:* users:(("rosmaster",pid=4242,fd=5))'
     fake(bin_dir / 'ss', f"echo '{listen}'")
     env = {
