@@ -12,7 +12,8 @@ usage() {
 usage: x30_host.sh env navigation|perception      the ROS network of this shell:
                                                  eval "$(bash tools/x30_host.sh env perception)"
        x30_host.sh check                          the network, the master, every node, the clocks;
-                                                 the cameras (perception host)
+                                                 Deep Robotics' autonomy (navigation host), the
+                                                 cameras (perception host)
        x30_host.sh start navigation|perception    the host's launch file (what the service runs)
        sudo bash x30_host.sh install navigation|perception
                                                  the service x30-<role>, its settings in
@@ -64,6 +65,17 @@ local_ips() { hostname -I 2>/dev/null || ip -o -4 addr show 2>/dev/null | awk '{
 
 row() { printf '%-8s %-5s %s\n' "$1" "$2" "$3"; }
 
+dr_row() { # Deep Robotics' autonomy on the navigation host: off, or what of it runs
+  local running
+  [ -d "${JY_COG:-$HOME/jy_cog}" ] || return 0
+  running=$(bash "$HERE/dr_services.sh" sweep --dry-run 2>/dev/null | grep -c '^stop ' || true)
+  if [ "$running" = 0 ]; then
+    row deeprob ok "its autonomy is off"
+  else
+    row deeprob WARN "$running processes of its autonomy run: bash tools/dr_services.sh off"
+  fi
+}
+
 launch_args() { # <role>: X30_LAUNCH_ARGS here, else the service's
   if [ -n "${X30_LAUNCH_ARGS:-}" ]; then
     say "$X30_LAUNCH_ARGS"
@@ -74,7 +86,7 @@ launch_args() { # <role>: X30_LAUNCH_ARGS here, else the service's
 }
 
 cmd_check() {
-  local ips role='' other problems=0 cameras=()
+  local ips role='' other problems=0 pid unit='' cameras=()
   ips=" $(local_ips | tr '\n' ' ') "
   case "$ips" in
     *" $NAV_IP "*) role=navigation other=$PER_IP ;;
@@ -110,11 +122,15 @@ cmd_check() {
       *) row ntp WARN "not synchronized: the clock row says how far the hosts are apart" ;;
     esac
   fi
-  if [ "$role" = perception ]; then
+  if [ "$role" = navigation ]; then
+    dr_row
+    pid=$(master_pid)
+    [ -z "$pid" ] || unit=$(unit_of "$pid")
+  elif [ "$role" = perception ]; then
     cameras=(--cameras --launch-args "$(launch_args perception)")
   fi
   python3 "$HERE/x30_check.py" --master "${ROS_MASTER_URI:-http://$NAV_IP:$MASTER_PORT}" \
-    --other "$other" "${cameras[@]}" || problems=1
+    --master-unit "$unit" --other "$other" "${cameras[@]}" || problems=1
   return "$problems"
 }
 

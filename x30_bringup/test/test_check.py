@@ -210,3 +210,41 @@ def test_check_on_the_perception_host_reads_its_service_settings(tmp_path):
     assert 'host     ok    the perception host' in out.stdout, out.stdout + out.stderr
     assert 'hertzino -     not started here' in out.stdout  # systemd's quotes gone
     assert 'hikmicro MISS  127.0.0.1: ISAPI 80' in out.stdout
+
+
+def test_check_on_the_navigation_host_shows_deep_robotics_and_the_masters_service(
+    tmp_path, other_host
+):
+    words = subprocess.run(['hostname', '-I'], capture_output=True, text=True, check=False)
+    here = (words.stdout.split() or [''])[0]
+    if not here:
+        pytest.skip('no address of this computer to play the navigation host')
+    master = other_host(0.0)
+    bin_dir, proc = tmp_path / 'bin', tmp_path / 'proc' / '4242'
+    bin_dir.mkdir()
+    proc.mkdir(parents=True)
+    (proc / 'cgroup').write_text('0::/system.slice/jy_roscore.service\n')
+    listen = 'LISTEN 0 128 0.0.0.0:11311 0.0.0.0:* users:(("rosmaster",pid=4242,fd=5))'
+    (bin_dir / 'ss').write_text(f"#!/bin/sh\necho '{listen}'\n")
+    (bin_dir / 'ss').chmod(0o755)
+    (tmp_path / 'jy_cog' / 'system' / 'conf').mkdir(parents=True)  # nothing of it running
+    env = {
+        **os.environ,
+        'PATH': f'{bin_dir}:{os.environ["PATH"]}',
+        'X30_NAV_IP': here,
+        'ROS_IP': here,
+        'ROS_MASTER_URI': master,
+        'X30_PROC': str(tmp_path / 'proc'),
+        'JY_COG': str(tmp_path / 'jy_cog'),
+    }
+    out = subprocess.run(
+        ['bash', str(TOOLS / 'x30_host.sh'), 'check'],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+        check=False,
+    )
+    assert 'host     ok    the navigation host' in out.stdout, out.stdout + out.stderr
+    assert 'deeprob  ok    its autonomy is off' in out.stdout
+    assert f'master   ok    {master} (jy_roscore.service)' in out.stdout

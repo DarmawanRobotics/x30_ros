@@ -229,6 +229,7 @@ def main(argv: list | None = None) -> int:
     """Print the rows; 1 when something cannot be reached."""
     parser = argparse.ArgumentParser(prog='x30_check', description=__doc__.splitlines()[0])
     parser.add_argument('--master', required=True)
+    parser.add_argument('--master-unit', default='', help='the systemd service running it')
     parser.add_argument('--other', default='', help="the other host's address")
     parser.add_argument('--cameras', action='store_true', help='check the inspection cameras')
     parser.add_argument('--launch-args', default='', help="the host's launch arguments")
@@ -241,7 +242,8 @@ def main(argv: list | None = None) -> int:
         row('master', 'MISS', f'{args.master}: {error}')
         state, problems = None, 1
     if state is not None:
-        row('master', 'ok', args.master)
+        unit = f' ({args.master_unit})' if args.master_unit else ''
+        row('master', 'ok', f'{args.master}{unit}')
         problems += nodes(master, state)
         if args.other:
             clock(master, state, args.other)
