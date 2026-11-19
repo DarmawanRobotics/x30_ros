@@ -3,17 +3,9 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
-## [Unreleased] (0.11.0)
+## [Unreleased] (0.12.0)
 
 ### Added
-- `odometry_only:=true` (x30_bringup): navigation without a map, like HotDog and Pashupati.
-  FAST-LIO's start is the map origin (localization's `assume_start_origin`, the state kept
-  `LOCALIZED` while only tags correct the drift), the launch site is created without a map
-  (x30_mapping's `create_site`, also a mapping.launch argument, exclusive with
-  `start_mapping`), routes are taught and repeated in that frame; with `sim` nothing is drawn
-  from the world and the simulator sends no `/initialpose`. Refused without `localization`.
-- `stack_odometry.test`: on x30_sim, a route taught on the stick without a map and repeated by
-  the follower to within 0.15 m of its stop point.
 - Path follower controller `neupan` (x30_navigation): [NeuPAN](https://github.com/hanruihua/NeuPAN)
   tracks the route ahead and keeps the footprint off the safety scan's points in one MPC,
   planning forward and sideways speed and the yaw rate (the `holonomic` kinematics patched into
@@ -36,14 +28,28 @@ versions follow [SemVer](https://semver.org).
   installed as on the robot, its unit tests and the patrol loop around a box on x30_sim.
 
 ### Fixed
+- `X30Node`: unknown parameters are looked for once the node is built, not 0.5 s after it
+  started: a slow constructor (the path follower with NeuPAN) no longer gets its own, still
+  being declared, reported as typos.
+
+## [Unreleased] (0.11.0)
+
+### Added
+- `odometry_only:=true` (x30_bringup): navigation without a map, like HotDog and Pashupati.
+  FAST-LIO's start is the map origin (localization's `assume_start_origin`, the state kept
+  `LOCALIZED` while only tags correct the drift), the launch site is created without a map
+  (x30_mapping's `create_site`, also a mapping.launch argument, exclusive with
+  `start_mapping`), routes are taught and repeated in that frame; with `sim` nothing is drawn
+  from the world and the simulator sends no `/initialpose`. Refused without `localization`.
+- `stack_odometry.test`: on x30_sim, a route taught on the stick without a map and repeated by
+  the follower to within 0.15 m of its stop point.
+
+### Fixed
 - `planner_node`: the empty `/map` of a site without a map is no `map not usable` error.
 - `route_recorder_node`: no `no fresh map->base TF` warning at the first `route/start` while its
   TF listener fills.
 - The sim stack tests keep what the nodes remember (site, last route, trip) in their run's
   directory, not in `~/.x30`: parallel and repeated runs no longer share it.
-- `X30Node`: unknown parameters are looked for once the node is built, not 0.5 s after it
-  started: a slow constructor (the path follower with NeuPAN) no longer gets its own, still
-  being declared, reported as typos.
 
 ## [Unreleased] (0.10.0)
 
