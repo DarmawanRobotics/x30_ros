@@ -11,7 +11,7 @@ usage() {
   cat <<'EOF'
 usage: x30_host.sh env navigation|perception      the ROS network of this shell:
                                                  eval "$(bash tools/x30_host.sh env perception)"
-       x30_host.sh check                          the master, the other host, every node's address
+       x30_host.sh check                          the network, the master, every node, the clocks
        x30_host.sh start navigation|perception    the host's launch file (what the service runs)
        sudo bash x30_host.sh install navigation|perception
                                                  the service x30-<role>, its settings in
@@ -96,11 +96,12 @@ cmd_check() {
   fi
   if command -v timedatectl > /dev/null; then
     case "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" in
-      yes) row clock ok "synchronized (NTP)" ;;
-      *) row clock WARN "not synchronized: stamps across the hosts may disagree" ;;
+      yes) row ntp ok "synchronized" ;;
+      *) row ntp WARN "not synchronized: the clock row says how far the hosts are apart" ;;
     esac
   fi
-  python3 "$HERE/x30_check.py" --master "${ROS_MASTER_URI:-http://$NAV_IP:$MASTER_PORT}" || problems=1
+  python3 "$HERE/x30_check.py" --master "${ROS_MASTER_URI:-http://$NAV_IP:$MASTER_PORT}" \
+    --other "$other" || problems=1
   return "$problems"
 }
 
