@@ -85,9 +85,9 @@ at mounting position A, (47.15, −1, 117) at B, (7.15, −1, 117) at C) rather 
 | | |
 |---|---|
 | `env navigation\|perception` | the exports of that host: `ROS_MASTER_URI=http://192.168.1.106:11311`, its `ROS_IP`, no `ROS_HOSTNAME`, `PYTHONNOUSERSITE=1`, and `X30_PYTHON` when NeuPAN's venv is there; `eval` it |
-| `check` | this host's role, `ROS_IP` one of its addresses, the other host answering ping, the clock synchronized, the master answering, every registered node reachable from here (a name that does not resolve: `/etc/hosts`) |
-| `start navigation\|perception` | what the service runs: ROS and the workspace sourced, the network set (the service's settings win), on the navigation host `dr_services.sh off` until Deep Robotics' boot settled, then the host's launch file with `X30_LAUNCH_ARGS` under `x30_watchdog.py`, waiting for Deep Robotics' master (never one of its own: it would go with every restart, and Deep Robotics' LiDAR and IMU drivers with it) |
-| `install navigation\|perception` | with sudo: `/etc/x30/<role>.env` (kept when it exists; mode 600, the cameras' passwords go there) and `/etc/systemd/system/x30-<role>.service` (`Type=notify`, `WatchdogSec=60`, `Restart=on-failure`), enabled |
+| `check` | this host's role, `ROS_IP` one of its addresses, the other host answering ping, NTP, the master answering (on the navigation host with the systemd service running it), every registered node reachable from here (a name that does not resolve: `/etc/hosts`), the other host's clock against this one's (below); on the navigation host Deep Robotics' autonomy off, on the perception host the cameras' ports (HIKMICRO 80 and 554, Hertzino 80 and 443, at the addresses of `X30_LAUNCH_ARGS` or `/etc/x30/perception.env`) |
+| `start navigation\|perception` | what the service runs: ROS and the workspace sourced, the network set (the service's settings win), on the navigation host `dr_services.sh off` until Deep Robotics' boot settled, then the host's launch file with `X30_LAUNCH_ARGS` under `x30_watchdog.py`, waiting for Deep Robotics' master (never one of its own: it would go with every restart, and Deep Robotics' LiDAR and IMU drivers with it); on the navigation host the watchdog runs `dr_services.sh sweep` every 30 s, so what one of Deep Robotics' services starts again late goes again (the journal names it) |
+| `install navigation\|perception` | with sudo: `/etc/x30/<role>.env` (kept when it exists; mode 600, the cameras' passwords go there) and `/etc/systemd/system/x30-<role>.service` (`Type=notify`, `WatchdogSec=60`, `Restart=on-failure`), enabled; the navigation host's starts after Deep Robotics' services (`jy_*`) and the one running the ROS master, as found (run it with the robot up) |
 
 `X30_NAV_IP` and `X30_PER_IP` change the two addresses. The service's settings:
 
@@ -108,6 +108,18 @@ with an error, for systemd to restart the service, when the master restarted (`/
 changed), when the master or a critical node stays away longer than the grace, when the start
 takes longer than `--startup`, or when roslaunch exits; a hung watchdog stops pinging and
 systemd restarts it after 60 s. Stopping the service stops roslaunch with SIGINT first.
+`--sweep CMD [--sweep-sec 30]` runs a command beside the stack and logs what it says (the same
+output once).
+
+The clock row takes the stamps of a small topic the other host publishes (`/x30/odom` from the
+navigation host, the cameras' state from the perception host) against this host's clock when
+they arrive: `in step` within 0.1 s, else how far apart. Nothing in x30_ros compares one host's
+stamps with the other's clock (the inspection calls the camera drivers' services), so a skew
+breaks no node; logs, reports and bags of the two hosts disagree by it. Without internet the
+navigation host can be the perception host's clock: `chrony` serving the robot's network on
+the navigation host (`allow 192.168.1.0/24`, `local stratum 10`) and following it on the
+perception host (`server 192.168.1.106 iburst`), or once after boot
+`sudo date -s "$(ssh ysc@192.168.1.106 date -Ins)"` on the perception host.
 
 ## NeuPAN
 

@@ -56,8 +56,10 @@ drivers. The stack is split by what each part needs to be next to:
 | build | the whole workspace | `tools/check_deps.sh --perception` prints the build line: x30_utils, x30_bringup and the drivers only |
 
 `tools/x30_host.sh` sets each host's ROS network (`env`), checks that the two see each other
-(`check`: the master, the other host, every registered node's address, the clock), and runs
-each host's launch file by hand or as a systemd service under a watchdog (`start`, `install`):
+(`check`: the master, the other host, every registered node's address, how far the two clocks
+are apart; Deep Robotics' autonomy on the navigation host, the cameras' ports on the perception
+host), and runs each host's launch file by hand or as a systemd service under a watchdog
+(`start`, `install`):
 
 ```bash
 # both hosts: ~/x30_ws with x30_ros and x30.repos in src
@@ -79,13 +81,20 @@ when the master restarted (its nodes are lost with it: the perception host follo
 navigation host's restarts this way), when the master or a critical node stays away longer than
 45 s (a respawn takes seconds), when the start takes over 4 min, when roslaunch exits, or when
 the watchdog itself hangs. Meanwhile the robot stands: the control mux stops a command that is
-not renewed, and the motion host stops taking commands without the driver's heartbeat. On the navigation
-host the service first runs `dr_services.sh off` until Deep Robotics' boot has settled (a round
-30 s after the first finds nothing to stop).
+not renewed, and the motion host stops taking commands without the driver's heartbeat.
 
-Not tried on the robot yet: the boot order against Deep Robotics' services (`systemctl cat
-jy_roscore.service jy_core.service jy_cog.service` shows what they start) and the clocks of the
-two hosts (`check`'s `clock` line).
+**Deep Robotics' boot**: the navigation host's service starts after Deep Robotics' services
+(`install` orders it after every `jy_*` service and the one running the ROS master, as it finds
+them), then runs `dr_services.sh off` until their boot has settled (a round 30 s after the first
+finds nothing to stop) and waits for their master. While the stack runs the watchdog sweeps
+every 30 s (`dr_services.sh sweep`): what one of their services starts again later is stopped
+again and named in the journal, without Deep Robotics' own kill scripts, which may stop
+processes by name.
+
+**The clocks**: `check`'s `clock` line compares the other host's stamps with this host's clock.
+No node of x30_ros compares one host's stamps with the other's clock, so a skew stops nothing;
+logs, reports and bags of the two hosts disagree by it (tools/README.md, "Two hosts and the
+watchdog", on keeping one clock).
 
 Nodes started by others without `ROS_IP` (Deep Robotics' drivers on the navigation host
 register as `ysc-perception`) are reachable from the other host only if that name resolves
