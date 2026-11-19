@@ -4,7 +4,8 @@
 # needs and clash with it (/map, /initialpose, TF, /cmd_vel), its URDF publisher sends the
 # frames x30_description does, and its bridge (transfer) holds the UDP port of the motion host's
 # reports and drives the robot from /cmd_vel. Turns them off and on again; offline, on the
-# navigation host.
+# navigation host. While x30_ros runs as a service its watchdog sweeps them every 30 s: what one
+# of Deep Robotics' services starts again late goes again.
 # Kept: the sensor drivers (/livox/lidar, /imu/data), the ROS master and the robot server
 # (the controller app). Never touched: the motion host (.103) and the perception host (.105:
 # elevation map, autonomous charging and their drivers).
@@ -12,10 +13,12 @@ set -u
 
 usage() {
   cat <<'EOF'
-usage: dr_services.sh status|off|on [--dry-run] [--force]
+usage: dr_services.sh status|off|on|sweep [--dry-run] [--force]
   status   autorun_slam, the Deep Robotics processes, the busiest, the report port, boot starters
   off      stop the localization, navigation, mapping, URDF and bridge now; autorun_slam false
   on       autorun_slam as it was before off (back from the next boot)
+  sweep    stop what of them runs again, one line each, nothing else (x30_ros running: no
+           Deep Robotics script, which may stop processes by name)
   --dry-run  print what would be done, change nothing
 from a laptop: ssh ysc@192.168.1.106 'bash -s -- off' < tools/dr_services.sh
 EOF
@@ -299,6 +302,15 @@ cmd_off() {
   return "$FAILED"
 }
 
+cmd_sweep() {  # while x30_ros runs (its watchdog, every 30 s): never kill_nav.sh and the like
+  local pid
+  plan_stop
+  for pid in "${STOPPING[@]}"; do say "stop $pid ${ARGS[$pid]:0:100}"; done
+  [ "$DRY" = 1 ] && return 0
+  stop_all
+  return "$FAILED"
+}
+
 cmd_on() {
   local was
   if [ -f "$BACKUP" ]; then
@@ -317,7 +329,7 @@ main() {
     case "$arg" in
       --dry-run) DRY=1 ;;
       --force) FORCE=1 ;;
-      status | off | on) command=$arg ;;
+      status | off | on | sweep) command=$arg ;;
       *) usage ;;
     esac
   done

@@ -201,6 +201,20 @@ def test_dry_run_changes_nothing(jy):
     assert log.read_text() == '' and nav.poll() is None
 
 
+def test_sweep_stops_what_came_back_quietly_and_never_runs_their_scripts(jy):
+    """The watchdog's sweep while x30_ros runs: a kill_nav.sh may stop processes by name."""
+    root, log, spawn = jy
+    assert services(root, 'sweep').stdout == ''  # nothing back: nothing said
+    nav, driver = spawn('nav/bin/move_base'), spawn('drivers/livox_lidar_publisher2')
+    out = services(root, 'sweep')
+    assert out.returncode == 0, out.stdout + out.stderr
+    lines = out.stdout.splitlines()
+    assert len(lines) == 1 and lines[0].startswith(f'stop {nav.pid} {root}/nav/'), lines
+    assert wait_until(lambda: nav.poll() is not None) and driver.poll() is None
+    assert log.read_text() == ''  # no kill_nav.sh, no kill_mapping.sh
+    assert (root / 'system' / 'conf' / 'autorun_slam').read_text() == 'true\n'  # off's to set
+
+
 def test_elsewhere_or_unknown_commands_are_refused(tmp_path):
     out = services(tmp_path / 'nowhere', 'status')
     assert out.returncode == 1 and 'run this on the navigation host' in out.stdout
