@@ -45,6 +45,7 @@ def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp
         'X30_ETC': str(tmp_path / 'etc'),
         'X30_SYSTEMD_DIR': str(tmp_path),
         'X30_SYSTEMCTL': 'true',
+        'X30_PROC': str(tmp_path / 'no-proc'),  # no Deep Robotics service seen
     }
     out = host('install', 'perception', env=env)
     assert out.returncode == 0, out.stdout + out.stderr
@@ -65,6 +66,36 @@ def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp
     assert 'After=network-online.target jy_roscore.service' in navigation
     # no NeuPAN venv beside this checkout: X30_PYTHON stays a comment
     assert '# X30_PYTHON=' in (tmp_path / 'etc' / 'navigation.env').read_text()
+
+
+def fake(path: Path, body: str) -> Path:
+    path.write_text(f'#!/bin/sh\n{body}\n')
+    path.chmod(0o755)
+    return path
+
+
+def test_the_navigation_host_starts_after_deep_robotics_services_and_the_masters(tmp_path):
+    bin_dir, proc = tmp_path / 'bin', tmp_path / 'proc' / '4242'
+    bin_dir.mkdir()
+    proc.mkdir(parents=True)
+    (proc / 'cgroup').write_text('0::/system.slice/ros_master.service\n')
+    units = 'jy_core.service enabled enabled\\njy_cog.service enabled enabled'
+    systemctl = fake(bin_dir / 'systemctl', f'[ "$1" = list-unit-files ] && printf "{units}\\n"; true')
+    listen = 'LISTEN 0 128 0.0.0.0:11311 0.0.0.0:* users:(("rosmaster",pid=4242,fd=5))'
+    fake(bin_dir / 'ss', f"echo '{listen}'")
+    env = {
+        'PATH': f'{bin_dir}:{os.environ["PATH"]}',
+        'X30_ETC': str(tmp_path / 'etc'),
+        'X30_SYSTEMD_DIR': str(tmp_path),
+        'X30_SYSTEMCTL': str(systemctl),
+        'X30_PROC': str(tmp_path / 'proc'),
+    }
+    out = host('install', 'navigation', env=env)
+    assert out.returncode == 0, out.stdout + out.stderr
+    after = 'jy_cog.service jy_core.service ros_master.service'
+    assert f'starts after {after}' in out.stdout
+    unit = (tmp_path / 'x30-navigation.service').read_text()
+    assert f'After=network-online.target {after}\n' in unit
 
 
 def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):

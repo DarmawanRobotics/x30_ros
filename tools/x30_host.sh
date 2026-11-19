@@ -27,6 +27,7 @@ MASTER_PORT=11311
 ETC=${X30_ETC:-/etc/x30}
 SYSTEMD_DIR=${X30_SYSTEMD_DIR:-/etc/systemd/system}
 SYSTEMCTL=${X30_SYSTEMCTL:-systemctl}
+PROC=${X30_PROC:-/proc}
 SETTLE_SEC=${X30_SETTLE_SEC:-10}
 # the navigation host's nodes that drive and guard the robot: the watchdog restarts the stack
 # when one stays away (a respawn takes seconds)
@@ -215,9 +216,26 @@ env_file() { # <role> <user> <ws>
   fi
 }
 
-unit_file() { # <role> <user>
-  local role=$1 after=''
-  [ "$role" = navigation ] && after=' jy_roscore.service jy_core.service jy_cog.service'
+master_pid() { # the process listening on the master's port here, '' when none (or not seen)
+  command -v ss > /dev/null || return 0
+  ss -H -ltnp "sport = :$MASTER_PORT" 2>/dev/null | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n 1
+}
+
+unit_of() { # <pid>: the systemd service it runs in, '' when none
+  sed -n 's#.*/\([^/]*\.service\)$#\1#p' "$PROC/$1/cgroup" 2>/dev/null | head -n 1
+}
+
+dr_units() { # Deep Robotics' services here and the ROS master's, sorted, on one line
+  local pid
+  {
+    "$SYSTEMCTL" list-unit-files --no-legend 'jy_*.service' 2>/dev/null | awk '{print $1}'
+    pid=$(master_pid)
+    [ -z "$pid" ] || unit_of "$pid"
+  } | awk '/^[^ ]+[.]service$/' | sort -u | tr '\n' ' ' | sed 's/ $//'
+}
+
+unit_file() { # <role> <user> [<units to start after>]
+  local role=$1 after=${3:+ $3}
   cat <<EOF
 [Unit]
 Description=x30_ros, $role host (x30_bringup ${role}_host.launch)
@@ -244,7 +262,7 @@ EOF
 }
 
 cmd_install() { # <role>
-  local role=$1 user ws env unit
+  local role=$1 user ws env unit after=''
   role_ip "$role" > /dev/null
   if [ "$(id -u)" != 0 ] && [ -z "${X30_ETC:-}" ]; then
     say "run it with sudo: sudo bash $HERE/x30_host.sh install $role"
@@ -263,7 +281,18 @@ cmd_install() { # <role>
   fi
   chmod 600 "$env"
   chown "$user" "$env" 2>/dev/null || true
-  unit_file "$role" "$user" > "$unit"
+  if [ "$role" = navigation ]; then
+    # after Deep Robotics' own services, the master's among them: what they start is settled
+    # (dr_services.sh off) once they are up
+    after=$(dr_units)
+    if [ -n "$after" ]; then
+      say "starts after $after"
+    else
+      after='jy_roscore.service jy_core.service jy_cog.service'
+      say "no Deep Robotics service found (the master not running?): after $after by name"
+    fi
+  fi
+  unit_file "$role" "$user" "$after" > "$unit"
   say "wrote $unit"
   "$SYSTEMCTL" daemon-reload
   "$SYSTEMCTL" enable "x30-$role.service"
