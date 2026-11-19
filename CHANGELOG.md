@@ -26,6 +26,12 @@ versions follow [SemVer](https://semver.org).
   avoidance off.
 - `stack_neupan.test` (registered when `X30_PYTHON` is set) and CI's `neupan` job: NeuPAN
   installed as on the robot, its unit tests and the patrol loop around a box on x30_sim.
+- NeuPAN's latest solve time in `navigation/status` (`| neupan 23 ms |`); a warning from the
+  follower (every 30 s) while more than one solve in ten of the last 50 overruns the step.
+- `bench_neupan` (x30_navigation): NeuPAN's solves timed on this computer, the follower's
+  controller from the robot profile and navigation.yaml on an open route and in a corridor past
+  a box, the robot standing still; exit 1 when the slow ones overrun the step. CI's `neupan` job
+  runs it on the runner.
 
 ### Fixed
 - `X30Node`: unknown parameters are looked for once the node is built, not 0.5 s after it
