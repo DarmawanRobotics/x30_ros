@@ -306,7 +306,9 @@ cmd_sweep() {  # while x30_ros runs (its watchdog, every 30 s): never kill_nav.s
   local pid
   plan_stop
   for pid in "${STOPPING[@]}"; do say "stop $pid ${ARGS[$pid]:0:100}"; done
-  [ "$DRY" = 1 ] && return 0
+  if [ "$DRY" = 1 ] || [ "${#STOPPING[@]}" = 0 ]; then
+    return 0  # nothing came back: no second look at every process
+  fi
   stop_all
   return "$FAILED"
 }
