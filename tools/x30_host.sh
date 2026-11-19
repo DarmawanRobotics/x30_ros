@@ -100,40 +100,7 @@ cmd_check() {
       *) row clock WARN "not synchronized: stamps across the hosts may disagree" ;;
     esac
   fi
-  python3 - "${ROS_MASTER_URI:-http://$NAV_IP:$MASTER_PORT}" <<'EOF' || problems=1
-import socket
-import sys
-from urllib.parse import urlparse
-import xmlrpc.client
-
-master = sys.argv[1]
-socket.setdefaulttimeout(2.0)
-proxy = xmlrpc.client.ServerProxy(master)
-try:
-    _, _, state = proxy.getSystemState('/x30_host_check')
-except (OSError, xmlrpc.client.Error) as error:
-    print(f'{"master":<8} {"MISS":<5} {master}: {error}')
-    sys.exit(1)
-print(f'{"master":<8} {"ok":<5} {master}')
-nodes = sorted({node for kind in state for _, names in kind for node in names})
-unreachable = 0
-for node in nodes:
-    code, _, uri = proxy.lookupNode('/x30_host_check', node)
-    if code != 1:
-        continue
-    address = urlparse(uri)
-    try:
-        socket.create_connection((address.hostname, address.port), 2.0).close()
-    except OSError as error:
-        unreachable += 1
-        print(f'{"node":<8} {"MISS":<5} {node} at {address.hostname}:{address.port}: {error}')
-if unreachable:
-    print('         a name that does not resolve: "<ip> <name>" in /etc/hosts, or ROS_IP for that')
-    print('         node where it starts')
-print(f'{"nodes":<8} {"ok" if not unreachable else "MISS":<5} '
-      f'{len(nodes) - unreachable} of {len(nodes)} reachable from here')
-sys.exit(1 if unreachable else 0)
-EOF
+  python3 "$HERE/x30_check.py" --master "${ROS_MASTER_URI:-http://$NAV_IP:$MASTER_PORT}" || problems=1
   return "$problems"
 }
 
