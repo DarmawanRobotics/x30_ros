@@ -110,6 +110,8 @@ install() { # [wheels dir]
   check
   say "the path follower uses it through X30_PYTHON (in ~/.bashrc and the stack's service):"
   say "  export X30_PYTHON=$VENV/bin/python"
+  say "how fast it solves here (the workspace built and sourced, the robot standing still):"
+  say "  \$X30_PYTHON \$(rospack find x30_navigation)/scripts/bench_neupan"
 }
 
 main() {

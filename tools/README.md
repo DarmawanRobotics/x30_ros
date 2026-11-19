@@ -97,6 +97,10 @@ bash tools/install_neupan.sh --wheels ~/wheels     # ... then on the robot, no i
 NeuPAN's own. A `~/.local` setuptools or numpy never leaks in (`PYTHONNOUSERSITE=1`, as for
 catkin). Without `python3-venv` it says so (`sudo apt install python3-venv`).
 
+How fast NeuPAN solves on the navigation host, before the robot walks with it (a few seconds,
+the robot standing still): `$X30_PYTHON $(rospack find x30_navigation)/scripts/bench_neupan`
+(x30_navigation README, "NeuPAN").
+
 ## Robot without internet
 
 1. On a computer with internet (Linux or macOS, with git):
