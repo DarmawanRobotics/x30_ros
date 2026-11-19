@@ -147,6 +147,8 @@ jobs:
           source devel/setup.bash
           cd src/x30_ros
           "$X30_PYTHON" -m pytest -q -p no:cacheprovider x30_navigation/test/unit/test_neupan.py \
-            x30_navigation/test/unit/test_dune_model.py x30_navigation/test/unit/test_controllers.py
+            x30_navigation/test/unit/test_dune_model.py x30_navigation/test/unit/test_controllers.py \
+            x30_navigation/test/unit/test_solve_times.py x30_navigation/test/unit/test_bench_neupan.py
+          "$X30_PYTHON" x30_navigation/scripts/bench_neupan --solves 50
           rostest --text x30_bringup stack_neupan.test
 
