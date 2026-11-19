@@ -225,3 +225,14 @@ def test_a_start_that_never_comes_up_and_a_launch_that_exits_end_the_service(ros
     assert not any(m.startswith('READY=1') for m in systemd[1]())
     failed = watchdog(ros, systemd[0], command=('sh', '-c', 'exit 7'))
     assert failed.wait(10) == 7
+
+
+def test_the_sweep_runs_beside_the_stack_and_says_the_same_once(ros, systemd, tmp_path):
+    runs = tmp_path / 'runs'
+    sweep = f'sh -c "echo x >> {runs}; echo stop 42 move_base"'
+    process = watchdog(ros, systemd[0], '--sweep', sweep, '--sweep-sec', '0.2')
+    assert until(lambda: runs.exists() and len(runs.read_text().split()) >= 3)
+    process.send_signal(signal.SIGTERM)
+    assert process.wait(10) == 0
+    out = process.stdout.read()
+    assert out.count('sweep: stop 42 move_base') == 1, out  # logged once until it changes

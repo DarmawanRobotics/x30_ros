@@ -11,6 +11,10 @@ systemd to start it again (Restart=on-failure), when:
 - the start takes longer than --startup;
 - the command exits.
 
+With --sweep it also runs a command every --sweep-sec seconds and logs what it says, the same
+output once (the navigation host: Deep Robotics' autonomy, started again late by one of its
+services, stopped again).
+
 If the watchdog itself hangs it stops pinging, and systemd restarts the service after
 WatchdogSec. SIGINT or SIGTERM stops the command with SIGINT (roslaunch's own clean shutdown),
 then SIGTERM and SIGKILL. Standard library only: no ROS, works before the workspace is sourced.
@@ -20,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import signal
 import socket
 import subprocess
@@ -29,6 +34,7 @@ import xmlrpc.client
 
 CALLER = '/x30_watchdog'
 STOP_SEC = 25.0  # SIGINT to the command, then SIGTERM; SIGKILL after as long again
+SWEEP_TIMEOUT = 30.0  # a sweep that hangs is given up (the next one tries again)
 
 
 class TimeoutTransport(xmlrpc.client.Transport):
@@ -120,6 +126,8 @@ def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument('--startup', type=float, default=240.0, help='seconds to come up')
     parser.add_argument('--timeout', type=float, default=3.0, help='seconds per XML-RPC call')
     parser.add_argument('--master', default=os.environ.get('ROS_MASTER_URI', ''))
+    parser.add_argument('--sweep', default='', help='command to run every --sweep-sec seconds')
+    parser.add_argument('--sweep-sec', type=float, default=30.0)
     args = parser.parse_args(argv[:split])
     command = argv[split + 1 :]
     if not command or not args.master:
@@ -130,6 +138,25 @@ def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
 def log(message: str):
     """One line to the journal."""
     print(f'x30_watchdog: {message}', flush=True)
+
+
+def sweep(command: str, said: str) -> str:
+    """Run the sweep; log what it says when it says something new. Return what it said."""
+    try:
+        out = subprocess.run(
+            shlex.split(command),
+            capture_output=True,
+            text=True,
+            timeout=SWEEP_TIMEOUT,
+            check=False,
+        )
+        text = (out.stdout + out.stderr).strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        text = f'{command}: {error}'
+    if text and text != said:
+        for line in text.splitlines():
+            log(f'sweep: {line}')
+    return text
 
 
 def stop(child: subprocess.Popen) -> int:
@@ -154,7 +181,10 @@ def run(args: argparse.Namespace, command: list[str]) -> int:
     checks = Checks(args.master, args.critical, args.timeout)
     start = time.monotonic()
     ready, bad_since, last = False, None, ''
+    swept, next_sweep = '', start + args.sweep_sec
     log(f'started {" ".join(command)}; critical: {", ".join(args.critical) or "none"}')
+    if args.sweep:
+        log(f'sweep every {args.sweep_sec:g} s: {args.sweep}')
     while True:
         if stopping:
             log('stopping')
@@ -185,6 +215,9 @@ def run(args: argparse.Namespace, command: list[str]) -> int:
                 stop(child)
                 return 1
             notify(f'WATCHDOG=1\nSTATUS={"starting" if not ready else "waiting"}: {problem}')
+        if args.sweep and time.monotonic() >= next_sweep:
+            swept = sweep(args.sweep, swept)
+            next_sweep = time.monotonic() + args.sweep_sec
         deadline = time.monotonic() + args.period
         while time.monotonic() < deadline and not stopping and child.poll() is None:
             time.sleep(min(0.2, args.period))
