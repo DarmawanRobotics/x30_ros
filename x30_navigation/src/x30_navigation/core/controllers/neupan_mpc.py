@@ -30,8 +30,11 @@ from x30_navigation.core.controllers.base import (
     TrackRequest,
 )
 from x30_navigation.core.controllers.neupan_inputs import map_points, route_ahead
+from x30_navigation.core.controllers.solve_times import SolveTimes
 from x30_navigation.core.dune_model import DuneRecord, check_checkpoint
 from x30_utils.config import param
+
+LATE_HINT = 'lower neupan/dune_points or neupan/horizon_steps (bench_neupan times them)'
 
 
 @dataclass(frozen=True)
@@ -144,6 +147,7 @@ class NeupanController(PathController):
         self.since_solve = math.inf
         self.plan = np.zeros(3)
         self.failures = 0
+        self.times = SolveTimes(cfg.step_sec)  # a solve longer than the step comes late
 
     def _build(self):
         """Return NeuPAN for the robot (ImportError: NeuPAN is not installed)."""
@@ -254,10 +258,12 @@ class NeupanController(PathController):
                 raise RuntimeError(f'NeuPAN failed {self.failures} times: {error}') from error
             return np.zeros(3)
         self.failures = 0
+        self.times.add(time.perf_counter() - start)
+        self.warning = self.times.warning('NeuPAN', LATE_HINT)
         action = np.asarray(action, dtype=float).reshape(-1)
         if not self.holonomic:
             action = np.array([action[0], 0.0, action[1]])
-        self.debug = self._debug(request, info, time.perf_counter() - start, points)
+        self.debug = self._debug(request, info, points)
         if info.get('stop') or info.get('arrive') or not np.all(np.isfinite(action)):
             return np.zeros(3)
         return action
@@ -269,15 +275,15 @@ class NeupanController(PathController):
         vy = float(np.clip(plan[1], -lim.max_vy, lim.max_vy))
         return Command(vx, vy, self.clamp_wz(float(plan[2])))
 
-    def _debug(self, request: TrackRequest, info: dict, seconds: float, points) -> dict:
-        """Return what the markers draw: the planned poses, the route ahead, the timing."""
+    def _debug(self, request: TrackRequest, info: dict, points) -> dict:
+        """Return what the markers draw: the planned poses, the route ahead; the solve's time."""
         planned = info.get('opt_state_list') or []
         rollout = np.array([[float(p[0, 0]), float(p[1, 0])] for p in planned])
         reference = info.get('ref_state_list') or []
         out = {
             'rollout': rollout,
             'nearest': tuple(request.route.shifted_point(request.s, request.offset)),
-            'solve_ms': round(seconds * 1000.0, 1),
+            'solve_ms': round(self.times.last_ms, 1),  # the follower's status shows it
             'points': 0 if points is None else int(points.shape[1]),
             'min_distance': float(self.planner.min_distance),
             'stop': bool(info.get('stop')),
