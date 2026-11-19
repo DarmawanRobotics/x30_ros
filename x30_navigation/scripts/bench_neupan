@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""bench_neupan: see x30_navigation.bench_neupan."""
+
+import sys
+
+from x30_navigation.bench_neupan import main
+
+if __name__ == '__main__':
+    sys.exit(main())
