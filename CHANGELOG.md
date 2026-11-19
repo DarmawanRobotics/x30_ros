@@ -20,6 +20,16 @@ versions follow [SemVer](https://semver.org).
   exits.
 - `tools/check_deps.sh --perception`: the perception host's camera drivers only, with a build
   line for them; on the navigation host a row for NeuPAN's venv.
+- `tools/dr_services.sh sweep`: what of Deep Robotics' autonomy runs again, stopped, one line
+  each, without its kill scripts. The navigation host's watchdog runs it every 30 s
+  (`x30_watchdog.py --sweep`), so what one of Deep Robotics' services starts again late goes
+  again and is named in the journal.
+- `x30_host.sh install navigation` orders the service after Deep Robotics' services (`jy_*`)
+  and the one running the ROS master, as found on the robot.
+- `x30_host.sh check` (its ROS rows in `tools/x30_check.py`): how far the other host's clock is
+  from this one's (the stamps of a small topic it publishes on arrival), the systemd service
+  running the master and Deep Robotics' autonomy on the navigation host, the cameras' ports on
+  the perception host (at the addresses of the service's launch arguments).
 
 ## [Unreleased] (0.12.0)
 
