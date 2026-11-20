@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_bringup</name>
-  <version>0.15.0</version>
+  <version>0.16.0</version>
   <description>One launch for the Deep Robotics Jueying X30: x30_driver (or the simulated X30 of x30_sim) and the URDF with robot_state_publisher, the robot profile of the stack, and optionally every layer: control, perception, odometry, localization, mapping, navigation, health, the inspection at the stop points and its cameras.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

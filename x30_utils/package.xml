@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_utils</name>
-  <version>0.15.0</version>
+  <version>0.16.0</version>
   <description>Shared building blocks of the X30 stack (the ROS Noetic port of Dharma): math, typed configuration, the robot profile, the braking model, logging, file IO and X30Node, a rospy node with validated parameters, serialized callbacks, steady timers, TF and clean shutdown.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>
