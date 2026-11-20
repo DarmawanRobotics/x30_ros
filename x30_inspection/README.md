@@ -14,7 +14,7 @@ is kept on the robot and published.
 | `inspection/report` | `x30_msgs/InspectionReport` | everything measured at one point, its highest severity, the folder |
 | `inspection/status` | `x30_msgs/InspectionStatus`, latched | idle / inspecting / disabled, points, targets, both cameras connected, the last point and its severity, the ambient |
 | in | `site/status`, `navigation/stop_point`, TF `map` → `base_link` | the active site; where the robot stopped (else its TF pose) |
-| `/hikmicro/*` | hikmicro_driver | `ptz/move_to` (succeeds once the camera has arrived), `ptz/goto_preset`, `ptz/state`, `thermal/get_temperature`, `snapshot` |
+| `/hikmicro/*` | hikmicro_driver | `ptz/move_to` (succeeds once the camera has arrived), `ptz/goto_preset`, `ptz/state`, `thermal/get_temperature`, `thermal/temperature`, `snapshot` |
 | `/hertzino/*` | hertzino_driver | `detect` (one detection measured after the goal, its photos in the result), `status` |
 
 The path follower calls `inspection/inspect` at every stop point and waits for the answer up to
@@ -80,7 +80,11 @@ attention / warning / critical thresholds (degC), after the usual infrared-inspe
 
 `thermal/ambient_c` is live: set it to the air temperature of the day
 (`rosparam set /inspection_node/thermal/ambient_c 33.0`). The full-resolution thermal and visible
-JPEGs of the camera (`snapshot`) are the evidence.
+JPEGs of the camera (`snapshot`) are the evidence, with the raw thermometry frame for analysis:
+`<target>_thermal.npz`, the newest frame of `thermal/temperature` (hikmicro_driver's
+`radiometric_rate`) taken once the camera settled, in degC per pixel with the camera's pan, tilt
+and zoom (`x30_utils.io.read_thermal`, the format of x30_recorder). It is waited for up to
+`camera/raw_wait_sec` (2.5 s); `camera/raw_thermal: false` keeps none.
 
 ## Partial discharge
 
@@ -108,13 +112,14 @@ leaves the point `partial`, not `failed`.
 
 ```
 <reports_dir>/<YYYYMMDD>/<HHMMSS>_<point>/report.json, <target>_thermal.jpg, <target>_visible.jpg,
-                                          <target>_soundmap.jpg, <target>_prpd.jpg
+                                          <target>_thermal.npz, <target>_soundmap.jpg,
+                                          <target>_prpd.jpg
 <reports_dir>/<YYYYMMDD>/findings.csv           every finding of the day, one row each
 ```
 
 `report.json` holds the point, the robot's position, the state (`done`, `partial`, `failed`,
 `no_targets`), the highest severity and every finding with its value, reference and delta.
-`inspection/report` carries the same, with the image paths.
+`inspection/report` carries the same, with the paths of the images and raw frames.
 
 **Retention.** A robot on patrol fills its disk with reports, and a full disk writes nothing more:
 reports, maps or routes. At start and after every report whole days go, never today's: those

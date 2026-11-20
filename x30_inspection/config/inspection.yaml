@@ -13,6 +13,7 @@ camera: # the HIKMICRO PTZ camera (hikmicro_driver)
   move_timeout_sec: 20.0
   settle_sec: 1.0             # after arriving: focus and a fresh thermometry frame
   park_preset: 0              # a preset called after each point; 0: the camera stays
+  raw_thermal: true           # <target>_thermal.npz: the raw frame (thermal/temperature)
 thermal:
   ambient_c: 30.0             # degC, the air temperature of the day (live: rosparam set)
   samples: 3

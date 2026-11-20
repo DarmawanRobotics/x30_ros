@@ -93,6 +93,12 @@ class CameraConfig:
     state_max_age_sec: float = param(
         3.0, min=0.1, max=60.0, unit='s', doc='ptz/state older than this: not connected'
     )
+    raw_thermal: bool = param(
+        True, doc='a raw thermometry frame (.npz, degC per pixel) per target in the report'
+    )
+    raw_wait_sec: float = param(
+        2.5, min=0.0, max=30.0, unit='s', doc='for a frame of thermal/temperature once settled'
+    )
 
 
 @dataclass(frozen=True)

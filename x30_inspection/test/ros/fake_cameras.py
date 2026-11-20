@@ -22,9 +22,12 @@ from hikmicro_msgs.srv import (
     SnapshotRequest,
     SnapshotResponse,
 )
+import numpy as np
 import rospy
+from sensor_msgs.msg import Image
 
 JPEG = b'\xff\xd8\xff\xe0fake'
+FRAME = np.arange(12, dtype=np.float32).reshape(3, 4) + 25.0  # degC
 
 
 def key(box) -> tuple:
@@ -50,7 +53,9 @@ class FakeHikmicro:
         self.pose = [0.0, 0.0, 1.0]
         self.moves, self.presets, self.measured = [], [], []
         self.stall = False
+        self.frame_age = 0.0  # s, how old the published thermometry frames are
         self.state_pub = rospy.Publisher(f'{ns}/ptz/state', PtzState, queue_size=1)
+        self.frame_pub = rospy.Publisher(f'{ns}/thermal/temperature', Image, queue_size=1)
         self.move = actionlib.SimpleActionServer(
             f'{ns}/ptz/move_to', MoveToAction, self.on_move, auto_start=False
         )
@@ -71,6 +76,10 @@ class FakeHikmicro:
         msg = PtzState(connected=True, pan=pan, tilt=tilt, zoom=zoom)
         msg.header.stamp = rospy.Time.now()
         self.state_pub.publish(msg)
+        frame = Image(height=3, width=4, encoding='32FC1', step=16, data=FRAME.tobytes())
+        frame.header.stamp = msg.header.stamp - rospy.Duration(self.frame_age)
+        frame.header.frame_id = 'thermal_optical'
+        self.frame_pub.publish(frame)
 
     def on_move(self, goal):
         with self.lock:
@@ -113,6 +122,7 @@ class FakeHikmicro:
         stop_server(self.move)
         stop_server(self.preset)
         self.state_pub.unregister()
+        self.frame_pub.unregister()
 
 
 class FakeHertzino:

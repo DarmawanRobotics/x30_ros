@@ -15,8 +15,10 @@
   <exec_depend>actionlib</exec_depend>
   <exec_depend>hertzino_msgs</exec_depend>
   <exec_depend>hikmicro_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>x30_msgs</exec_depend>
   <exec_depend>x30_utils</exec_depend>
