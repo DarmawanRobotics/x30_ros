@@ -125,6 +125,7 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     env.pop('X30_LOG_DIR', None)
     out = host('start', 'perception', env=env)
     assert out.returncode == 3, out.stdout + out.stderr  # the launch's exit, through the watchdog
+    assert Path(f'{launched}.logs').read_text() == f'{os.environ["HOME"]}/x30/logs'  # JSON lines
     assert launched.read_text().splitlines() == [
         '192.168.1.105',
         '--wait',

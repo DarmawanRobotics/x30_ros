@@ -171,8 +171,9 @@ cmd_start() { # <role>
   mapfile -t args < <(python3 -c 'import shlex, sys; print(*shlex.split(sys.argv[1]), sep="\n")' \
     "${X30_LAUNCH_ARGS:-}")
   say "x30_ros, $role host: master $ROS_MASTER_URI, ROS_IP $ROS_IP, ${args[*]:-no arguments}"
-  # 24/7: ROS's logs within a budget at every start
+  # 24/7: ROS's logs within a budget at every start; each node's JSON lines log, rotated
   python3 "$HERE/x30_logs.py" --budget-mb "${X30_ROS_LOG_MB:-2048}" || true
+  export X30_LOG_DIR=${X30_LOG_DIR-$HOME/x30/logs}
   # the master is Deep Robotics' roscore on the navigation host: wait for it, never start one
   # with the launch (it would go with every restart, and Deep Robotics' LiDAR and IMU drivers,
   # registered with it, with it); its restart restarts the stack on both hosts
