@@ -212,6 +212,22 @@ def test_the_handheld_gateway_follows_the_robots_namespace_and_stays_out_of_heal
     assert '/teleop_udp_node' not in roslaunch('--nodes', navigation, 'bridge:=false').split()
 
 
+def test_the_netra_uplink_follows_the_robot_and_runs_with_a_netra_url():
+    args = ('fleet:=true', 'namespace:=dog', 'sites_dir:=/data/sites',
+            'netra_url:=https://netra.example.com', 'netra_robot_id:=x30-02')  # fmt: skip
+    params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
+    assert params['/fleet_uplink_node/server_url'] == 'https://netra.example.com'
+    assert params['/fleet_uplink_node/robot_id'] == 'x30-02'
+    assert params['/fleet_uplink_node/sites_dir'] == '/data/sites'
+    assert params['/fleet_uplink_node/battery_topic'] == '/dog/battery'
+    assert '/fleet_uplink_node/token' not in params  # the token: X30_NETRA_TOKEN only
+    assert '/fleet_uplink_node' not in roslaunch('--nodes', str(LAUNCH)).split()
+    navigation = str(HOSTS / 'navigation_host.launch')
+    assert '/fleet_uplink_node' not in roslaunch('--nodes', navigation).split()  # no NETRA set
+    nodes = roslaunch('--nodes', navigation, 'netra_url:=https://netra.example.com').split()
+    assert '/fleet_uplink_node' in nodes
+
+
 def test_the_navigation_host_keeps_a_black_box_unless_told_not_to():
     launch = str(HOSTS / 'navigation_host.launch')
     command = roslaunch('--args', '/blackbox', launch, 'blackbox_dir:=/data/bb').split()
