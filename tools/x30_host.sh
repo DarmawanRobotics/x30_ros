@@ -268,7 +268,7 @@ EOF
 }
 
 cmd_install() { # <role>
-  local role=$1 user ws env unit after=''
+  local role=$1 user ws env unit after='' what
   role_ip "$role" > /dev/null
   if [ "$(id -u)" != 0 ] && [ -z "${X30_ETC:-}" ]; then
     say "run it with sudo: sudo bash $HERE/x30_host.sh install $role"
@@ -302,7 +302,8 @@ cmd_install() { # <role>
   say "wrote $unit"
   "$SYSTEMCTL" daemon-reload
   "$SYSTEMCTL" enable "x30-$role.service"
-  say "next: the settings in $env (X30_LAUNCH_ARGS$([ "$role" = perception ] && printf ', the passwords'))"
+  [ "$role" = perception ] && what='X30_LAUNCH_ARGS, the passwords' || what='X30_LAUNCH_ARGS'
+  say "next: the settings in $env ($what)"
   say "then: sudo systemctl start x30-$role; journalctl -u x30-$role -f"
 }
 
