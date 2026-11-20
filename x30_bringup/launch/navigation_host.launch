@@ -17,6 +17,8 @@
                  last run's
       sites_dir, controller, reports_dir, lidar_frame, lidar_pose: bringup.launch's
       health, inspection: those layers (on by default)
+      bridge:    the handheld's UDP gateway (x30_bridge, on by default): the X30Controller app
+                 on the robot's Wi-Fi, its shared secret from X30_TELEOP_TOKEN
       odometry_method: fast_lio, or external when another estimator publishes /Odometry
       blackbox: the last hours of status, commands, pose and log in a rolling rosbag
                  (scripts/blackbox): blackbox_dir, blackbox_minutes per split, blackbox_splits
@@ -27,6 +29,7 @@
   <arg name="controller" default=""/>
   <arg name="health" default="true"/>
   <arg name="inspection" default="true"/>
+  <arg name="bridge" default="true"/>
   <arg name="reports_dir" default=""/>
   <arg name="lidar_frame" default="livox_frame"/>
   <arg name="lidar_pose" default="0 0 0 0 0 0"/>
@@ -51,6 +54,7 @@
     <arg name="reports_dir" value="$(arg reports_dir)"/>
     <arg name="lidar_frame" value="$(arg lidar_frame)"/>
     <arg name="lidar_pose" value="$(arg lidar_pose)"/>
+    <arg name="bridge" value="$(arg bridge)"/>
   </include>
 
   <node if="$(arg blackbox)" pkg="x30_bringup" type="blackbox" name="blackbox" respawn="true"

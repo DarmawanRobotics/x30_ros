@@ -67,7 +67,10 @@ def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp
     navigation = (tmp_path / 'x30-navigation.service').read_text()
     assert 'After=network-online.target jy_roscore.service' in navigation
     # no NeuPAN venv beside this checkout: X30_PYTHON stays a comment
-    assert '# X30_PYTHON=' in (tmp_path / 'etc' / 'navigation.env').read_text()
+    nav_settings = tmp_path / 'etc' / 'navigation.env'
+    assert '# X30_PYTHON=' in nav_settings.read_text()
+    assert '\nX30_TELEOP_TOKEN=\n' in nav_settings.read_text()  # the handheld's secret
+    assert stat.S_IMODE(nav_settings.stat().st_mode) == 0o600
 
 
 def fake(path: Path, body: str) -> Path:
