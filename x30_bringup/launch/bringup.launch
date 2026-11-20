@@ -40,6 +40,8 @@
                     sim: /tmp/x30_sim/sites)
       bridge:       the handheld's UDP gateway (x30_bridge: port 9870, its shared secret from
                     X30_TELEOP_TOKEN), the control mux's handheld source
+      fleet:        the NETRA command center's uplink (x30_fleet: netra_url, netra_robot_id, its
+                    token from X30_NETRA_TOKEN)
       rviz: RViz with the robot model
   -->
   <arg name="namespace" default="x30"/>
@@ -71,6 +73,9 @@
   <arg name="lidar_frame" default="livox_frame"/>
   <arg name="lidar_pose" default="0 0 0 0 0 0"/>
   <arg name="bridge" default="false"/>
+  <arg name="fleet" default="false"/>
+  <arg name="netra_url" default=""/>
+  <arg name="netra_robot_id" default=""/>
   <arg name="rviz" default="false"/>
 
   <!-- base_link has one parent: the driver's leg odometry or the localization bridge -->
@@ -183,6 +188,13 @@
   </group>
 
   <include if="$(arg bridge)" file="$(find x30_bridge)/launch/bridge.launch">
+    <arg name="sites_dir" value="$(arg sites_dir)"/>
+    <arg name="robot_ns" value="$(arg namespace)"/>
+  </include>
+
+  <include if="$(arg fleet)" file="$(find x30_fleet)/launch/fleet.launch">
+    <arg name="server_url" value="$(arg netra_url)"/>
+    <arg name="robot_id" value="$(arg netra_robot_id)"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
     <arg name="robot_ns" value="$(arg namespace)"/>
   </include>

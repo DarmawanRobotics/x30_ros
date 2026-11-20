@@ -14,6 +14,7 @@
   <exec_depend>rosbag</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>x30_bridge</exec_depend>
+  <exec_depend>x30_fleet</exec_depend>
   <exec_depend>x30_control</exec_depend>
   <exec_depend>x30_description</exec_depend>
   <exec_depend>x30_driver</exec_depend>
