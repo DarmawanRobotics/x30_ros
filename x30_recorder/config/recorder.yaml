@@ -1,0 +1,21 @@
+# recorder_node on the perception host (192.168.1.105). Only what differs from the dataclass
+# defaults, plus docs; every parameter with its unit and range: README.md. The camera's password
+# comes from HIKMICRO_PASSWORD in the environment, never from a parameter.
+recordings_dir: ~/x30/recordings  # <YYYYMMDD>/<HHMMSS>_<patrol|manual>/ per session
+
+thermal:                        # raw frames (.npz) of hikmicro_driver's thermal/temperature
+  min_interval_sec: 0.0         # every frame: hikmicro.yaml's radiometric_rate (1 Hz)
+
+video:                          # the camera's streams as they are encoded, MP4 segments
+  streams: ['visible:101', 'thermal:201']   # name:channel, main streams
+  segment_sec: 300.0
+
+acoustic:                       # hertzino_driver's spectrum, prpd, voiceprint, detection
+  chunk_sec: 10.0
+
+patrol:                         # recording on its own while a route runs
+  stop_after_sec: 30.0
+
+disk:                           # the host's disk is Deep Robotics' too: it never fills up
+  min_free_gb: 10.0             # the oldest sessions go while less is free
+  stop_free_gb: 3.0             # nothing more is written below this
