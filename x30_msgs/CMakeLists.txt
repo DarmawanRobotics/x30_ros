@@ -13,6 +13,7 @@ add_message_files(
   LocalizationStatus.msg
   NavigationStatus.msg
   OdometryStatus.msg
+  RecorderStatus.msg
   SiteStatus.msg
   TripStatus.msg
   # perception, navigation and inspection data

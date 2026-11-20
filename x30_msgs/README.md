@@ -22,6 +22,7 @@ rosmsg show x30_msgs/ControlStatus
 | `DockingStatus` | `docking/status` | IDLE, SEARCHING ... DOCKED / FAILED, tag visibility, errors to the dock, attempt, charging |
 | `ControlStatus` | `control/status` | AUTO / REMOTE, e-stop and its reasons, re-arm, protective field state, clearance, speed scale |
 | `HealthStatus` | `health/status` | OK / WARN / ERROR, issues, speed scale requested from the control mux |
+| `RecorderStatus` | `recorder/status` | recording, patrol or manual, the session, raw thermal frames, acoustic files, video segments, streams, free disk |
 | `InspectionStatus` | `inspection/status` | IDLE, INSPECTING, DISABLED; points and targets of the site, cameras connected, the last point and its severity, the ambient temperature |
 
 **Data**
