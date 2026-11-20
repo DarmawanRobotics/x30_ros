@@ -38,7 +38,8 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 [x30_localization](x30_localization/README.md) ·
 [x30_navigation](x30_navigation/README.md) · [x30_health](x30_health/README.md) ·
 [x30_inspection](x30_inspection/README.md) · [x30_recorder](x30_recorder/README.md) ·
-[x30_bridge](x30_bridge/README.md) · [x30_sim](x30_sim/README.md) · [tools](tools/README.md) ·
+[x30_bridge](x30_bridge/README.md) · [x30_fleet](x30_fleet/README.md) ·
+[x30_sim](x30_sim/README.md) · [tools](tools/README.md) ·
 [CHANGELOG](CHANGELOG.md)
 
 ## Packages
@@ -59,6 +60,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 | [`x30_inspection`](x30_inspection/README.md) | substation inspection at the stop points (the follower's hook): the HIKMICRO PTZ camera pointed at each target taught there, overheating judged by absolute, ambient and similar criteria (NETA MTS); partial discharge from the Hertzino HZ-FA-371; a report with the thermal, visible, sound map and PRPD images on the robot and on `inspection/report` |
 | [`x30_recorder`](x30_recorder/README.md) | the inspection cameras recorded on the perception host while a route runs or on request: every raw thermal frame (`.npz`, degC per pixel, with the robot's pose and the camera's pan, tilt and zoom), the visible and thermal video (RTSP copied into MP4 segments), the acoustic camera's data; disk limits and retention |
 | [`x30_bridge`](x30_bridge/README.md) | the handheld's UDP gateway (teleop protocol v1 of Pashupati with the X30's commands): the X30Controller app on a Skydroid H12 or any Android drives through the control mux, teaches and runs routes, starts the recorder and an inspection, and sees the state, the inspection camera and the cloud; no ROS on the handheld |
+| [`x30_fleet`](x30_fleet/README.md) | the X30 in the NETRA command center (robot API v1 of Pashupati, NETRA's substation module): telemetry, patrol and stop events and alerts over one WebSocket; NETRA's patrols on the robot's routes with their inspection plan; x30_inspection's reports and the taught routes uploaded through a spool on disk; NETRA's commands, the recorder's among them |
 | [`x30_sim`](x30_sim/README.md) | the X30 in software (`bringup.launch sim:=true`): a kinematic body behind the driver's topics and services, the four Mid-360 ray-cast into `/livox/lidar`, the body IMU, a drifting FAST-LIO stand-in and leg odometry, a tag camera, seeded scenarios, worlds and sites; no Gazebo, no GPU |
 
 ## Stack
@@ -71,6 +73,7 @@ robot's own perception and navigation software: the stack drives the robot throu
 and reads the X30's sensor topics.
 
 ```
+ fleet        the NETRA command center's uplink  ◄ x30_fleet
  handheld     UDP gateway of the X30Controller app  ◄ x30_bridge
  inspection   thermal and partial discharge at the stop points  ◄ x30_inspection
               the cameras recorded on the perception host  ◄ x30_recorder
