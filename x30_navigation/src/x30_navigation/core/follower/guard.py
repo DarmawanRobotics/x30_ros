@@ -78,6 +78,22 @@ class MotionGuard:
         stalled = speed > STALL_SPEED and math.hypot(out.vx, out.vy) < STALL_SPEED
         return Guarded(out, clearance, stalled)
 
+    def published(
+        self, shaped: Command, guarded: Command, points: np.ndarray, blocked: bool
+    ) -> Command:
+        """Return what may be published of a ramped command: a ramp never outruns the guard."""
+        out = self.limit(shaped, points, blocked).command
+        speed, kept = math.hypot(shaped.vx, shaped.vy), math.hypot(out.vx, out.vy)
+        allowed = math.hypot(guarded.vx, guarded.vy)
+        if kept < speed - 1e-6 and allowed > 1e-6:
+            # the ramp bent the motion toward something: the guarded way at the ramp's speed
+            k = min(speed, allowed) / allowed
+            along = Command(guarded.vx * k, guarded.vy * k, out.wz)
+            along = self.limit(along, points, blocked).command
+            if math.hypot(along.vx, along.vy) > kept:
+                return along
+        return out
+
     def _arc(self, command: Command, points: np.ndarray, yaw_margin: float) -> Command:
         """Return the command slowed along its own arc until it stops clear (as the field does)."""
         person = self.config.human_speed * (

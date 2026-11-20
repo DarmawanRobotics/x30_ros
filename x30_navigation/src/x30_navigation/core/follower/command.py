@@ -47,6 +47,15 @@ class CommandShaper:
         self.last = self.envelope(out)
         return self.last
 
+    def hold(self, command: Command) -> Command:
+        """Return command and go on from it (the guard cut the shaped one)."""
+        self.vx.reset(command.vx)
+        self.vy.reset(command.vy)
+        self.wz.reset(command.wz)
+        self.smooth_vy.value, self.smooth_wz.value = command.vy, command.wz
+        self.last = command
+        return command
+
     def hold_forward(self):
         """Stop the forward motion at once (no ramp); sideways and turning keep their ramps."""
         self.vx.reset(min(self.vx.value, 0.0))
