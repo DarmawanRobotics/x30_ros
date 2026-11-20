@@ -9,6 +9,9 @@ import subprocess
 
 import yaml
 
+from x30_localization.core.config import LocalizationConfig
+from x30_utils.config import build
+
 LAUNCH = Path(__file__).resolve().parents[1] / 'launch' / 'bringup.launch'
 LAYERS = (
     'odometry:=true',
@@ -121,34 +124,22 @@ def test_sim_with_fast_lio_is_refused():
     assert 'sim:=true stands in for FAST-LIO' in out
 
 
-def test_odometry_only_takes_the_odometry_start_as_the_map_origin(tmp_path):
-    args = ('sim:=true', 'odometry_only:=true', 'site:=yard', f'sites_dir:={tmp_path}', *LAYERS)
+def test_no_map_the_odometry_start_is_the_origin(tmp_path):
+    """No argument for a map: the start is the origin, the site is created, nothing maps."""
+    args = ('sim:=true', 'site:=yard', f'sites_dir:={tmp_path}', *LAYERS, 'health:=true')
     params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
-    assert params['/localization_node/assume_start_origin'] is True
-    assert params['/localization_node/estimator/max_sigma_xy'] == 100.0  # LOCALIZED all along
-    assert params['/localization_node/estimator/max_sigma_yaw_deg'] == 180.0
+    assert '/localization_node/assume_start_origin' not in params  # x30_localization's own
+    assert build(LocalizationConfig, {}).assume_start_origin
     assert params['/site_manager_node/create_site'] is True
     assert params['/site_manager_node/site'] == 'yard'
     assert (tmp_path / 'yard' / 'tags.json').is_file()  # the world's, in the start's frame
-    normal = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *LAYERS))
-    assert '/localization_node/assume_start_origin' not in normal  # the dataclass default
-    assert '/localization_node/estimator/max_sigma_xy' not in normal
-    assert normal['/site_manager_node/create_site'] is True  # the site manager's default
-    out = roslaunch('--nodes', str(LAUNCH), 'odometry_only:=true', 'mapping:=true')
-    assert 'odometry_only:=true is a mode of localization:=true' in out
-
-
-def test_odometry_only_maps_nothing():
-    layers = ('localization:=true', 'mapping:=true', 'navigation:=true', 'health:=true')
-    nodes = roslaunch('--nodes', str(LAUNCH), 'odometry_only:=true', *layers).split()
+    nodes = roslaunch('--nodes', str(LAUNCH), *args).split()
     assert '/site_manager_node' in nodes and '/route_recorder_node' in nodes
-    assert '/grid_mapper_node' not in nodes and '/planner_node' not in nodes
-    params = yaml.safe_load(
-        roslaunch('--dump-params', str(LAUNCH), 'odometry_only:=true', *layers)
-    )
+    assert not [n for n in nodes if 'mapper' in n or 'planner' in n]
     expected = params['/health_monitor_node/nodes/expected']
-    assert '/grid_mapper_node' not in expected and '/planner_node' not in expected
     assert '/route_recorder_node' in expected and '/path_follower_node' in expected
+    # an old odometry_only:= is no argument any more: roslaunch ignores it
+    assert roslaunch('--nodes', str(LAUNCH), *args, 'odometry_only:=false').split() == nodes
 
 
 def test_sites_dir_reaches_every_layer(tmp_path):
@@ -239,8 +230,8 @@ def test_the_navigation_host_passes_its_arguments(tmp_path):
     params = yaml.safe_load(out)
     assert params['/path_follower_node/controller'] == 'neupan'
     assert params['/site_manager_node/site'] == 'gardu'
-    assert params['/site_manager_node/create_site'] is True  # odometry only, always
-    assert params['/localization_node/assume_start_origin'] is True
+    assert params['/site_manager_node/create_site'] is True
+    assert '/localization_node/assume_start_origin' not in params  # its default: the start
     assert '/inspection_node/sites_dir' not in params
     # the arguments of the map it had: an old service setting is no map either
     old = ('odometry_only:=false', 'mapping:=true')

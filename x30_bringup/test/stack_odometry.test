@@ -1,15 +1,14 @@
 <launch>
   <!--
-    Odometry only end to end on the simulated X30 (x30_sim): bringup.launch with sim:=true and
-    odometry_only:=true, the control mux, the sector scans, the odometry monitor, localization,
-    mapping, navigation and health. No map: the site is created empty and the robot is
-    localized at the odometry start; the operator teaches a route on the stick (REMOTE) and the
-    follower repeats it (AUTO). Every run creates its site in a new directory.
+    Teach and repeat end to end on the simulated X30 (x30_sim): bringup.launch with sim:=true,
+    the control mux, the sector scans, the odometry monitor, localization, the sites,
+    navigation and health. No map: the robot is localized at the odometry start; the operator
+    teaches a route on the stick (REMOTE) and the follower repeats it (AUTO). Every run draws
+    its site in a new directory.
   -->
   <arg name="sites_dir" default="/tmp/x30_stack_odometry/$(anon sites)"/>
   <include file="$(find x30_bringup)/launch/bringup.launch">
     <arg name="sim" value="true"/>
-    <arg name="odometry_only" value="true"/>
     <arg name="site" value="yard"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
     <arg name="control" value="true"/>
