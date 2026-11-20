@@ -3,6 +3,30 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.19.0)
+
+### Added
+- x30_fleet: `fleet_uplink_node`, the X30 in the NETRA command center (robot API v1 of
+  Pashupati, with NETRA's substation module like HotDog), on the navigation host when
+  `netra_url` is set (`navigation_host.launch netra_url:=... netra_robot_id:=...`,
+  `bringup.launch fleet:=true`):
+  - telemetry at 1 Hz with the X30's `recorder` and `substation` parts, patrol and stop
+    events, alerts, acknowledgements and time sync over one WebSocket; events wait while NETRA
+    is unreachable;
+  - NETRA's patrols on the robot's routes: the route and its substation inspection plan
+    downloaded into the active site (`<site>/netra/`), loaded and started;
+  - x30_inspection's reports of NETRA's points and freshly taught routes uploaded through a
+    spool on disk, on NETRA's clock, every report once (`uid`), always as multipart;
+  - NETRA's commands as the stack's services, with the X30's `recorder_start`,
+    `recorder_stop` and `inspect_point`;
+  - the robot token from `X30_NETRA_TOKEN` in the environment, never a parameter
+    (`x30_host.sh install navigation` puts it in the private settings file); `fake_netra`, a
+    NETRA on one computer for tests and trials.
+- x30_inspection: NETRA's plan of the running patrol (`<site>/netra/inspection.yaml`) inspected
+  beside the site's own points (the site's names win); the report keeps every region's reading,
+  its time and the ambient temperature.
+- tools: `check_deps.sh` checks python3-requests and python3-websocket.
+
 ## [Unreleased] (0.18.0)
 
 ### Added

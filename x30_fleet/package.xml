@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_fleet</name>
-  <version>0.18.0</version>
+  <version>0.19.0</version>
   <description>The X30 in the NETRA command center (robot API v1 of Pashupati, the substation module): telemetry, patrol and stop events and alerts over one WebSocket; NETRA's patrols on the robot's routes with their inspection plan; the substation inspections of x30_inspection and the taught routes uploaded through a spool on disk; NETRA's commands as the stack's services.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>
