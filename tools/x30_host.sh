@@ -241,6 +241,8 @@ unit_file() { # <role> <user> [<units to start after>]
 Description=x30_ros, $role host (x30_bringup ${role}_host.launch)
 Wants=network-online.target
 After=network-online.target$after
+# a robot's stack is never given up on: restarted however often it fails
+StartLimitIntervalSec=0
 
 [Service]
 User=$2

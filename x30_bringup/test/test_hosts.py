@@ -57,6 +57,7 @@ def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp
     unit = (tmp_path / 'x30-perception.service').read_text()
     for line in ('Type=notify', 'NotifyAccess=main', 'WatchdogSec=60', 'Restart=on-failure'):
         assert line in unit
+    assert 'StartLimitIntervalSec=0' in unit.split('[Service]')[0]  # never given up on
     assert f'ExecStart=/bin/bash {TOOLS}/x30_host.sh start perception' in unit
     assert f'EnvironmentFile={settings}' in unit
     settings.write_text('X30_LAUNCH_ARGS="hertzino:=false"\n')
