@@ -18,8 +18,15 @@ versions follow [SemVer](https://semver.org).
   runs first, the newest 5 kept) and writes each node's JSON lines log to `X30_LOG_DIR`
   (`~/x30/logs`, rotated) by default.
 - The follower's check of the control field compares the turning room too (`field/yaw_margin`).
+- A robot without a map: mapping.launch `grid:=false` (the site manager and the route recorder
+  alone, the site manager's `mapping: false` offering no `mapping/*`), navigation.launch
+  `planner:=false`.
 
 ### Changed
+- The navigation host never maps: `navigation_host.launch` is odometry only, with no
+  `odometry_only` or `mapping` argument (old ones in a service's settings are ignored); it runs
+  the site and its routes, no grid mapper, no mapping session, no planner. `odometry_only:=true`
+  in bringup.launch maps nothing either, and x30_health expects only what runs.
 - The arc check of a turning translation moved from x30_control to `x30_utils.safety`: the
   field and the follower's guard share it.
 - The follower's `safety/yaw_margin_deg` is 6 (was 5): at least the field's 0.10 rad.
