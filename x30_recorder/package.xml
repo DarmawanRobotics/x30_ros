@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>x30_recorder</name>
+  <version>0.16.0</version>
+  <description>The X30's inspection cameras recorded on the perception host, where they are: the HIKMICRO camera's raw thermal frames (.npz, degC per pixel, with the robot's pose and the camera's pan, tilt and zoom), its visible and thermal streams copied by ffmpeg into MP4 segments, and the Hertzino acoustic camera's spectra, raw PRPD and voiceprint frames and detections; while the path follower runs a route (patrol) or on request, within the disk the host shares with Deep Robotics' software.</description>
+  <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
+  <license>Apache-2.0</license>
+  <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
+
+  <build_depend>x30_utils</build_depend>
+  <!-- hikmicro_msgs and hertzino_msgs come from x30.repos (hikmicro_driver, hertzino_driver) -->
+  <exec_depend>ffmpeg</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>hertzino_msgs</exec_depend>
+  <exec_depend>hikmicro_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>x30_msgs</exec_depend>
+  <exec_depend>x30_utils</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>roslaunch</test_depend>
+</package>
