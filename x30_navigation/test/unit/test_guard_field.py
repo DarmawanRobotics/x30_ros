@@ -12,8 +12,10 @@ from rig import Rig, person
 from sim import line, route_of, step, straight_route
 from test_detour import ROUTE, pocket
 
-from x30_navigation.core.config.follower import FollowerConfig
+from x30_navigation.core.config.follower import FollowerConfig, SafetyConfig
 from x30_navigation.core.controllers import CONTROLLERS
+from x30_navigation.core.controllers.base import Command
+from x30_navigation.core.follower.guard import MotionGuard
 from x30_utils.math import Pose2D
 from x30_utils.robot import Footprint, Limits, RobotProfile
 
@@ -23,6 +25,11 @@ from x30_control.core.config import FieldConfig  # noqa: E402
 from x30_control.core.scan import ScanState, ScanView  # noqa: E402
 
 DONE = ('GOAL_REACHED', 'FAILED')
+X30_PROFILE = RobotProfile(
+    name='x30',
+    footprint=Footprint(front=0.5, rear=0.5, half_width=0.235),
+    limits=Limits(max_vx=0.75, max_vy=0.15, max_wz=0.45, max_accel=0.5, max_yaw_accel=1.5),
+)
 
 
 def drive_through_the_mux(rig: Rig, seconds: float) -> list:
@@ -43,6 +50,43 @@ def drive_through_the_mux(rig: Rig, seconds: float) -> list:
         if decision.report.state.name in DONE:
             break
     return cuts
+
+
+def close_scene(rng) -> np.ndarray:
+    """Return points close around the robot: clusters and wall pieces, 0.2 to 1.4 m out."""
+    parts = []
+    for _ in range(rng.integers(1, 5)):
+        r, a = rng.uniform(0.2, 1.4), rng.uniform(-np.pi, np.pi)
+        centre = np.array([r * np.cos(a), r * np.sin(a)])
+        if rng.random() < 0.5:
+            d, s = rng.uniform(-np.pi, np.pi), np.linspace(-0.5, 0.5, 30)
+            parts.append(centre + np.column_stack((s * np.cos(d), s * np.sin(d))))
+        else:
+            parts.append(centre + rng.normal(0.0, 0.1, size=(rng.integers(3, 30), 2)))
+    return np.vstack(parts)
+
+
+@pytest.mark.parametrize('robot', [RobotProfile(), X30_PROFILE], ids=['default', 'x30'])
+def test_the_field_passes_what_the_guard_lets_through(robot):
+    """Points close by, hard turns, ramps bent off the guarded way: the field changes nothing."""
+    guard, mux = MotionGuard(robot, SafetyConfig()), field.ProtectiveField(robot, FieldConfig())
+    lim, rng, cuts = robot.limits, np.random.default_rng(3), []
+    for i in range(1000):
+        points = close_scene(rng)
+        cmd = Command(
+            rng.uniform(-0.3, lim.max_vx),
+            rng.uniform(-lim.max_vy, lim.max_vy),
+            rng.uniform(-lim.max_wz, lim.max_wz),
+        )
+        guarded = guard.limit(cmd, points, False).command
+        noise = rng.normal(0.0, (0.1, 0.05, 0.2))
+        shaped = Command(guarded.vx + noise[0], guarded.vy + noise[1], guarded.wz + noise[2])
+        for c in (guarded, guard.published(shaped, guarded, points, False)):
+            view = ScanView(ScanState.OK, points)
+            out = mux.limit(MuxCommand(c.vx, c.vy, c.wz), view, remote=False)
+            if out.state is not field.FieldState.CLEAR:
+                cuts.append((i, out.state.value))
+    assert cuts == []
 
 
 def test_the_pocket_detour_passes_without_a_cut():
@@ -69,13 +113,8 @@ def test_neupan_passes_a_box_in_a_corridor_without_a_cut():
     need_neupan()
     from x30_navigation.core.controllers.neupan_mpc import NeupanConfig
 
-    robot = RobotProfile(
-        name='x30',
-        footprint=Footprint(front=0.5, rear=0.5, half_width=0.235),
-        limits=Limits(max_vx=0.75, max_vy=0.15, max_wz=0.45, max_accel=0.5, max_yaw_accel=1.5),
-    )
     config = FollowerConfig(require_localization=False, controller='neupan')
-    rig = Rig(route_of(straight_route(-3.0, 6.0)), config=config, robot=robot)
+    rig = Rig(route_of(straight_route(-3.0, 6.0)), config=config, robot=X30_PROFILE)
     controller = CONTROLLERS.create('neupan', NeupanConfig(dune_checkpoint=MODEL), X30)
     rig.follower.set_controller('neupan', controller)
     rig.sectors = 72
