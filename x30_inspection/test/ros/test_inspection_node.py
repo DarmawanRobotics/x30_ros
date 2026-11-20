@@ -7,7 +7,8 @@ import json
 from pathlib import Path
 import threading
 
-from fake_cameras import FakeHertzino, FakeHikmicro
+from fake_cameras import FRAME, FakeHertzino, FakeHikmicro
+import numpy as np
 import pytest
 import rospy
 from std_srvs.srv import Trigger
@@ -22,6 +23,7 @@ from x30_msgs.msg import (
     StopPointEvent,
 )
 from x30_msgs.srv import AddTarget
+from x30_utils.io import read_thermal
 from x30_utils.testing.harness import Collector, connected, delete_params, wait_for
 
 NAMES = itertools.count()
@@ -131,11 +133,24 @@ def test_inspects_the_point_where_the_robot_stopped(make):
     folder = Path(msg.directory)
     files = sorted(p.name for p in folder.iterdir())
     assert files == ['bushing_prpd.jpg', 'bushing_soundmap.jpg', 'phases_thermal.jpg',
-                     'phases_visible.jpg', 'report.json']  # fmt: skip
+                     'phases_thermal.npz', 'phases_visible.jpg', 'report.json']  # fmt: skip
+    raw = read_thermal(str(folder / 'phases_thermal.npz'))  # the frame once the camera arrived
+    assert np.array_equal(raw['temperature'], FRAME) and tuple(raw['ptz']) == (30.0, -10.0, 3.0)
+    assert raw['meta'] == {'frame_id': 'thermal_optical', 'target': 'phases'}
     saved = json.loads((folder / 'report.json').read_text())
     assert saved['severity'] == 'critical' and saved['x'] == pytest.approx(1.2)
     assert (folder.parent / 'findings.csv').read_text().count('\n') == 1 + len(msg.findings)
     assert rig.status.wait_until(lambda s: s.last_point == 'bay1' and s.last_severity == 3, 5.0)
+
+
+def test_no_raw_thermal_frame_from_before_the_camera_arrived(make):
+    rig = make(**{'camera.raw_wait_sec': 0.3})
+    rig.camera.frame_age = 60.0  # only frames taken a minute ago
+    rig.stop_at(1.0, 2.0)
+    assert rig.call(Trigger, 'inspection/inspect').success
+    assert rig.reports_msgs.wait(1, 5.0)
+    folder = Path(rig.reports_msgs.last.directory)
+    assert (folder / 'phases_thermal.jpg').exists() and not list(folder.glob('*.npz'))
 
 
 def test_a_stop_without_a_point_answers_at_once(make):

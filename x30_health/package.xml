@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_health</name>
-  <version>0.16.0</version>
+  <version>0.17.0</version>
   <description>One health signal for the X30 (the ROS Noetic port of dharma_health): rates and header ages of the sensor topics (raw, any type), the expected nodes, the stack's typed states, the safety scan, the TF chain, the clock and the computer (CPU, memory, disk, temperatures), aggregated into health/status with a speed scale for the control mux, and diagnostics.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

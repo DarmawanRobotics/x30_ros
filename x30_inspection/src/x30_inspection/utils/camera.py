@@ -10,16 +10,19 @@ import time
 import actionlib
 from hikmicro_msgs.msg import GotoPresetAction, GotoPresetGoal, MoveToAction, MoveToGoal, PtzState
 from hikmicro_msgs.srv import GetTemperature, GetTemperatureRequest, Snapshot, SnapshotRequest
+from sensor_msgs.msg import Image
 
 from x30_inspection.core.config import CameraConfig
 from x30_inspection.core.runner import Camera
 from x30_inspection.core.thermal import Reading
 from x30_inspection.utils.actions import run_goal
-from x30_utils.ros import EVENTS
+from x30_utils.io import image_temperatures, write_thermal
+from x30_utils.ros import EVENTS, SENSOR
 from x30_utils.ros.services import ServiceClient
 
 ACTION_MARGIN_SEC = 5.0  # past the driver's own move timeout
 SNAPSHOTS = ((SnapshotRequest.THERMAL, 'thermal'), (SnapshotRequest.VISIBLE, 'visible'))
+UNKNOWN = (math.nan, math.nan, math.nan)
 
 
 class HikmicroCamera(Camera):
@@ -31,16 +34,25 @@ class HikmicroCamera(Camera):
         ns = config.namespace.rstrip('/')
         self.lock = threading.Lock()
         self.state: tuple[PtzState | None, float] = (None, 0.0)
+        self.frame: Image | None = None  # the newest thermometry frame
+        self.settled = 0.0  # ROS time the camera settled at the last target
         self.move = actionlib.SimpleActionClient(f'{ns}/ptz/move_to', MoveToAction)
         self.preset = actionlib.SimpleActionClient(f'{ns}/ptz/goto_preset', GotoPresetAction)
         self.temperature = ServiceClient(GetTemperature, f'{ns}/thermal/get_temperature')
         self.snapshots = ServiceClient(Snapshot, f'{ns}/snapshot')
         node.create_subscription(PtzState, f'{ns}/ptz/state', self.on_state, EVENTS)
+        if config.raw_thermal:
+            node.create_subscription(Image, f'{ns}/thermal/temperature', self.on_frame, SENSOR)
 
     def on_state(self, msg: PtzState):
         """Keep the camera's position."""
         with self.lock:
             self.state = (msg, time.monotonic())
+
+    def on_frame(self, msg: Image):
+        """Keep the newest thermometry frame (32FC1, degC per pixel)."""
+        with self.lock:
+            self.frame = msg
 
     def fresh_state(self) -> PtzState | None:
         """Return the latest connected state, None when stale or disconnected."""
@@ -67,6 +79,7 @@ class HikmicroCamera(Camera):
         result, error = run_goal(self.move, goal, timeout + ACTION_MARGIN_SEC, cancelled)
         if result is None:
             return f'ptz/move_to {error}'
+        self.settled = self.node.now() + self.config.settle_sec
         return '' if result.reached else f'ptz/move_to {result.state}: {result.message}'
 
     def measure(self, box) -> tuple[Reading | None, str]:
@@ -105,7 +118,38 @@ class HikmicroCamera(Camera):
                 self.node.log.warning('snapshot not saved', path=path, detail=str(failure))
                 continue
             files.append(os.path.abspath(path))
-        return files
+        raw = self.raw_thermal(prefix)
+        return files + ([raw] if raw else [])
+
+    def raw_thermal(self, prefix: str) -> str:
+        """Save the newest frame since the camera settled as <prefix>_thermal.npz ('' if none)."""
+        if not self.config.raw_thermal:
+            return ''
+        path = f'{prefix}_thermal.npz'
+        deadline = time.monotonic() + self.config.raw_wait_sec
+        while True:
+            with self.lock:
+                msg = self.frame
+            if msg is None:  # no thermal/temperature: hikmicro_driver's radiometric_rate 0
+                return ''
+            if msg.header.stamp.to_sec() >= self.settled:
+                break
+            if time.monotonic() >= deadline:
+                self.node.log.warning('no raw thermal frame since the camera settled', path=path)
+                return ''
+            time.sleep(0.05)
+        meta = {'frame_id': msg.header.frame_id, 'target': os.path.basename(prefix)}
+        big = bool(msg.is_bigendian)
+        try:
+            if msg.encoding != '32FC1':
+                raise ValueError(f'{msg.encoding} is not 32FC1')
+            data = image_temperatures(msg.height, msg.width, msg.step, msg.data, big)
+            stamp, ptz = msg.header.stamp.to_sec(), self.pose() or UNKNOWN
+            write_thermal(path, data, stamp, ptz=ptz, meta=meta)
+        except (OSError, ValueError) as failure:
+            self.node.log.warning('raw thermal frame not saved', path=path, detail=str(failure))
+            return ''
+        return os.path.abspath(path)
 
     def park(self) -> str:
         """Call the park preset; '' once the camera has arrived there."""

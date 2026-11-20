@@ -1,0 +1,23 @@
+<launch>
+  <!--
+    recorder_node on the perception host: the inspection cameras recorded where they are (raw
+    thermal frames, the camera streams, the acoustic data), while a route runs or on request.
+      params_file:    overrides of config/recorder.yaml
+      recordings_dir: where the sessions go, when set
+      host:           the HIKMICRO camera, when set (its password: HIKMICRO_PASSWORD)
+  -->
+  <arg name="params_file" default=""/>
+  <arg name="recordings_dir" default=""/>
+  <arg name="host" default=""/>
+  <arg name="output" default="screen"/>
+  <arg name="respawn" default="true"/>
+
+  <node pkg="x30_recorder" type="recorder_node" name="recorder_node" output="$(arg output)"
+        respawn="$(arg respawn)" respawn_delay="2">
+    <rosparam command="load" file="$(find x30_recorder)/config/recorder.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+    <param if="$(eval arg('recordings_dir') != '')" name="recordings_dir"
+           value="$(arg recordings_dir)"/>
+    <param if="$(eval arg('host') != '')" name="video/host" value="$(arg host)"/>
+  </node>
+</launch>

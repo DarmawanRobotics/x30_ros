@@ -27,6 +27,9 @@ COMMAND = Profile(1, tcp_nodelay=True)
 EVENTS = Profile(20)
 """Every message matters: events, requests."""
 
+RECORDED = Profile(20, tcp_nodelay=True, buff_size=1 << 24)
+"""Every message of a sensor kept, none dropped while a callback runs: recordings."""
+
 
 def profile(qos) -> Profile:
     """Return a Profile from a Profile or a queue size."""

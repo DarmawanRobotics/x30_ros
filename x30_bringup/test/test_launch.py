@@ -255,16 +255,22 @@ def fake_driver(root: Path, name: str, node: str):
     )
 
 
-def test_the_perception_host_runs_the_cameras_at_their_addresses(tmp_path, monkeypatch):
+def test_the_perception_host_runs_the_cameras_at_their_addresses_and_records_them(
+    tmp_path, monkeypatch
+):
     fake_driver(tmp_path, 'hikmicro_driver', 'hikmicro_ptz_node')
     fake_driver(tmp_path, 'hertzino_driver', 'hertzino_node')
     monkeypatch.setenv('ROS_PACKAGE_PATH', f'{tmp_path}:{os.environ["ROS_PACKAGE_PATH"]}')
     launch = str(HOSTS / 'perception_host.launch')
     nodes = roslaunch('--nodes', launch).split()
-    assert nodes == ['/hikmicro/hikmicro_ptz_node', '/hertzino/hertzino_node']
+    assert nodes == ['/hikmicro/hikmicro_ptz_node', '/hertzino/hertzino_node', '/recorder_node']
     params = yaml.safe_load(roslaunch('--dump-params', launch, 'hikmicro_host:=10.0.0.9'))
     assert params['/hikmicro/hikmicro_ptz_node/host'] == '10.0.0.9'
     assert params['/hertzino/hertzino_node/host'] == '192.168.2.204'
-    assert roslaunch('--nodes', launch, 'hertzino:=false').split() == [
+    assert params['/recorder_node/video/host'] == '10.0.0.9'  # the camera it records
+    assert params['/recorder_node/recordings_dir'] == '~/x30/recordings'
+    moved = yaml.safe_load(roslaunch('--dump-params', launch, 'recordings_dir:=/data/rec'))
+    assert moved['/recorder_node/recordings_dir'] == '/data/rec'
+    assert roslaunch('--nodes', launch, 'hertzino:=false', 'recorder:=false').split() == [
         '/hikmicro/hikmicro_ptz_node'
     ]

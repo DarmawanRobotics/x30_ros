@@ -51,11 +51,11 @@ elevation map and charging. The stack is split by what each part needs to be nex
 
 | | navigation host (.106): `navigation_host.launch` | perception host (.105): `perception_host.launch` |
 |---|---|---|
-| runs | the driver, `robot_state_publisher`, the control mux, the LiDAR scans, FAST-LIO, localization, the site and its routes ([No map](#no-map)), navigation (NeuPAN with `controller:=neupan`), health, the inspection with its sites and reports | the inspection cameras: hikmicro_driver (PTZ, RTSP video), hertzino_driver |
-| why | the motion host reports to its UDP 43897; the protective field stays on the same computer as the LiDAR driver and the mux, so the network between the hosts never blinds it; FAST-LIO and NeuPAN want its x86 cores | decoding the cameras' video off the computer that drives; the inspection calls the cameras' services, small messages |
+| runs | the driver, `robot_state_publisher`, the control mux, the LiDAR scans, FAST-LIO, localization, the site and its routes ([No map](#no-map)), navigation (NeuPAN with `controller:=neupan`), health, the inspection with its sites and reports | the inspection cameras: hikmicro_driver (PTZ, RTSP video), hertzino_driver; their recorder (x30_recorder: raw thermal frames, video, acoustic data, `recorder:=false` off) |
+| why | the motion host reports to its UDP 43897; the protective field stays on the same computer as the LiDAR driver and the mux, so the network between the hosts never blinds it; FAST-LIO and NeuPAN want its x86 cores | decoding the cameras' video off the computer that drives; the inspection calls the cameras' services, small messages; the recordings written where the cameras' data arrives, never over the network |
 | ROS | the robot's master (Deep Robotics' roscore, kept by `dr_services.sh`), `ROS_IP=192.168.1.106` | the navigation host's master, `ROS_IP=192.168.1.105`; Deep Robotics' own master here stays for its own nodes |
 | Deep Robotics | `tools/dr_services.sh off`: its autonomy, URDF and bridge off | untouched: the elevation map, charging and its drivers |
-| build | the whole workspace | `tools/check_deps.sh --perception` prints the build line: x30_utils, x30_bringup and the drivers only |
+| build | the whole workspace | `tools/check_deps.sh --perception` prints the build line: x30_utils, x30_msgs, x30_recorder, x30_bringup and the drivers only |
 
 `tools/x30_host.sh` sets each host's ROS network (`env`), checks that the two see each other
 (`check`: the master, the other host, every registered node's address, how far the two clocks
@@ -112,6 +112,7 @@ What a robot on patrol around the clock needs beside the stack, all on by defaul
 | restarts | the service (`StartLimitIntervalSec=0`), the watchdog, every node's `respawn` | the stack never given up on |
 | Deep Robotics' autonomy | the watchdog's sweep every 30 s | off, whatever of it starts late |
 | inspection reports | x30_inspection, after every report | whole days, the oldest first, while less than 6 GB is free (`reports_min_free_gb`, `reports_keep_days`) |
+| camera recordings | x30_recorder on the perception host, before a session and every 30 s of it | the oldest sessions first while less than 10 GB is free (`disk/min_free_gb`, `disk/keep_days`); nothing recorded below 3 GB |
 | ROS's logs (`~/.ros/log`) | the service, at every start (`tools/x30_logs.py`) | within 2 GB, the oldest runs first (`X30_ROS_LOG_MB`) |
 | each node's log | `X30_LOG_DIR` (`~/x30/logs`) | one JSON lines file per node, rotated at 10 MB, 5 kept |
 | black box | `navigation_host.launch blackbox:=true` (`scripts/blackbox`) | the last 3 h of every layer's status, the commands before and after the mux, the pose, the battery, the safety scan, the inspection and `/rosout_agg`, in 10 min rosbag splits in `~/x30/blackbox` (about 0.5 GB) |

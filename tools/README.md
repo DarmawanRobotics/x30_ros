@@ -6,7 +6,7 @@ nothing downloaded on the robot.
 | Script | Run on | |
 |---|---|---|
 | `dr_services.sh status\|off\|on` | the navigation host (192.168.1.106) | Deep Robotics' own localization, navigation, mapping, URDF and bridge off, now and at boot, and back on |
-| `check_deps.sh [--tests] [--gui]` | the robot | what the build and the stack need, checked offline: the apt packages, the sources of x30.repos, the Livox SDK |
+| `check_deps.sh [--perception] [--tests] [--gui]` | the robot | what the build and the stack need, checked offline: the apt packages, the sources of x30.repos, the Livox SDK; `--perception` what the perception host builds (the camera drivers, the recorder) |
 | `install_neupan.sh [--venv DIR] [--wheels DIR]`, `--download DIR`, `--check` | the navigation host | NeuPAN for the `neupan` controller: a venv with PyTorch (CPU), cvxpy and NeuPAN with the patches of [neupan/](neupan) |
 | `x30_host.sh env\|check\|start\|install` | each host | the ROS network of the navigation (192.168.1.106) and the perception host (192.168.1.105), whether they see each other, and each one's launch file by hand or as the service `x30-<role>` |
 | `x30_watchdog.py` | (the service) | the host's roslaunch under systemd's watchdog: restarts it when the master restarts or a critical node stays away |

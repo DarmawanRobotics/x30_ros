@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_control</name>
-  <version>0.16.0</version>
+  <version>0.17.0</version>
   <description>The control mux of the X30 stack (the ROS Noetic port of dharma_control): the only publisher of the robot's cmd_vel. AUTO (navigation) or REMOTE (an operator source), the speed envelope, a protective field on the 360 degree safety scan and a latched e-stop with a hardware input and re-arm.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

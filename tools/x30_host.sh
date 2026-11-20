@@ -2,9 +2,9 @@
 # x30_ros across the X30's two computers: the navigation host (192.168.1.106, the intelligent
 # controller: the robot's ROS master, the driver, control, LiDAR scans, odometry, localization,
 # routes without a map, navigation, health, inspection) and the perception host (192.168.1.105:
-# the inspection cameras). Sets each one's ROS network, checks that the two see each other, and
-# starts each one's launch file, by hand or as a systemd service (x30_bringup README, "Two
-# hosts").
+# the inspection cameras and their recorder). Sets each one's ROS network, checks that the two
+# see each other, and starts each one's launch file, by hand or as a systemd service
+# (x30_bringup README, "Two hosts").
 set -euo pipefail
 
 usage() {
