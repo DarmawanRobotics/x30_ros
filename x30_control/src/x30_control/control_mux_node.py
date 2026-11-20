@@ -176,12 +176,14 @@ class ControlMuxNode(X30Node):
 
     def _set_field(self, state: FieldState, clearance: float, scale: float, mono: float):
         if state is not self._field[0]:
+            # every change is in control/status; the log names each state at most once a second
+            # (a person beside the path flips limited and clear at the command rate)
             log = (
                 self.log.warning
                 if state in (FieldState.STOP, FieldState.STALE, FieldState.BLIND)
                 else self.log.info
             )
-            log('protective field', state=state.value)
+            log('protective field', state=state.value, throttle=1.0, key=f'field {state.value}')
         self._field, self._field_time = (state, clearance, scale), mono
 
     def _current_field(self, mono: float) -> tuple:
