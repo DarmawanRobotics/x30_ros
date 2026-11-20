@@ -101,6 +101,24 @@ register as `ysc-perception`) are reachable from the other host only if that nam
 there: `check` lists them, and a line `192.168.1.106 ysc-perception` in the perception host's
 `/etc/hosts` fixes it.
 
+## Running for months
+
+What a robot on patrol around the clock needs beside the stack, all on by default:
+
+| | where | what it keeps |
+|---|---|---|
+| restarts | the service (`StartLimitIntervalSec=0`), the watchdog, every node's `respawn` | the stack never given up on |
+| Deep Robotics' autonomy | the watchdog's sweep every 30 s | off, whatever of it starts late |
+| inspection reports | x30_inspection, after every report | whole days, the oldest first, while less than 6 GB is free (`reports_min_free_gb`, `reports_keep_days`) |
+| ROS's logs (`~/.ros/log`) | the service, at every start (`tools/x30_logs.py`) | within 2 GB, the oldest runs first (`X30_ROS_LOG_MB`) |
+| each node's log | `X30_LOG_DIR` (`~/x30/logs`) | one JSON lines file per node, rotated at 10 MB, 5 kept |
+| black box | `navigation_host.launch blackbox:=true` (`scripts/blackbox`) | the last 3 h of every layer's status, the commands before and after the mux, the pose, the battery, the safety scan, the inspection and `/rosout_agg`, in 10 min rosbag splits in `~/x30/blackbox` (about 0.5 GB) |
+| the disk, the CPU, the temperatures | x30_health | warnings below 5 GB free and above the limits |
+
+After an incident: `rqt_bag ~/x30/blackbox/x30_<time>.bag` for what the robot was told and
+did, `~/x30/logs/<node>.jsonl` for why. Copy the reports off the robot before they are old
+enough to go.
+
 ## Launch
 
 `launch/bringup.launch`:
