@@ -11,6 +11,7 @@
 
   <build_depend>x30_utils</build_depend>
   <!-- hikmicro_driver and hertzino_driver (hikmicro:=true, hertzino:=true) come from x30.repos -->
+  <exec_depend>rosbag</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>x30_control</exec_depend>
   <exec_depend>x30_description</exec_depend>

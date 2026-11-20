@@ -12,6 +12,9 @@
                  bringup.launch's
       mapping, health, inspection: those layers (on by default)
       odometry_method: fast_lio, or external when another estimator publishes /Odometry
+      blackbox: the last hours of status, commands, pose and log in a rolling rosbag
+                 (scripts/blackbox): blackbox_dir, blackbox_minutes per split, blackbox_splits
+                 kept (3 h, about 0.5 GB)
   -->
   <arg name="site" default=""/>
   <arg name="odometry_only" default="false"/>
@@ -24,6 +27,10 @@
   <arg name="lidar_frame" default="livox_frame"/>
   <arg name="lidar_pose" default="0 0 0 0 0 0"/>
   <arg name="odometry_method" default="fast_lio"/>
+  <arg name="blackbox" default="true"/>
+  <arg name="blackbox_dir" default="$(env HOME)/x30/blackbox"/>
+  <arg name="blackbox_minutes" default="10"/>
+  <arg name="blackbox_splits" default="18"/>
 
   <include file="$(find x30_bringup)/launch/bringup.launch">
     <arg name="control" value="true"/>
@@ -43,4 +50,8 @@
     <arg name="lidar_frame" value="$(arg lidar_frame)"/>
     <arg name="lidar_pose" value="$(arg lidar_pose)"/>
   </include>
+
+  <node if="$(arg blackbox)" pkg="x30_bringup" type="blackbox" name="blackbox" respawn="true"
+        respawn_delay="10" output="log"
+        args="$(arg blackbox_dir) $(arg blackbox_minutes) $(arg blackbox_splits)"/>
 </launch>

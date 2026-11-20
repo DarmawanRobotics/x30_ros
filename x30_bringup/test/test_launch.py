@@ -194,6 +194,32 @@ def test_the_navigation_host_runs_all_but_the_cameras_and_what_its_watchdog_watc
     assert critical and set(critical) <= set(nodes)
 
 
+def test_the_navigation_host_keeps_a_black_box_unless_told_not_to():
+    launch = str(HOSTS / 'navigation_host.launch')
+    command = roslaunch('--args', '/blackbox', launch, 'blackbox_dir:=/data/bb').split()
+    assert command[0].endswith('x30_bringup/scripts/blackbox')
+    assert command[1:4] == ['/data/bb', '10', '18']  # 10 min splits, 3 h kept
+    assert '/blackbox' not in roslaunch('--nodes', launch, 'blackbox:=false').split()
+
+
+def test_the_black_box_records_the_robot_in_rolling_splits(tmp_path):
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    (bin_dir / 'rosbag').write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    (bin_dir / 'rosbag').chmod(0o755)
+    script = Path(__file__).resolve().parents[1] / 'scripts' / 'blackbox'
+    env = {**os.environ, 'PATH': f'{bin_dir}:{os.environ["PATH"]}'}
+    out = subprocess.run(
+        [str(script), str(tmp_path / 'bb'), '10', '18', '__name:=blackbox'],
+        capture_output=True, text=True, env=env, timeout=30, check=True,
+    ).stdout.split()  # fmt: skip
+    assert (tmp_path / 'bb').is_dir()
+    assert out[:5] == ['record', '--lz4', '--split', '--duration=10m', '--max-splits=18']
+    assert out[5:8] == ['-o', str(tmp_path / 'bb' / 'x30'), '__name:=blackbox']
+    for topic in ('/navigation/status', '/cmd_vel', '/x30/odom', '/localization/pose'):
+        assert topic in out
+
+
 def test_the_navigation_host_passes_its_arguments(tmp_path):
     args = ('odometry_only:=true', 'site:=gardu', 'controller:=neupan', 'inspection:=false')
     out = roslaunch('--dump-params', str(HOSTS / 'navigation_host.launch'), *args)
