@@ -36,7 +36,6 @@ def test_every_layer_behind_its_argument():
     for node in (
         '/odometry_monitor_node',
         '/localization_node',
-        '/grid_mapper_node',
         '/site_manager_node',
         '/route_recorder_node',
         '/path_loader_node',
@@ -135,7 +134,7 @@ def test_odometry_only_takes_the_odometry_start_as_the_map_origin(tmp_path):
     normal = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *LAYERS))
     assert '/localization_node/assume_start_origin' not in normal  # the dataclass default
     assert '/localization_node/estimator/max_sigma_xy' not in normal
-    assert normal['/site_manager_node/create_site'] is False
+    assert normal['/site_manager_node/create_site'] is True  # the site manager's default
     out = roslaunch('--nodes', str(LAUNCH), 'odometry_only:=true', 'mapping:=true')
     assert 'odometry_only:=true is a mode of localization:=true' in out
 
@@ -148,7 +147,6 @@ def test_odometry_only_maps_nothing():
     params = yaml.safe_load(
         roslaunch('--dump-params', str(LAUNCH), 'odometry_only:=true', *layers)
     )
-    assert params['/site_manager_node/mapping'] is False  # no mapping/start
     expected = params['/health_monitor_node/nodes/expected']
     assert '/grid_mapper_node' not in expected and '/planner_node' not in expected
     assert '/route_recorder_node' in expected and '/path_follower_node' in expected
@@ -158,7 +156,7 @@ def test_sites_dir_reaches_every_layer(tmp_path):
     layers = ('localization:=true', 'mapping:=true', 'navigation:=true', 'inspection:=true')
     args = ('sim:=true', 'site:=lobby', f'sites_dir:={tmp_path}', *layers)
     params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
-    nodes = ('localization_node', 'site_manager_node', 'grid_mapper_node', 'path_loader_node')
+    nodes = ('localization_node', 'site_manager_node', 'path_loader_node')
     for node in (*nodes, 'inspection_node'):
         assert params[f'/{node}/sites_dir'] == str(tmp_path), node
     assert params['/inspection_node/reports_dir'] == '/tmp/x30_sim/reports'
@@ -243,7 +241,6 @@ def test_the_navigation_host_passes_its_arguments(tmp_path):
     assert params['/path_follower_node/controller'] == 'neupan'
     assert params['/site_manager_node/site'] == 'gardu'
     assert params['/site_manager_node/create_site'] is True  # odometry only, always
-    assert params['/site_manager_node/mapping'] is False
     assert params['/localization_node/assume_start_origin'] is True
     assert '/inspection_node/sites_dir' not in params
     # the arguments of the map it had: an old service setting is no map either

@@ -8,51 +8,43 @@ import subprocess
 import yaml
 
 LAUNCH = Path(__file__).resolve().parents[2] / 'launch' / 'mapping.launch'
-NODES = ('grid_mapper_node', 'site_manager_node', 'route_recorder_node')
+NODES = ('site_manager_node', 'route_recorder_node')
 
 
-def params(*args: str) -> dict:
+def roslaunch(option: str, *args: str) -> str:
     result = subprocess.run(
-        ['roslaunch', '--dump-params', str(LAUNCH), *args],
+        ['roslaunch', option, str(LAUNCH), *args],
         capture_output=True,
         text=True,
         timeout=60,
         check=False,
     )
     assert result.returncode == 0 and 'Unable' not in result.stdout, result.stdout + result.stderr
-    return yaml.safe_load(result.stdout)
+    return result.stdout
+
+
+def params(*args: str) -> dict:
+    return yaml.safe_load(roslaunch('--dump-params', *args))
+
+
+def test_the_sites_and_their_routes_no_map():
+    assert roslaunch('--nodes').split() == [f'/{n}' for n in NODES]
 
 
 def test_defaults_land_in_each_node():
     p = params()
-    assert p['/grid_mapper_node/cloud_topic'] == '/cloud_registered_body'
-    assert p['/grid_mapper_node/grid/resolution'] == 0.05
-    assert p['/site_manager_node/start_mapping'] is False
-    assert p['/site_manager_node/create_site'] is False
+    assert p['/site_manager_node/create_site'] is True
     assert p['/route_recorder_node/min_spacing_m'] == 0.2
     assert not any(f'/{node}/sites_dir' in p for node in NODES)  # the dataclass default
+    assert not any(name.startswith('/grid_mapper_node/') for name in p)
 
 
 def test_arguments_override_when_set(tmp_path):
     extra = tmp_path / 'site.yaml'
-    extra.write_text('grid_mapper_node:\n  rate_hz: 1.0\n')
-    p = params(
-        'sites_dir:=/data/map', 'site:=gardu', 'start_mapping:=true', f'params_file:={extra}'
-    )
+    extra.write_text('route_recorder_node:\n  min_spacing_m: 0.5\n')
+    p = params('sites_dir:=/data/map', 'site:=gardu', f'params_file:={extra}')
     assert all(p[f'/{node}/sites_dir'] == '/data/map' for node in NODES)
     assert p['/site_manager_node/site'] == 'gardu'
-    assert p['/site_manager_node/start_mapping'] is True
-    assert p['/grid_mapper_node/rate_hz'] == 1.0
-    assert p['/grid_mapper_node/cloud_topic'] == '/cloud_registered_body'  # the rest stays
-    assert params('site:=gardu', 'create_site:=true')['/site_manager_node/create_site'] is True
-
-
-def test_without_a_map_no_grid_mapper_and_no_mapping_session():
-    p = params('grid:=false', 'create_site:=true', 'site:=gardu')
-    assert p['/site_manager_node/mapping'] is False
-    assert p['/site_manager_node/create_site'] is True
-    nodes = subprocess.run(
-        ['roslaunch', '--nodes', str(LAUNCH), 'grid:=false'],
-        capture_output=True, text=True, timeout=60, check=False,
-    ).stdout.split()  # fmt: skip
-    assert nodes == ['/site_manager_node', '/route_recorder_node']
+    assert p['/route_recorder_node/min_spacing_m'] == 0.5
+    assert p['/route_recorder_node/output_path'] == ''  # the rest stays
+    assert params('site:=gardu', 'create_site:=false')['/site_manager_node/create_site'] is False

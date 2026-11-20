@@ -6,7 +6,7 @@ catkin_python_setup()
 catkin_package()
 
 catkin_install_python(
-  PROGRAMS scripts/grid_mapper_node scripts/site_manager_node scripts/route_recorder_node
+  PROGRAMS scripts/site_manager_node scripts/route_recorder_node
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(DIRECTORY config launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 

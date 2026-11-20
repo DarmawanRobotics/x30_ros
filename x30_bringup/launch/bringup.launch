@@ -13,13 +13,12 @@
                     odometry_method: fast_lio, or external for a simulator
       localization: map -> odom and the bridge of FAST-LIO into odom -> base_link
                     (x30_localization)
-      mapping:      the site maps, mapping sessions and routes (x30_mapping); site: the site at
-                    start (empty: the last run's)
+      mapping:      the sites and their routes, without a map (x30_mapping); site: the site
+                    at start (empty: the last run's), created when it is missing
       odometry_only: navigation without a map (with localization): FAST-LIO's start is the map
                     origin, so the robot starts on the same spot (the dock) every time; the site is
-                    created without a map, routes are taught and repeated in that frame, tags
-                    only correct the drift; nothing maps: no grid mapper, no mapping session
-                    (README, Odometry only)
+                    created empty, routes are taught and repeated in that frame, tags only
+                    correct the drift (README, Odometry only)
       navigation:   the route loader, path follower, avoidance and docking
                     (x30_navigation), commanding the control mux; controller: the path
                     follower's (empty: navigation.yaml's holonomic; neupan: NeuPAN, which avoids
@@ -137,8 +136,6 @@
   <include if="$(arg mapping)" file="$(find x30_mapping)/launch/mapping.launch">
     <arg name="site" value="$(arg site)"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
-    <arg name="create_site" value="$(eval 'true' if arg('odometry_only') else '')"/>
-    <arg name="grid" value="$(eval not arg('odometry_only'))"/>
   </include>
 
   <include if="$(arg navigation)" file="$(find x30_navigation)/launch/navigation.launch">
@@ -161,8 +158,7 @@
       + (['/odometry_monitor_node'] if arg('odometry') else [])
       + (['/fast_lio/fast_lio'] if arg('odometry') and arg('odometry_method') == 'fast_lio' else [])
       + (['/localization_node'] if arg('localization') else [])
-      + (([] if arg('odometry_only') else ['/grid_mapper_node'])
-         + ['/site_manager_node', '/route_recorder_node'] if arg('mapping') else [])
+      + (['/site_manager_node', '/route_recorder_node'] if arg('mapping') else [])
       + (['/path_loader_node', '/path_follower_node', '/obstacle_avoidance_node',
           '/docking_node'] if arg('navigation') else [])))</rosparam>
     <rosparam param="health_monitor_node/sensors/topics" subst_value="true">$(eval str(
