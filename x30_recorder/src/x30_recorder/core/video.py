@@ -53,7 +53,7 @@ class StreamRecorder:
         self.delay = options['restart_sec']
         self.retry_at = self.started_at = 0.0
         self.restarts = 0
-        self.state = 'off'
+        self.state, self.interrupted = 'off', False
 
     def start(self, now: float, popen=subprocess.Popen):
         """Start ffmpeg (again)."""
@@ -69,7 +69,7 @@ class StreamRecorder:
         except OSError as error:
             self._failed(now, f'cannot start {o["ffmpeg"]}: {error}')
             return
-        self.state, self.started_at = 'recording', now
+        self.state, self.started_at, self.interrupted = 'recording', now, False
         threading.Thread(target=self._read, args=(self.process,), daemon=True).start()
 
     def poll(self, now: float, popen=subprocess.Popen):
@@ -86,12 +86,19 @@ class StreamRecorder:
         """Return True while ffmpeg runs."""
         return self.process is not None and self.process.poll() is None
 
+    def interrupt(self):
+        """Ask ffmpeg to close its segment and end (SIGINT, once); stop() waits for it."""
+        process = self.process
+        if process is not None and process.poll() is None and not self.interrupted:
+            process.send_signal(signal.SIGINT)
+            self.interrupted = True
+
     def stop(self, timeout: float = 5.0):
         """Let ffmpeg close its segment (SIGINT), kill it if it does not."""
+        self.interrupt()
         process, self.process, self.state = self.process, None, 'off'
-        if process is None or process.poll() is not None:
+        if process is None:
             return
-        process.send_signal(signal.SIGINT)
         try:
             process.wait(timeout)
         except subprocess.TimeoutExpired:

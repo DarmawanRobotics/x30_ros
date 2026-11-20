@@ -4,24 +4,34 @@ from __future__ import annotations
 
 import json
 import shutil
+import signal
 import subprocess
 
 import pytest
 
 from x30_recorder.core.video import StreamRecorder, ffmpeg_command, masked, stream_url
-from x30_recorder.utils.streams import stream_specs
+from x30_recorder.utils.streams import Streams, stream_specs
 
 SECRET = 'p@ss:w/rd'
 OPTIONS = {'ffmpeg': 'ffmpeg', 'segment_sec': 300.0, 'transport': 'tcp', 'restart_sec': 2.0}
 
 
 class FakeProcess:
-    def __init__(self):
+    def __init__(self, events=None, name=''):
         self.returncode = None
         self.stderr = None
+        self.events, self.name = events if events is not None else [], name
 
     def poll(self):
         return self.returncode
+
+    def send_signal(self, number):
+        self.events.append((self.name, 'signal', number))
+
+    def wait(self, timeout=None):
+        self.events.append((self.name, 'wait'))
+        self.returncode = 0
+        return 0
 
 
 def test_the_url_of_a_channel_and_the_password_masked():
@@ -71,6 +81,26 @@ def test_a_stopped_ffmpeg_restarts_later_and_later(tmp_path):
     assert r.state == 'recording' and r.restarts == 2
     r.poll(70.0, popen)  # a steady minute: quick restarts again
     assert r.delay == OPTIONS['restart_sec']
+
+
+def test_every_stream_is_asked_to_close_before_any_is_waited_for(tmp_path):
+    events = []
+
+    class Config:
+        enabled, host, port, user, password_env = True, '10.0.0.5', 554, 'admin', ''
+        streams, urls = ('visible:101', 'thermal:201'), ()
+
+    streams = Streams(Config, lambda level, message: None)
+    for name, url in streams.specs:
+        recorder = StreamRecorder(name, url, '', str(tmp_path), OPTIONS, None)
+        recorder.process, recorder.state = FakeProcess(events, name), 'recording'
+        streams.recorders.append(recorder)
+    streams.stop()
+    assert events == [
+        ('visible', 'signal', signal.SIGINT), ('thermal', 'signal', signal.SIGINT),
+        ('visible', 'wait'), ('thermal', 'wait'),
+    ]  # fmt: skip
+    assert streams.recorders == [] and streams.states() == []
 
 
 @pytest.mark.skipif(shutil.which('ffmpeg') is None or shutil.which('ffprobe') is None,

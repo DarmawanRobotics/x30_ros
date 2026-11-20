@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 
 from x30_recorder.core.video import StreamRecorder, stream_url
 
@@ -58,11 +59,14 @@ class Streams:
         for recorder in self.recorders:
             recorder.poll(now)
 
-    def stop(self):
-        """Stop every stream (each closes its last segment)."""
+    def stop(self, timeout: float = 5.0):
+        """Stop every stream, all at once (each closes its last segment)."""
         recorders, self.recorders = self.recorders, []
         for recorder in recorders:
-            recorder.stop()
+            recorder.interrupt()
+        deadline = time.monotonic() + timeout
+        for recorder in recorders:
+            recorder.stop(max(0.5, deadline - time.monotonic()))
 
     def states(self) -> list[str]:
         """Return name: state of every stream."""
