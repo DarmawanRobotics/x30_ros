@@ -168,6 +168,7 @@ rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
 | `battery_topic`, `odom_topic` | `/x30/battery`, `/x30/odom` | x30_driver's battery and leg odometry |
 | `sites_dir`, `route` | | `path_loader_node`'s, when set |
 | `docking` | `true` | start `docking_node` |
+| `planner` | `true` | start `planner_node`; `false` for a robot without a map (it plans on one) |
 | `controller` | | the path follower's, when set (else navigation.yaml's `holonomic`) |
 | `dune_checkpoint` | `models/dune_x30.pth` | NeuPAN's DUNE model (a `params_file` may give another) |
 | `python` | `$X30_PYTHON` | the path follower's interpreter: the NeuPAN venv |
