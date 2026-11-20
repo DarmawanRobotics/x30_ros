@@ -5,8 +5,9 @@
       params_file:  parameters on top of config/sim.yaml
       robot_params: the robot profile, loaded as robot/ (empty: already on the parameter server)
       world, scenario: a file or a name in config/worlds, config/scenarios (empty: the files')
-      site, sites_dir: draw this site (map, tags, the world's route) from the world before any
-                    node starts, unless it has a map already (draw_site)
+      site, sites_dir: draw this site (the world's tags and route, in the frame of the robot's
+                    start: the map frame) before any node starts, unless it has its tags
+                    already (draw_site)
   -->
   <arg name="params_file" default=""/>
   <arg name="robot_params" default=""/>

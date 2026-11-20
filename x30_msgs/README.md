@@ -17,9 +17,7 @@ rosmsg show x30_msgs/ControlStatus
 | `OdometryStatus` | `odometry/status` | INITIALIZING, OK, DEGRADED, LOST; estimator speed, tilt while still |
 | `TripStatus` | `odometry/trip` | distance, moving time, current, average and top speed since `odometry/trip_reset` |
 | `LocalizationStatus` | `localization/status` | NONE, LOCALIZED, UNCERTAIN; source of the last correction, 1-sigma uncertainty |
-| `MappingStatus` | `mapping/status` | integrated and rejected scans, grid size, known area |
-| `SiteStatus` | `site/status` | active site, sites on the robot, map, fiducials, routes |
-| `PlannerStatus` | `planner/status` | IDLE ... ARRIVED / FAILED / CANCELLED, goal, path length, remaining, replans |
+| `SiteStatus` | `site/status` | active site, sites on the robot, fiducials, routes (no map) |
 | `NavigationStatus` | `navigation/status` | INACTIVE ... GOAL_REACHED / FAILED, pause reasons, progress, cross-track error |
 | `DockingStatus` | `docking/status` | IDLE, SEARCHING ... DOCKED / FAILED, tag visibility, errors to the dock, attempt, charging |
 | `ControlStatus` | `control/status` | AUTO / REMOTE, e-stop and its reasons, re-arm, protective field state, clearance, speed scale |
@@ -40,11 +38,10 @@ rosmsg show x30_msgs/ControlStatus
 
 | Service | Server | |
 |---|---|---|
-| `GoTo`, `PlanPath` | `planner/go_to`, `planner/plan` | plan to a pose in the map frame (and drive there) |
 | `SetPath`, `LoadPath` | `navigation/set_path`, `navigation/load_path` | give the follower a path or a taught route |
 | `MarkStopPoint` | `route/mark_stop_point` | stop point at the current pose while teaching a route |
 | `SetMode` | `control/set_mode` | `auto` or `remote` with the operator source |
-| `ListSites`, `LoadSite`, `StartMapping` | `site/list`, `site/load`, `mapping/start` | sites and mapping sessions |
+| `ListSites`, `LoadSite` | `site/list`, `site/load` | the sites on the robot, the active one |
 | `LoadFile` | `localization/load_tags` | switch to a file inside the sites directory |
 | `AddTarget` | `inspection/add_target` | teach an inspection target from the PTZ camera's current view where the robot stands |
 

@@ -53,6 +53,26 @@ def test_tag_in_view_localizes_then_corrects_through_the_gate():
     assert loc.estimator.map_odom == before and 'rejected' in loc.message
 
 
+def test_the_origin_is_known_as_well_as_the_start_spot():
+    """Put on its start spot by the dock or by hand: the tags in view correct the spot."""
+    near = Pose2D(0.04, -0.03, math.radians(1.5))  # the spot a little off
+    off = []
+    for xy, yaw_deg in ((0.05, 2.0), (0.01, 0.25)):  # the defaults; as sure as after a fix
+        config = EstimatorConfig(origin_sigma_xy=xy, origin_sigma_yaw_deg=yaw_deg)
+        loc = Localizer(MapOdomEstimator(config), TagConfig(min_interval_sec=0.0))
+        loc.tags = {'base_map': MAP_TAG}
+        loc.track(Pose2D(), 0.0)
+        loc.assume_origin(0.0)
+        status = loc.status(0.0)
+        assert status.sigma_xy == pytest.approx(xy)
+        assert math.degrees(status.sigma_yaw) == pytest.approx(yaw_deg)
+        for i in range(10):
+            m = loc.measure_tag('base_map', BASE_CAM, cam_tag_seen_from(near), 1.0 + i)
+            assert loc.on_tag(m, Pose2D(), 1.0 + i)  # within the gate
+        off.append(loc.estimator.base_pose().distance(near))
+    assert off[0] < 0.6 * off[1]  # the start spot's own uncertainty: the tags win sooner
+
+
 def test_explicit_localize_takes_a_far_consistent_tag():
     """auto_correct gates; localization/start (explicit) relocalizes regardless."""
     loc = localizer()
@@ -142,16 +162,22 @@ def test_no_correction_from_a_tag_being_recorded():
 
 
 def test_status_and_uncertain_state_after_a_long_drive():
-    loc = localizer()
-    status = loc.status(0.0)
-    assert status.state is State.NONE and math.isinf(status.sigma_xy)
-    loc.track(Pose2D(), 0.0)
-    loc.assume_origin(0.0)
-    assert loc.status(0.0).source == 'origin'
-    for i in range(1, 400):
-        loc.track(Pose2D(float(i), 0.0, 0.0), float(i))
-    status = loc.status(400.0)
-    assert status.state is State.UNCERTAIN and status.since_correction == pytest.approx(400.0)
+    """No map corrects the drift: LOCALIZED all along by default, UNCERTAIN past a set sigma."""
+    for config, state in (
+        (EstimatorConfig(), State.LOCALIZED),
+        (EstimatorConfig(max_sigma_xy=0.5), State.UNCERTAIN),
+    ):
+        loc = Localizer(MapOdomEstimator(config), TagConfig(min_interval_sec=0.0))
+        status = loc.status(0.0)
+        assert status.state is State.NONE and math.isinf(status.sigma_xy)
+        loc.track(Pose2D(), 0.0)
+        loc.assume_origin(0.0)
+        assert loc.status(0.0).source == 'origin'
+        for i in range(1, 400):
+            loc.track(Pose2D(float(i), 0.0, 0.0), float(i))
+        status = loc.status(400.0)
+        assert status.state is state and status.since_correction == pytest.approx(400.0)
+        assert status.sigma_xy > 0.5  # the drift, reported
 
 
 def test_unknown_tag_and_missing_file():

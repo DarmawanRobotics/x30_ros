@@ -29,6 +29,7 @@ def loc(ros, tmp_path):
     harness = Harness(
         {
             'sites_dir': str(tmp_path),
+            'assume_start_origin': False,  # NONE until a tag or a pose estimate
             'tag.record_duration_sec': 1.0,
             'tag.record_min_samples': 3,
             'tag.min_interval_sec': 0.0,
@@ -168,9 +169,7 @@ def test_tags_file_with_tilde_is_expanded(ros, tmp_path, monkeypatch):
 
 def test_assume_start_origin_only_at_the_first_start(ros, tmp_path):
     """After an odometry restart the old origin is no map frame: stay NONE (safer)."""
-    harness = Harness(
-        {'sites_dir': str(tmp_path), 'assume_start_origin': True, 'leveling.window_sec': 0.3}
-    )
+    harness = Harness({'sites_dir': str(tmp_path), 'leveling.window_sec': 0.3})  # the default
     try:
         assert wait_for(lambda: harness.state() == LOCALIZED, 10.0)
         assert harness.status.last.source == 'origin'
@@ -192,6 +191,7 @@ def test_a_tag_is_fused_while_fast_lio_lags_the_camera(ros, tmp_path):
         {
             'sites_dir': str(tmp_path),
             'tags_file': str(tags),
+            'assume_start_origin': False,  # the tag localizes, not the origin
             'leveling.window_sec': 0.3,
             'tag.frames': ['base_map'],
         }

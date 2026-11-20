@@ -8,8 +8,8 @@ import os
 
 import pytest
 
-from x30_mapping.core.config import RecorderConfig
-from x30_mapping.core.routes import RouteRecorder, route_path
+from x30_navigation.core.config.sites import RecorderConfig
+from x30_navigation.core.sites.recorder import RouteRecorder, route_path
 from x30_utils.io import read_route
 from x30_utils.math import Pose2D
 

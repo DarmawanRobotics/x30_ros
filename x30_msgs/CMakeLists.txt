@@ -11,10 +11,8 @@ add_message_files(
   HealthStatus.msg
   InspectionStatus.msg
   LocalizationStatus.msg
-  MappingStatus.msg
   NavigationStatus.msg
   OdometryStatus.msg
-  PlannerStatus.msg
   SiteStatus.msg
   TripStatus.msg
   # perception, navigation and inspection data
@@ -30,16 +28,13 @@ add_message_files(
 add_service_files(
   FILES
   AddTarget.srv
-  GoTo.srv
   ListSites.srv
   LoadFile.srv
   LoadPath.srv
   LoadSite.srv
   MarkStopPoint.srv
-  PlanPath.srv
   SetMode.srv
   SetPath.srv
-  StartMapping.srv
 )
 
 generate_messages(DEPENDENCIES std_msgs)

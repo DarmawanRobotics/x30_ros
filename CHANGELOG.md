@@ -3,6 +3,45 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.16.0)
+
+### Added
+- `estimator/origin_sigma_xy`, `origin_sigma_yaw_deg` (x30_localization): the origin is as sure
+  as the robot is put on its start spot (5 cm, 2°), so a tag seen soon after the start corrects
+  it. The sim's drift scenario ends its loop localized within 0.05 m (0.10 m with the origin as
+  sure as after a fix).
+
+### Changed
+- No map anywhere, on the robot and in the simulator:
+  - No x30_mapping package: no `grid_mapper_node`, no mapping session (`mapping/start`, `stop`,
+    `save`), no `/map` and no map files. A site is a folder of tags and routes in the frame of
+    the odometry's start; the site manager and the route recorder are x30_navigation's
+    (`navigation.launch` starts them, with `site` and `create_site`, on by default; bringup's
+    `mapping` argument is gone, `navigation` brings the sites, an old `mapping:=` is ignored).
+  - x30_navigation: no `planner_node` (`planner/go_to`, `plan`, `cancel`, its costmap, the
+    `planner` argument). Routes, stop points, path shift, the detours, avoidance and docking need
+    no map; `navigation/set_path` takes a path from elsewhere.
+  - x30_localization: no scan matching on a map (`scan_match/*`). The odometry's start is the map
+    origin by default (`assume_start_origin: true`) and the state stays `LOCALIZED`
+    (`estimator/max_sigma_xy` 100 m, `max_sigma_yaw_deg` 180°): only tags correct the drift,
+    sigma reports it.
+  - x30_bringup: no `odometry_only` argument, the start is always the origin (an old
+    `odometry_only:=` is ignored).
+  - x30_sim: a drawn site holds the world's tags and route in the frame of the robot's start, no
+    map; `sim/ground_truth` and `sim/obstacles` are in that frame; no `/initialpose`
+    (`initial_pose_hz` gone).
+  - x30_msgs: no `MappingStatus`, `PlannerStatus`, `GoTo`, `PlanPath`, `StartMapping`;
+    `SiteStatus` without `has_map` and `mapping`.
+  - x30_utils: no `grid` (occupancy grids, scan-to-map matching); `SiteLayout` without
+    `map_yaml` and `map_image`.
+- `stack_sim.test` walks the 30 m patrol loop instead of a planned goal; `stack_neupan.test`
+  starts the loop once the scenario's person has crossed (it walks into whatever stands in its
+  way).
+
+### Fixed
+- The docking node's check of the control field took three of its four values since 0.14.0 (the
+  turning room was added): it failed at every start with a TypeError in the log and never ran.
+
 ## [Unreleased] (0.15.0)
 
 ### Added

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from geometry_msgs.msg import PoseArray, PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseArray, PoseStamped
 from geometry_msgs.msg import Twist as TwistMsg
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -13,10 +13,9 @@ from std_msgs.msg import Header
 
 from x30_sim.core.body import Twist
 from x30_utils.math import Pose2D
-from x30_utils.ros.convert import matrix_to_pose, planar_covariance, pose2d_to_pose
+from x30_utils.ros.convert import matrix_to_pose, pose2d_to_pose
 from x30_utils.ros.time import to_stamp
 
-INITIAL_POSE_SIGMA = (0.05, 0.05, math.radians(2.0))  # m, m, rad: as a tag in view
 LEG_POSE_VARIANCE = (0.01, 0.01, 1e6, 1e6, 1e6, 0.05)  # x30_driver's odom covariances
 LEG_TWIST_VARIANCE = (0.02, 0.02, 1e6, 1e6, 1e6, 0.05)
 NAN = float('nan')
@@ -77,14 +76,6 @@ def imu_msg(stamp: float, frame: str, accel: np.ndarray, gyro: np.ndarray) -> Im
 def pose_stamped(stamp: float, frame: str, pose: Pose2D) -> PoseStamped:
     """Return a planar PoseStamped."""
     return PoseStamped(header=header(stamp, frame), pose=pose2d_to_pose(pose))
-
-
-def initial_pose(stamp: float, frame: str, pose: Pose2D) -> PoseWithCovarianceStamped:
-    """Return /initialpose at a pose with the uncertainty of a tag fix."""
-    msg = PoseWithCovarianceStamped(header=header(stamp, frame))
-    msg.pose.pose = pose2d_to_pose(pose)
-    msg.pose.covariance = planar_covariance(np.diag(np.square(INITIAL_POSE_SIGMA)))
-    return msg
 
 
 def battery_msg(stamp: float, charge: float, charging: bool, report: bool) -> BatteryState:

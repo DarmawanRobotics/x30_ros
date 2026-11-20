@@ -1,4 +1,4 @@
-"""Where a site lives on disk: <site>/map.yaml + map.pgm, tags.json, routes/*.csv."""
+"""Where a site lives on disk: <site>/tags.json, routes/*.csv (no map)."""
 
 from __future__ import annotations
 
@@ -27,16 +27,6 @@ class SiteLayout:
     def root(self) -> str:
         """The site directory."""
         return os.path.join(expand(self.sites_dir), self.site)
-
-    @property
-    def map_yaml(self) -> str:
-        """The map metadata file."""
-        return os.path.join(self.root, 'map.yaml')
-
-    @property
-    def map_image(self) -> str:
-        """The map image."""
-        return os.path.join(self.root, 'map.pgm')
 
     @property
     def tags(self) -> str:

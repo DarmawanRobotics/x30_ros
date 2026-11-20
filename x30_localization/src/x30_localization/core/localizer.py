@@ -98,9 +98,11 @@ class Localizer:
         return result, self.timeline.change(self.estimator.map_odom, now)
 
     def assume_origin(self, now: float) -> Samples:
-        """Take odom as the map: map->odom = identity, well known."""
+        """Take odom as the map: map->odom = identity, known as well as the start spot."""
         cfg = self.estimator.config
-        cov = np.diag([cfg.min_sigma_xy**2] * 2 + [math.radians(cfg.min_sigma_yaw_deg) ** 2])
+        xy = max(cfg.origin_sigma_xy, cfg.min_sigma_xy)
+        yaw = math.radians(max(cfg.origin_sigma_yaw_deg, cfg.min_sigma_yaw_deg))
+        cov = np.diag([xy**2, xy**2, yaw**2])  # a tag seen soon corrects the spot
         odom_base = self.estimator.odom_base
         return self.localize(Measurement(odom_base, cov, now, 'origin'), odom_base, now)
 

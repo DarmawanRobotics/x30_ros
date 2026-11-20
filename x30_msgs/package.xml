@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_msgs</name>
-  <version>0.15.0</version>
-  <description>Messages and services of the X30 stack (the ROS Noetic port of dharma_interfaces): typed status of every subsystem, sector scans, paths and stop points, sites and mapping.</description>
+  <version>0.16.0</version>
+  <description>Messages and services of the X30 stack (the ROS Noetic port of dharma_interfaces): typed status of every subsystem, sector scans, paths and stop points, sites and routes.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>
   <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>

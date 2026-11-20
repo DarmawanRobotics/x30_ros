@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from geometry_msgs.msg import PoseArray, PoseStamped, PoseWithCovarianceStamped, Twist
+from geometry_msgs.msg import PoseArray, PoseStamped, Twist
 from nav_msgs.msg import Odometry
 import numpy as np
 from sensor_msgs.msg import BatteryState, Imu, PointCloud2
 from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
 
-from x30_msgs.msg import LocalizationStatus
 from x30_sim.core.config import SimConfig
 from x30_sim.core.odometry import lio_transform
 from x30_sim.core.scenario import Scenario, load_scenario
@@ -19,7 +18,7 @@ from x30_sim.utils import conversions as conv
 from x30_sim.utils import livox
 from x30_sim.utils.files import scenario_file, world_file
 from x30_utils.math import inverse, make_transform
-from x30_utils.ros import COMMAND, EVENTS, LATCHED, X30Node, run
+from x30_utils.ros import COMMAND, EVENTS, X30Node, run
 from x30_utils.ros.pointcloud import xyz_cloud
 from x30_utils.ros.time import to_stamp
 
@@ -44,7 +43,8 @@ class SimRobotNode(X30Node):
         self.cfg = cfg = self.sim.config
         self.frames = self.robot.frames
         self.base_imu = make_transform(cfg.imu.xyz)
-        self.localization: int | None = None  # LocalizationStatus.state, None: never heard
+        # the map frame is where the odometry started, as on the robot: truth and obstacles in it
+        self.start = world.start
         self._collision_sent: bool | None = None
         self._scans = 0
         self._create_interfaces(cfg)
@@ -65,12 +65,8 @@ class SimRobotNode(X30Node):
         self._battery_pub = self.create_publisher(BatteryState, driver('battery'), 5)
         self._truth_pub = self.create_publisher(PoseStamped, 'sim/ground_truth', 10)
         self._collision_pub = self.latched(Bool, 'sim/collision')
-        self._initial_pub = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 1)
         self.create_subscription(Twist, driver('cmd_vel'), self.on_cmd, COMMAND)
         self.create_subscription(PoseArray, 'sim/obstacles', self.on_obstacles, EVENTS)
-        self.create_subscription(
-            LocalizationStatus, 'localization/status', self.on_localization, LATCHED
-        )
         self.create_service(Trigger, 'sim/inspect', self.on_inspect)
         station = self.sim.station
         speed = lambda: float(np.hypot(self.sim.body.twist.vx, self.sim.body.twist.vy))  # noqa: E731
@@ -86,8 +82,6 @@ class SimRobotNode(X30Node):
         self.every(1.0 / cfg.lidar.rate_hz, self.publish_scan)
         if cfg.imu.rate_hz > 0.0:
             self.every(1.0 / cfg.imu.rate_hz, self.publish_imu)
-        if cfg.initial_pose_hz > 0.0:
-            self.every(1.0 / cfg.initial_pose_hz, self.publish_initial_pose)
         self.every(1.0, self.publish_battery)
         if cfg.camera.rate_hz > 0.0 and self.sim.camera.tags:
             self.every(1.0 / cfg.camera.rate_hz, self.publish_tags)
@@ -103,17 +97,13 @@ class SimRobotNode(X30Node):
 
     def on_obstacles(self, msg: PoseArray):
         """Replace the dynamic obstacles (people, boxes) with circles at these map positions."""
-        xy = conv.obstacle_positions(msg)
+        xy = self.start.apply(conv.obstacle_positions(msg))  # into the world
         self.sim.set_obstacles(xy, self.live.obstacle_radius, self.live.obstacle_height)
         self.log.info('dynamic obstacles set', count=len(xy))
 
-    def on_localization(self, msg: LocalizationStatus):
-        """Send /initialpose only while the stack is not localized (again after a reset)."""
-        self.localization = int(msg.state)
-
     def on_inspect(self, _request, response):
         """Answer a stop-point inspection: always clear in the simulator."""
-        pose = self.sim.body.pose
+        pose = self.in_map(self.sim.body.pose)
         response.success = True
         response.message = f'clear (sim at {pose.x:.2f} {pose.y:.2f})'
         return response
@@ -129,13 +119,18 @@ class SimRobotNode(X30Node):
 
         return serve
 
+    def in_map(self, pose):
+        """Return a world pose in the map frame: the frame of the robot's start."""
+        return self.start.inverse() @ pose
+
     # ------------------------------------------------------------------ simulation
 
     def step(self):
         """Advance the simulation by the time that really passed."""
         now = self.now()
         self.sim.step(now)
-        self._truth_pub.publish(conv.pose_stamped(now, self.frames.map, self.sim.body.pose))
+        truth = self.in_map(self.sim.body.pose)
+        self._truth_pub.publish(conv.pose_stamped(now, self.frames.map, truth))
         collided = self.sim.body.collided
         if collided != self._collision_sent:
             self._collision_pub.publish(Bool(data=collided))
@@ -197,13 +192,6 @@ class SimRobotNode(X30Node):
         camera_base = inverse(self.sim.camera.base_camera)
         for frame, base_tag in self.sim.tag_detections(now).items():
             self.tf_out.send(camera_base @ base_tag, self.cfg.camera.frame, frame, stamp)
-
-    def publish_initial_pose(self):
-        """Send the true pose as /initialpose while localization is NONE (or silent)."""
-        if self.localization not in (None, LocalizationStatus.NONE):
-            return
-        pose = self.sim.body.pose
-        self._initial_pub.publish(conv.initial_pose(self.now(), self.frames.map, pose))
 
 
 def main():

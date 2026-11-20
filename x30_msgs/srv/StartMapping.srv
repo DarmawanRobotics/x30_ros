@@ -1,6 +1,0 @@
-# Start mapping into a site, created when new. reset: archive the old map and start over.
-string site               # 1-48 of a-z, 0-9, _ and -
-bool reset
----
-bool success
-string message

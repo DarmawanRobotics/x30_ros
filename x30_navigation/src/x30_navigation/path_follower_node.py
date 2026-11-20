@@ -162,7 +162,7 @@ class PathFollowerNode(X30Node):
             self.log.error('route refused', error=str(error))
 
     def on_set_path(self, request, response):
-        """Service: take a path (the planner); process it like a route when asked."""
+        """Service: take a path from elsewhere; process it like a route when asked."""
         try:
             points = conv.route_points(request.waypoints)
         except ValueError as error:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rostest: odometry only on x30_sim: no map, the start is the origin, a taught route repeated."""
+"""rostest: on x30_sim with no map: the start is the origin, a taught route repeated."""
 
 from __future__ import annotations
 
@@ -107,9 +107,9 @@ class StackOdometry(unittest.TestCase):
             time.sleep(0.05)
 
     def test_teaches_and_repeats_a_route_without_a_map(self):
-        """The site without a map, LOCALIZED at the origin; taught in REMOTE, repeated in AUTO."""
+        """The site of the world's tags and route, LOCALIZED at the origin; one more taught."""
         site = self.wait('/site/status', lambda s: s.site == SITE, 60.0)
-        self.assertFalse(site.has_map, site.message)
+        drawn = site.routes  # the world's patrol loop
         self.wait('/localization/status', lambda s: s.state == LocalizationStatus.LOCALIZED, 60)
         self.assertEqual(self.last('/localization/status').source, 'origin')
         with self.lock:
@@ -157,8 +157,7 @@ class StackOdometry(unittest.TestCase):
             self.assertLessEqual(self.localization_states, {LocalizationStatus.LOCALIZED})
         localization = self.last('/localization/status')
         self.assertEqual(localization.state, LocalizationStatus.LOCALIZED, localization.message)
-        site = self.wait('/site/status', lambda s: s.routes == 1, 10.0)
-        self.assertFalse(site.has_map, 'odometry only never maps')
+        self.wait('/site/status', lambda s: s.routes == drawn + 1, 10.0)
 
 
 if __name__ == '__main__':

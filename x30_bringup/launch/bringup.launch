@@ -12,18 +12,15 @@
       odometry:     FAST-LIO behind its start gate, and the odometry monitor (x30_odometry);
                     odometry_method: fast_lio, or external for a simulator
       localization: map -> odom and the bridge of FAST-LIO into odom -> base_link
-                    (x30_localization)
-      mapping:      the site maps, mapping sessions and routes (x30_mapping); site: the site at
-                    start (empty: the last run's)
-      odometry_only: navigation without a map (with localization): FAST-LIO's start is the map
-                    origin, so the robot starts on the same spot (the dock) every time; the site is
-                    created without a map, routes are taught and repeated in that frame, tags
-                    only correct the drift; nothing maps: no grid mapper, no mapping session, no
-                    planner, which plans on a map (README, Odometry only)
-      navigation:   the planner, route loader, path follower, avoidance and docking
-                    (x30_navigation), commanding the control mux; controller: the path
-                    follower's (empty: navigation.yaml's holonomic; neupan: NeuPAN, which avoids
-                    by itself, from the venv of tools/install_neupan.sh through X30_PYTHON)
+                    (x30_localization); no map: FAST-LIO's start is the map origin, so the robot
+                    starts on the same spot (the dock) every time, routes are taught and repeated
+                    in that frame, tags only correct the drift (README, No map)
+      navigation:   the sites (folders of routes and tags, no map) with route teaching, the
+                    route loader, path follower, avoidance and docking (x30_navigation),
+                    commanding the control mux; site: the site at start (empty: the last run's),
+                    created when it is missing; controller: the path follower's (empty:
+                    navigation.yaml's holonomic; neupan: NeuPAN, which avoids by itself, from
+                    the venv of tools/install_neupan.sh through X30_PYTHON)
       health:       health/status and diagnostics (x30_health), watching what is started here
       inspection:   thermal and partial discharge inspection at the stop points
                     (x30_inspection), called by the path follower at each of them; reports_dir:
@@ -36,9 +33,10 @@
                     m and rad): check it on the robot (x30_perception README) before relying
                     on the scans
       sim:          x30_sim's simulated X30 in place of x30_driver, the LiDARs, the IMU and
-                    FAST-LIO (odometry_method external); world, scenario: its files; site is drawn
-                    from the world unless it has a map (never with odometry_only)
-      sites_dir:    the sites of localization, mapping and navigation (empty: their files'; with
+                    FAST-LIO (odometry_method external); world, scenario: its files; site gets
+                    the world's tags and route, in the frame of the robot's start, unless it has
+                    its tags already
+      sites_dir:    the sites of localization, navigation and inspection (empty: their files'; with
                     sim: /tmp/x30_sim/sites)
       rviz: RViz with the robot model
   -->
@@ -55,9 +53,7 @@
   <arg name="odometry" default="false"/>
   <arg name="odometry_method" default="$(eval 'external' if arg('sim') else 'fast_lio')"/>
   <arg name="localization" default="false"/>
-  <arg name="mapping" default="false"/>
   <arg name="site" default=""/>
-  <arg name="odometry_only" default="false"/>
   <arg name="sites_dir" default="$(eval '/tmp/x30_sim/sites' if arg('sim') else '')"/>
   <arg name="navigation" default="false"/>
   <arg name="controller" default=""/>
@@ -77,9 +73,6 @@
   <!-- base_link has one parent: the driver's leg odometry or the localization bridge -->
   <arg if="$(eval arg('leg_odom_tf') and arg('localization'))" name="one_parent_for_base_link"
        value="$(eval {}['leg_odom_tf and localization both publish odom -> base_link'])"/>
-  <!-- odometry only sets up the localization's frame -->
-  <arg if="$(eval arg('odometry_only') and not arg('localization'))" name="odometry_only_frame"
-       value="$(eval {}['odometry_only:=true is a mode of localization:=true'])"/>
   <!-- the simulator publishes FAST-LIO's outputs itself -->
   <arg if="$(eval arg('sim') and arg('odometry_method') != 'external')" name="sim_without_fast_lio"
        value="$(eval {}['sim:=true stands in for FAST-LIO: odometry_method:=external'])"/>
@@ -99,14 +92,12 @@
     <include file="$(find x30_sim)/launch/sim.launch">
       <arg name="world" value="$(arg world)"/>
       <arg name="scenario" value="$(arg scenario)"/>
-      <!-- a drawn site is in the world's frame, not in the odometry start's -->
-      <arg name="site" value="$(eval '' if arg('odometry_only') else arg('site'))"/>
+      <!-- drawn in the frame of the robot's start, the odometry's -->
+      <arg name="site" value="$(arg site)"/>
       <arg name="sites_dir" value="$(arg sites_dir)"/>
     </include>
     <param name="sim_robot_node/driver_ns" value="$(arg namespace)"/>
     <param if="$(arg leg_odom_tf)" name="sim_robot_node/publish_tf" value="true"/>
-    <!-- its /initialpose would put the robot on the world's frame -->
-    <param if="$(arg odometry_only)" name="sim_robot_node/initial_pose_hz" value="0.0"/>
   </group>
 
   <include file="$(find x30_description)/launch/description.launch">
@@ -122,31 +113,17 @@
     <arg name="leg_odom_topic" value="/$(arg namespace)/odom"/>
   </include>
 
+  <!-- no map: map -> odom = identity once the bridge is up (x30_localization's defaults) -->
   <include if="$(arg localization)" file="$(find x30_localization)/launch/localization.launch">
     <arg name="sites_dir" value="$(arg sites_dir)"/>
-  </include>
-  <group if="$(arg odometry_only)">
-    <!-- after its files: map -> odom = identity once the bridge is up (never after an
-         odometry restart); nothing but tags corrects the drift, so the state stays LOCALIZED
-         and sigma only reports it -->
-    <param name="localization_node/assume_start_origin" value="true"/>
-    <param name="localization_node/estimator/max_sigma_xy" value="100.0"/>
-    <param name="localization_node/estimator/max_sigma_yaw_deg" value="180.0"/>
-  </group>
-
-  <include if="$(arg mapping)" file="$(find x30_mapping)/launch/mapping.launch">
-    <arg name="site" value="$(arg site)"/>
-    <arg name="sites_dir" value="$(arg sites_dir)"/>
-    <arg name="create_site" value="$(eval 'true' if arg('odometry_only') else '')"/>
-    <arg name="grid" value="$(eval not arg('odometry_only'))"/>
   </include>
 
   <include if="$(arg navigation)" file="$(find x30_navigation)/launch/navigation.launch">
     <arg name="battery_topic" value="/$(arg namespace)/battery"/>
     <arg name="odom_topic" value="/$(arg namespace)/odom"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
+    <arg name="site" value="$(arg site)"/>
     <arg name="controller" value="$(arg controller)"/>
-    <arg name="planner" value="$(eval not arg('odometry_only'))"/>
   </include>
 
   <group if="$(arg health)">
@@ -162,11 +139,9 @@
       + (['/odometry_monitor_node'] if arg('odometry') else [])
       + (['/fast_lio/fast_lio'] if arg('odometry') and arg('odometry_method') == 'fast_lio' else [])
       + (['/localization_node'] if arg('localization') else [])
-      + (([] if arg('odometry_only') else ['/grid_mapper_node'])
-         + ['/site_manager_node', '/route_recorder_node'] if arg('mapping') else [])
-      + (([] if arg('odometry_only') else ['/planner_node'])
-         + ['/path_loader_node', '/path_follower_node', '/obstacle_avoidance_node',
-            '/docking_node'] if arg('navigation') else [])))</rosparam>
+      + (['/site_manager_node', '/route_recorder_node', '/path_loader_node',
+          '/path_follower_node', '/obstacle_avoidance_node', '/docking_node']
+         if arg('navigation') else [])))</rosparam>
     <rosparam param="health_monitor_node/sensors/topics" subst_value="true">$(eval str(
       ['/livox/lidar:5.0', '/imu/data:100.0', '/' + arg('namespace') + '/odom:20.0']
       + (['/Odometry:8.0'] if arg('odometry') else [])))</rosparam>

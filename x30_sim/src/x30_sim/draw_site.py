@@ -1,4 +1,4 @@
-"""draw_site: write a site (map, tags, the world's route) from a world; print its directory."""
+"""draw_site: write a site (tags, the world's route) from a world; print its directory."""
 
 from __future__ import annotations
 
@@ -20,13 +20,14 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
     """Return the command line arguments."""
     parser = argparse.ArgumentParser(
         prog='draw_site',
-        description='Draw a site from a world, unless it has a map already. Prints the site path '
-        '(roslaunch: <param command="rosrun x30_sim draw_site ..."/> runs it before any node).',
+        description="Draw a site from a world (its tags and route, in the frame of the robot's "
+        'start), unless it has its tags already. Prints the site path (roslaunch: '
+        '<param command="rosrun x30_sim draw_site ..."/> runs it before any node).',
     )
     parser.add_argument('--world', default='', help='file or name in config/worlds (mall_loop)')
     parser.add_argument('--site', required=True, help='site name')
     parser.add_argument('--sites-dir', default=SITES_DIR, help=f'default {SITES_DIR}')
-    parser.add_argument('--overwrite', action='store_true', help='replace an existing map')
+    parser.add_argument('--overwrite', action='store_true', help='replace its tags and route')
     return parser.parse_args(argv)
 
 
@@ -49,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f'draw_site: {error}', file=sys.stderr)
         return INVALID
     print(root)
-    print(f'draw_site: {"drew" if drawn else "kept (it has a map)"} {root}', file=sys.stderr)
+    print(f'draw_site: {"drew" if drawn else "kept (it has its tags)"} {root}', file=sys.stderr)
     return 0
 
 

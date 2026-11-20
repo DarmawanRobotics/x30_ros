@@ -8,9 +8,9 @@
     its routes, navigation, health and the inspection (its sites and reports live here; its
     cameras run on the perception host: perception_host.launch). Network: ROS_IP=192.168.1.106
     (tools/x30_host.sh env navigation).
-    No map, ever (odometry only, like HotDog and Pashupati): FAST-LIO's start is the origin, the
-    robot starts on the same spot every time, routes are taught and repeated in that frame and
-    tags correct the drift. Nothing maps: no grid mapper, no mapping session, no planner.
+    No map (like HotDog and Pashupati): FAST-LIO's start is the origin, the robot starts on the
+    same spot every time, routes are taught and repeated in that frame and tags correct the
+    drift.
     The LiDAR and the IMU are Deep Robotics' own drivers on this host (/livox/lidar,
     /imu/data, kept running by tools/dr_services.sh): never a second driver here.
       site:      the site (routes, tags, inspection points), created when missing; empty: the
@@ -42,8 +42,6 @@
     <arg name="odometry" value="true"/>
     <arg name="odometry_method" value="$(arg odometry_method)"/>
     <arg name="localization" value="true"/>
-    <arg name="odometry_only" value="true"/>
-    <arg name="mapping" value="true"/>  <!-- the site and its routes: no map (odometry only) -->
     <arg name="site" value="$(arg site)"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
     <arg name="navigation" value="true"/>

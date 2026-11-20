@@ -1,9 +1,0 @@
-# Plan from the robot's pose to a goal on the map without moving.
-float64 x                 # m, map frame
-float64 y                 # m
-float64 yaw               # rad
----
-bool success
-string message
-Waypoint[] waypoints
-float32 length            # m

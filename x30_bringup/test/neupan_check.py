@@ -19,8 +19,10 @@ from x30_msgs.msg import ControlStatus, LocalizationStatus, NavigationStatus
 from x30_msgs.srv import LoadPath
 
 ROUTE = 'mall/routes/mall_loop.csv'  # drawn into the site from the world
-BOX = (4.5, 0.0, 0.3)  # person_crossing: x, y, radius, on the route up the east corridor
+START = (-4.5, -3.0)  # mall_loop's start, facing +x: the map origin (the odometry's start)
+BOX = (4.5 - START[0], 0.0 - START[1], 0.3)  # person_crossing: x, y (map), radius, east
 HALF_WIDTH = 0.235  # robot/footprint/half_width
+CROSSED_SEC = 31.0  # person_crossing's person is gone by 30 s: it walks into what stands by
 ENDS_WITHIN = 0.3  # m, the true pose from the end of the loop (its start)
 
 
@@ -30,6 +32,7 @@ class StackNeupan(unittest.TestCase):
         cls.lock = threading.Lock()
         cls.latest, cls.messages = {}, []
         cls.touched = False
+        cls.first_truth = None  # when the simulator was first heard: about its start
         cls.closest = math.inf  # the true robot's nearest approach to the box's centre
         for topic, msg_type in (
             ('/localization/status', LocalizationStatus),
@@ -50,6 +53,8 @@ class StackNeupan(unittest.TestCase):
                 elif isinstance(msg, NavigationStatus):
                     cls.messages.append(msg.message)
                 elif isinstance(msg, PoseStamped):
+                    if cls.first_truth is None:
+                        cls.first_truth = time.monotonic()
                     p = msg.pose.position
                     cls.closest = min(cls.closest, math.hypot(p.x - BOX[0], p.y - BOX[1]))
 
@@ -80,6 +85,12 @@ class StackNeupan(unittest.TestCase):
         self.wait(
             '/control/status', lambda s: s.armed and s.field == ControlStatus.FIELD_CLEAR, 30
         )
+        # the person crossing the south corridor walks blindly into whatever stands in its way,
+        # the robot waiting for it too: the loop starts once it has crossed, the box stays
+        self.wait('/sim/ground_truth', lambda m: True, 30.0)
+        with self.lock:
+            started = self.first_truth
+        time.sleep(max(0.0, started + CROSSED_SEC - time.monotonic()))
         self.call('/navigation/load_path', LoadPath, path=ROUTE)
         self.wait('/navigation/status', lambda n: n.count > 0, 10.0)
         self.call('/navigation/start')
@@ -87,8 +98,7 @@ class StackNeupan(unittest.TestCase):
         status = self.wait('/navigation/status', lambda n: n.state in done, 330.0)
         self.assertEqual(status.state, NavigationStatus.GOAL_REACHED, status.message)
         truth = self.last('/sim/ground_truth').pose.position
-        start = (-4.5, -3.0)  # mall_loop's start and end
-        error = math.hypot(truth.x - start[0], truth.y - start[1])
+        error = math.hypot(truth.x, truth.y)  # mall_loop ends at its start: the map origin
         with self.lock:
             touched, closest = self.touched, self.closest
             following = [m for m in self.messages if re.search(r'\| neupan \d+ ms \|', m)]

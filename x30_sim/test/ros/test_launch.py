@@ -52,7 +52,7 @@ def test_site_is_drawn_while_the_launch_file_is_read(tmp_path):
     p = params('site:=lobby', f'sites_dir:={tmp_path}')
     layout = SiteLayout(str(tmp_path), 'lobby')
     assert p['/sim/site_dir'].strip() == layout.root
-    assert Path(layout.map_yaml).is_file() and Path(layout.map_image).is_file()
+    assert not Path(layout.root, 'map.yaml').exists()  # tags and the route, no map
     tags, problems = read_tags(layout.tags)
     assert set(tags) == {'base_map', 'charging_dock'} and not problems
     route = read_route(str(Path(layout.routes) / 'mall_loop.csv'))

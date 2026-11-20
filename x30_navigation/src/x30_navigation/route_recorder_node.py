@@ -7,12 +7,10 @@ from datetime import datetime
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
-from x30_mapping.core.config import RecorderConfig
-from x30_mapping.core.routes import RouteRecorder
-from x30_mapping.core.session import LocState
-from x30_mapping.utils.conversions import localization
 from x30_msgs.msg import LocalizationStatus, SiteStatus
 from x30_msgs.srv import MarkStopPoint
+from x30_navigation.core.config.sites import RecorderConfig
+from x30_navigation.core.sites.recorder import RouteRecorder
 from x30_utils.math import Pose2D
 from x30_utils.ros import EVENTS, LATCHED, X30Node, run
 
@@ -70,7 +68,7 @@ class RouteRecorderNode(X30Node):
             self.log.warning(message)
 
     def _on_localization(self, msg: LocalizationStatus):
-        self.localized = localization(msg).state is LocState.LOCALIZED
+        self.localized = msg.state == LocalizationStatus.LOCALIZED
 
     def _tick(self):
         """Sample the pose while recording and write the file every flush_sec."""

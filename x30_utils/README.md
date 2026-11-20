@@ -2,7 +2,7 @@
 
 The shared toolbox of the X30 stack, the ROS Noetic port of
 [Dharma](https://github.com/DarmawanRobotics/Dharma): math, typed configuration, the robot
-profile, one safety model, logging, file IO, grids, and `X30Node`, the rospy base class of every
+profile, one safety model, logging, file IO and `X30Node`, the rospy base class of every
 node.
 
 Everything outside `x30_utils.ros` and `x30_utils.testing` is plain Python and numpy (the same
@@ -19,7 +19,6 @@ on Python 3.8 (Ubuntu 20.04): modules start with `from __future__ import annotat
 | `robot` | `RobotProfile`: kinematics, base height, footprint, motion limits, frames, shared by every node through the `robot/` parameters |
 | `safety` | the braking model `d = v t_r + v^2 / 2a`, the footprint's swept clearance along a translation and around a rotation, `SectorScan` semantics (blocked sectors are obstacles) |
 | `io` | atomic writes with `.bak`, tolerant JSON reads, path guards against traversal, route CSV, site layout and fiducial files |
-| `grid` | grid geometry, distance and likelihood fields, correlative scan-to-map matching with covariance |
 | `plugins` | `Registry`: named implementations of an interface, extensible through entry points |
 | `log` | structured logging (`log.info('scan', points=n)`, `throttle=`, `once=`, `event()`); with `X30_LOG_DIR`, rotated JSON lines files too |
 | `ros` | `X30Node`, `run()`, topic profiles, message conversions, validated `PointCloud2`, TF, markers, diagnostics |

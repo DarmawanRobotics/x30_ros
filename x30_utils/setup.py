@@ -8,7 +8,6 @@ setup(
         packages=[
             'x30_utils',
             'x30_utils.config',
-            'x30_utils.grid',
             'x30_utils.io',
             'x30_utils.log',
             'x30_utils.math',

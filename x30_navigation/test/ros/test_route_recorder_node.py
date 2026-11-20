@@ -10,9 +10,9 @@ import rospy
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
-from x30_mapping.route_recorder_node import RouteRecorderNode
 from x30_msgs.msg import LocalizationStatus, SiteStatus
 from x30_msgs.srv import MarkStopPoint
+from x30_navigation.route_recorder_node import RouteRecorderNode
 from x30_utils.io import read_route
 from x30_utils.log import Sink
 from x30_utils.math import planar_transform

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import os
 
-from x30_mapping.core.config import RecorderConfig
+from x30_navigation.core.config.sites import RecorderConfig
 from x30_utils.io import RoutePoint, SiteLayout, expand, valid_name, write_route
 from x30_utils.math import Pose2D
 
