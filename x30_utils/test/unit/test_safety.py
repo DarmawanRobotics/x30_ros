@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from x30_utils.robot import Footprint
+from x30_utils.robot import Footprint, Limits
 from x30_utils.safety import (
+    ArcCheck,
     rotation_room,
     stopping_distance,
     stopping_speed,
@@ -58,3 +60,33 @@ def test_sector_points_blocked_and_free():
     half = sector_points(-math.pi / 2, math.pi / 36, [4.0] * 36, 4.0)
     assert not half.full_circle
     assert not half.any_blocked
+
+
+def close_scene(rng) -> np.ndarray:
+    """Return points close around the robot: clusters and wall pieces, 0.2 to 1.4 m out."""
+    parts = []
+    for _ in range(rng.integers(1, 5)):
+        r, a = rng.uniform(0.2, 1.4), rng.uniform(-math.pi, math.pi)
+        centre = np.array([r * math.cos(a), r * math.sin(a)])
+        if rng.random() < 0.5:
+            d, s = rng.uniform(-math.pi, math.pi), np.linspace(-0.5, 0.5, 30)
+            parts.append(centre + np.column_stack((s * math.cos(d), s * math.sin(d))))
+        else:
+            parts.append(centre + rng.normal(0.0, 0.1, size=(rng.integers(3, 30), 2)))
+    return np.vstack(parts)
+
+
+def test_a_command_the_arc_check_scaled_passes_it_with_smaller_margins():
+    """The poses are counted from the start: a scaled command is checked where the full one was."""
+    arc = ArcCheck(FOOT, Limits(), 0.1)
+    rng = np.random.default_rng(7)
+    scaled = 0
+    for _ in range(400):
+        points = close_scene(rng)
+        vx, vy, wz = rng.uniform(-0.3, 0.8), rng.uniform(-0.4, 0.4), rng.uniform(-1.0, 1.0)
+        s = arc.scale(SimpleNamespace(vx=vx, vy=vy, wz=wz), points, 0.3, 0.11)
+        if 0.0 < s < 1.0:
+            scaled += 1
+            cmd = SimpleNamespace(vx=vx * s, vy=vy * s, wz=wz * s)
+            assert arc.scale(cmd, points, 0.29, 0.10) == 1.0
+    assert scaled > 20

@@ -48,7 +48,7 @@ class ArcCheck:
         limits: Limits,
         lateral_margin: float,
         step_m: float = 0.03,
-        max_poses: int = 60,
+        max_poses: int = 120,
         allowance_m: float = 0.02,
     ):
         self.footprint = footprint
@@ -71,10 +71,12 @@ class ArcCheck:
         t_r, t_b = self.limits.reaction_time, self.braking_time(cmd)
         extension = min(margin / v, yaw_margin / w)
         u_end = t_r + 0.5 * t_b + extension
-        p = self._nearby(points, (v + w * self.footprint.circumscribed_radius) * u_end)
+        rate = v + w * self.footprint.circumscribed_radius  # m/s of the fastest point
+        us = self._samples(rate, u_end)
+        p = self._nearby(points, rate * us[-1])
         if p.size == 0:
             return 1.0
-        u_clear = self._clear_until(cmd, p, u_end)
+        u_clear = self._clear_until(cmd, p, us, u_end)
         if u_clear >= u_end:
             return 1.0
         room = u_clear - extension
@@ -82,11 +84,17 @@ class ArcCheck:
             return 0.0
         return min(1.0, (-t_r + math.sqrt(t_r * t_r + 2.0 * t_b * room)) / t_b)
 
-    def _clear_until(self, cmd, points: np.ndarray, u_end: float) -> float:
+    def _samples(self, rate: float, u_end: float) -> np.ndarray:
+        """Return the arc parameters checked: each step_m of the fastest point (rate, m/s)."""
+        # counted from the start, not spread over u_end: a command scaled down is checked at the
+        # poses of the full one along the same arc, so what passes with some margins passes with
+        # smaller ones too (the follower's guard, then the control mux's field). The last is at
+        # or past u_end; past max_poses they are spread over u_end.
+        du = max(self.step_m / rate, u_end / self.max_poses)
+        return du * np.arange(1, math.ceil(u_end / du) + 1)
+
+    def _clear_until(self, cmd, points: np.ndarray, us: np.ndarray, u_end: float) -> float:
         """Return the arc parameter of the last clear pose before the first contact."""
-        reach = (_speed(cmd) + abs(cmd.wz) * self.footprint.circumscribed_radius) * u_end
-        count = int(min(self.max_poses, max(4, math.ceil(reach / self.step_m))))
-        us = np.linspace(u_end / count, u_end, count)
         poses = arc_poses(cmd, us)
         hits = self._hits(points, poses)
         if not hits.any():
