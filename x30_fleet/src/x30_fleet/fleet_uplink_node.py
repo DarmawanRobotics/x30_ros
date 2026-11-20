@@ -219,10 +219,16 @@ class FleetUplinkNode(X30Node):
         route_id = str(args['route_id'])
         try:
             text = self.link.download_route(route_id, os.path.join(folder, f'{route_id}.csv'))
-            plan = self.link.inspection_plan(route_id)
         except Exception as error:
             self.ack(cid, False, f'route download failed: {error}')
             return
+        try:
+            plan = self.link.inspection_plan(route_id)
+        except Exception as error:  # a NETRA without the plan: the route runs without its points
+            self.log.warning('no inspection plan from NETRA', route_id=route_id, error=str(error))
+            plan = None
+        if not isinstance(plan, dict):
+            plan = {'points': []}
         stops = substation.route_stops(text.decode(errors='ignore'))
         self.plan, skipped = substation.to_plan(plan, stops)
         for why in skipped:
