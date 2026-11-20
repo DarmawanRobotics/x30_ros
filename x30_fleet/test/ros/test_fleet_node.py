@@ -89,6 +89,16 @@ def test_start_patrol_fetches_the_route_and_its_plan_then_starts(rig):
     assert rig.netra.of_type('patrol_event')[1]['event'] == 'finished'
 
 
+def test_a_patrol_runs_without_netras_plan_when_there_is_none(rig):
+    rig.netra.routes['8'] = ROUTE
+    rig.netra.plans['8'] = 'not a plan'
+    rig.site()
+    ack = rig.command(1, 'start_patrol', route_id='8', patrol_id=43)
+    assert ack['ok'] and ack['msg'] == 'patrol started, 0 inspection points'
+    assert plans.load(rig.plan_file()).points == ()
+    assert rig.calls == ['load yard/netra/8.csv', 'navigation/start']
+
+
 def test_unknown_routes_and_ids_are_refused(rig):
     rig.site()
     assert not rig.command(1, 'start_patrol', route_id='../etc')['ok']
