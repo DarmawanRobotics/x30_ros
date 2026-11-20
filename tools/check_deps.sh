@@ -31,6 +31,7 @@ BUILD=(
   ros-noetic-topic-tools ros-noetic-rosbag ros-noetic-pcl-ros
   ros-noetic-cv-bridge ros-noetic-image-transport ros-noetic-image-transport-plugins
   python3-numpy python3-scipy python3-yaml python3-rospkg python3-setuptools python3-opencv
+  python3-requests python3-websocket
   libeigen3-dev libpcl-dev libapr1-dev libaprutil1-dev
   libcurl4-openssl-dev libssl-dev libopencv-dev libtinyxml2-dev nlohmann-json3-dev
   gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad ffmpeg
