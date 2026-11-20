@@ -68,7 +68,12 @@ control/remote/<source>/cmd_vel ─► arbitration ─► envelope ─► health
     `|wz|` with `max_yaw_accel`;
   - combined motion: the footprint is checked along the commanded arc until standstill (reaction
     time, then proportional braking; the margin grown by the person's distance) and the command
-    is scaled, keeping its curvature, until the arc is clear.
+    is scaled, keeping its curvature, until the arc is clear. The poses are every 3 cm of the
+    footprint's fastest point counted from the start, so a command scaled down is checked where
+    the full one was: what the follower's guard lets through with its margins, the field's no
+    larger ones pass;
+  - a command right on a limit passes untouched: what it is over by there is floating-point
+    noise (under 1e-9).
 
   `field.human_speed` defaults to 0.5 m/s: the static model (0) let a person walking at
   0.2 m/s brush the robot in the evaluation; 0.5 m/s covers slow walkers with a margin and keeps

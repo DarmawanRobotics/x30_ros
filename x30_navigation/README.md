@@ -65,8 +65,9 @@ field checks, a turning translation along its arc included (one function of x30_
 for both), and it checks what is published: the ramps of the command shaper are comfort and
 never outrun it, and a ramp bent toward something goes the guarded way. A turn that would sweep
 into a point goes on straight and turns later. So the field only stands by: the mux never cuts
-what the follower sends (`test_guard_field.py` drives the follower through the field), where
-it used to limit NeuPAN's passes and stop the robot in the pocket of the detour tests.
+what the follower sends (`test_guard_field.py` drives the follower through the field, and puts
+the field after the guard in 2000 random scenes of points close by and hard turns), where it
+used to limit NeuPAN's passes and stop the robot in the pocket of the detour tests.
 
 ## Docking on the X30
 
