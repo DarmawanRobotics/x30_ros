@@ -129,6 +129,16 @@ def test_a_point_passed_in_the_margin_band_is_held_like_the_field_holds_it():
     assert not safety.check_control(LM, safety.human_speed, 0.15)
 
 
+def test_a_turn_that_sweeps_into_something_goes_on_straight():
+    """The field's arc check: the corner beside a point turns into it; straight on it passes."""
+    guard = MotionGuard(ROBOT, SafetyConfig())
+    beside = np.array([[FP.front, FP.half_width + 0.06]])
+    assert guard.limit(Command(0.4), beside, False).command == Command(0.4)
+    assert guard.limit(Command(0.0, 0.0, 0.6), beside, False).command.wz == pytest.approx(0.6)
+    turning = guard.limit(Command(0.4, 0.0, 0.6), beside, False)
+    assert turning.command == Command(0.4, 0.0, 0.0) and not turning.stalled
+
+
 def test_a_slowing_ramp_never_outruns_the_guard():
     guard = MotionGuard(ROBOT, SafetyConfig())
     ahead = np.array([[FP.front + 0.6, 0.0]])
