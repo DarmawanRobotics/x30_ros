@@ -1,18 +1,20 @@
 """Combined motion: the footprint along the commanded arc until the robot stands still."""
 
+# Shared by the control mux's protective field and the path follower's guard, so the guard is
+# never less cautious than the field. A command is anything with vx, vy (m/s) and wz (rad/s).
+
 from __future__ import annotations
 
 import math
 
 import numpy as np
 
-from x30_control.core.command import Command
 from x30_utils.robot import Footprint, Limits
 
 EPS = 1e-9
 
 
-def arc_poses(cmd: Command, u: np.ndarray) -> np.ndarray:
+def arc_poses(cmd, u: np.ndarray) -> np.ndarray:
     """Return (K, 3) poses (x, y, yaw) reached with the constant twist after each u (s)."""
     u = np.asarray(u, dtype=float)
     theta = cmd.wz * u
@@ -56,14 +58,14 @@ class ArcCheck:
         self.max_poses = max_poses
         self.allowance_m = allowance_m
 
-    def braking_time(self, cmd: Command) -> float:
+    def braking_time(self, cmd) -> float:
         """Time (s) to brake both axes to standstill in proportion."""
         lim = self.limits
-        return max(cmd.speed / lim.max_decel, abs(cmd.wz) / lim.max_yaw_accel)
+        return max(_speed(cmd) / lim.max_decel, abs(cmd.wz) / lim.max_yaw_accel)
 
-    def scale(self, cmd: Command, points: np.ndarray, margin: float, yaw_margin: float) -> float:
+    def scale(self, cmd, points: np.ndarray, margin: float, yaw_margin: float) -> float:
         """Return the scale (0..1) for cmd; 1 for a pure translation or rotation."""
-        v, w = cmd.speed, abs(cmd.wz)
+        v, w = _speed(cmd), abs(cmd.wz)
         if v <= EPS or w <= EPS:
             return 1.0
         t_r, t_b = self.limits.reaction_time, self.braking_time(cmd)
@@ -80,9 +82,9 @@ class ArcCheck:
             return 0.0
         return min(1.0, (-t_r + math.sqrt(t_r * t_r + 2.0 * t_b * room)) / t_b)
 
-    def _clear_until(self, cmd: Command, points: np.ndarray, u_end: float) -> float:
+    def _clear_until(self, cmd, points: np.ndarray, u_end: float) -> float:
         """Return the arc parameter of the last clear pose before the first contact."""
-        reach = (cmd.speed + abs(cmd.wz) * self.footprint.circumscribed_radius) * u_end
+        reach = (_speed(cmd) + abs(cmd.wz) * self.footprint.circumscribed_radius) * u_end
         count = int(min(self.max_poses, max(4, math.ceil(reach / self.step_m))))
         us = np.linspace(u_end / count, u_end, count)
         poses = arc_poses(cmd, us)
@@ -114,3 +116,8 @@ class ArcCheck:
             return p
         radius = self.footprint.circumscribed_radius + self.lateral_margin + reach
         return p[np.hypot(p[:, 0], p[:, 1]) <= radius]
+
+
+def _speed(cmd) -> float:
+    """Return the linear speed (m/s) of a command."""
+    return math.hypot(cmd.vx, cmd.vy)
