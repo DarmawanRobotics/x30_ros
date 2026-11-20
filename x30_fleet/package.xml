@@ -25,4 +25,6 @@
 
   <test_depend>python3-pytest</test_depend>
   <test_depend>roslaunch</test_depend>
+  <test_depend>tf2_ros</test_depend>
+  <test_depend>x30_inspection</test_depend>
 </package>
