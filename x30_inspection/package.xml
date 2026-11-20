@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_inspection</name>
-  <version>0.17.0</version>
+  <version>0.18.0</version>
   <description>Substation inspection at the stop points of the X30's patrol (the HotDog pattern on ROS Noetic): the HIKMICRO PTZ camera is pointed at each piece of equipment taught there and its temperatures are judged for overheating (absolute, ambient and similar criteria), the Hertzino HZ-FA-371 listens for partial discharge, and a report with the thermal, visible, sound map and PRPD images is kept on the robot and published.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

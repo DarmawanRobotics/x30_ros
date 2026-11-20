@@ -1,0 +1,22 @@
+# teleop_udp_node (x30_bridge): the handheld's UDP gateway, protocol v1 (PROTOCOL.md)
+port: 9870
+token_env: X30_TELEOP_TOKEN   # the shared secret's variable, never a parameter (unset: no token)
+robot_name: ''                # in discovery beacons (empty: the hostname)
+client_timeout_sec: 2.0       # a silent handheld is dropped, its stick zeroed
+max_vx: 0.8                   # m/s, the stick's limits (also never above robot/limits)
+max_vy: 0.4
+max_wz: 1.0                   # rad/s
+remote_source: handheld       # control/remote/handheld/cmd_vel of the control mux
+telemetry_hz: 10.0
+robot_command_prefix: /x30/   # the driver's Trigger services (bringup's namespace)
+robot_commands: [stand_up, sit_down, start_stepping, stop_stepping, gait_walk, gait_off_road,
+                 gait_stair, emergency_stop]
+sites_dir: ~/x30/map          # the routes listed and loaded (bringup passes its own)
+cameras:                      # JPEG frames for the handheld, name=CompressedImage topic
+  - visible=/hikmicro/visible/image_raw/compressed
+  - thermal=/hikmicro/thermal/image_raw/compressed
+camera_fps: 5.0
+lidar_topic: /cloud_registered_body
+navigation_node: /path_follower_node   # its speed/cruise is the patrol speed
+patrol_speed_min: 0.1
+patrol_speed_max: 0.6

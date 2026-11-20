@@ -186,6 +186,7 @@ def test_the_navigation_host_runs_all_but_the_cameras_and_what_its_watchdog_watc
         '/path_follower_node',
         '/health_monitor_node',
         '/inspection_node',
+        '/teleop_udp_node',
     ):
         assert node in nodes, node
     assert not [n for n in nodes if n.startswith(('/hikmicro', '/hertzino'))]
@@ -195,6 +196,20 @@ def test_the_navigation_host_runs_all_but_the_cameras_and_what_its_watchdog_watc
     script = (Path(__file__).resolve().parents[2] / 'tools' / 'x30_host.sh').read_text()
     critical = re.search(r'^CRITICAL=\((.*)\)$', script, re.MULTILINE).group(1).split()
     assert critical and set(critical) <= set(nodes)
+
+
+def test_the_handheld_gateway_follows_the_robots_namespace_and_stays_out_of_health():
+    args = ('bridge:=true', 'health:=true', 'namespace:=dog', 'sites_dir:=/data/sites')
+    params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
+    assert params['/teleop_udp_node/robot_command_prefix'] == '/dog/'
+    assert params['/teleop_udp_node/battery_topic'] == '/dog/battery'
+    assert params['/teleop_udp_node/cmd_topic'] == '/dog/cmd_vel'
+    assert params['/teleop_udp_node/sites_dir'] == '/data/sites'
+    assert '/teleop_udp_node/token' not in params  # the secret: X30_TELEOP_TOKEN only
+    assert '/teleop_udp_node' not in params['/health_monitor_node/nodes/expected']  # not driving
+    assert '/teleop_udp_node' not in roslaunch('--nodes', str(LAUNCH)).split()
+    navigation = str(HOSTS / 'navigation_host.launch')
+    assert '/teleop_udp_node' not in roslaunch('--nodes', navigation, 'bridge:=false').split()
 
 
 def test_the_navigation_host_keeps_a_black_box_unless_told_not_to():

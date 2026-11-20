@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # x30_ros across the X30's two computers: the navigation host (192.168.1.106, the intelligent
 # controller: the robot's ROS master, the driver, control, LiDAR scans, odometry, localization,
-# routes without a map, navigation, health, inspection) and the perception host (192.168.1.105:
-# the inspection cameras and their recorder). Sets each one's ROS network, checks that the two
-# see each other, and starts each one's launch file, by hand or as a systemd service
-# (x30_bringup README, "Two hosts").
+# routes without a map, navigation, health, inspection, the handheld's gateway) and the
+# perception host (192.168.1.105: the inspection cameras and their recorder). Sets each one's
+# ROS network, checks that the two see each other, and starts each one's launch file, by hand
+# or as a systemd service (x30_bringup README, "Two hosts").
 set -euo pipefail
 
 usage() {
@@ -213,6 +213,9 @@ env_file() { # <role> <user> <ws>
     else
       say "# X30_PYTHON=$ws/neupan/bin/python"
     fi
+    say "# the handheld's shared secret (x30_bridge, the same in the app): this file is readable"
+    say "# by root and $2 only; empty: anyone on the robot's Wi-Fi can drive"
+    say "X30_TELEOP_TOKEN="
   else
     say "# the cameras' passwords: this file is readable by root and $2 only"
     say "HIKMICRO_PASSWORD="
@@ -302,7 +305,8 @@ cmd_install() { # <role>
   say "wrote $unit"
   "$SYSTEMCTL" daemon-reload
   "$SYSTEMCTL" enable "x30-$role.service"
-  [ "$role" = perception ] && what='X30_LAUNCH_ARGS, the passwords' || what='X30_LAUNCH_ARGS'
+  [ "$role" = perception ] && what='X30_LAUNCH_ARGS, the passwords' ||
+    what="X30_LAUNCH_ARGS, the handheld's X30_TELEOP_TOKEN"
   say "next: the settings in $env ($what)"
   say "then: sudo systemctl start x30-$role; journalctl -u x30-$role -f"
 }

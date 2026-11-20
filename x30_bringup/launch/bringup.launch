@@ -38,6 +38,8 @@
                     its tags already
       sites_dir:    the sites of localization, navigation and inspection (empty: their files'; with
                     sim: /tmp/x30_sim/sites)
+      bridge:       the handheld's UDP gateway (x30_bridge: port 9870, its shared secret from
+                    X30_TELEOP_TOKEN), the control mux's handheld source
       rviz: RViz with the robot model
   -->
   <arg name="namespace" default="x30"/>
@@ -68,6 +70,7 @@
   <arg name="hertzino_password" default=""/>
   <arg name="lidar_frame" default="livox_frame"/>
   <arg name="lidar_pose" default="0 0 0 0 0 0"/>
+  <arg name="bridge" default="false"/>
   <arg name="rviz" default="false"/>
 
   <!-- base_link has one parent: the driver's leg odometry or the localization bridge -->
@@ -178,6 +181,11 @@
     <node pkg="tf2_ros" type="static_transform_publisher" name="lidar_mount"
           args="$(arg lidar_pose) base_link $(arg lidar_frame)"/>
   </group>
+
+  <include if="$(arg bridge)" file="$(find x30_bridge)/launch/bridge.launch">
+    <arg name="sites_dir" value="$(arg sites_dir)"/>
+    <arg name="robot_ns" value="$(arg namespace)"/>
+  </include>
 
   <node if="$(arg rviz)" ns="$(arg namespace)" pkg="rviz" type="rviz" name="rviz"
         args="-d $(find x30_description)/rviz/x30.rviz"/>

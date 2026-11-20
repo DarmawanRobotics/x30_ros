@@ -1,0 +1,34 @@
+<launch>
+  <!--
+    teleop_udp_node (x30_bridge): the handheld's UDP gateway on the navigation host, protocol v1
+    (PROTOCOL.md). The stick is the control mux's `handheld` source; the mux alone drives. The
+    handheld's shared secret comes from X30_TELEOP_TOKEN in the environment, never a parameter.
+      params_file:  parameters on top of config/bridge.yaml
+      robot_params: the robot profile, loaded as robot/ (empty: already on the parameter server)
+      sites_dir:    where the routes are listed (empty: the file's)
+      robot_ns:     the namespace of the driver (its Trigger services, battery, cmd_vel)
+      port:         the UDP port (empty: the file's, 9870)
+  -->
+  <arg name="params_file" default=""/>
+  <arg name="robot_params" default=""/>
+  <arg name="sites_dir" default=""/>
+  <arg name="robot_ns" default="x30"/>
+  <arg name="port" default=""/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
+            file="$(arg robot_params)"/>
+
+  <node pkg="x30_bridge" type="teleop_udp_node" name="teleop_udp_node" output="$(arg output)"
+        respawn="$(arg respawn)" respawn_delay="2">
+    <rosparam command="load" file="$(find x30_bridge)/config/bridge.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+    <param if="$(eval arg('sites_dir') != '')" name="sites_dir" value="$(arg sites_dir)"/>
+    <param name="robot_command_prefix" value="/$(arg robot_ns)/"/>
+    <param name="battery_topic" value="/$(arg robot_ns)/battery"/>
+    <param name="cmd_topic" value="/$(arg robot_ns)/cmd_vel"/>
+    <param name="driver_diagnostics_topic" value="/$(arg robot_ns)/diagnostics"/>
+    <param if="$(eval arg('port') != '')" name="port" value="$(arg port)"/>
+  </node>
+</launch>
