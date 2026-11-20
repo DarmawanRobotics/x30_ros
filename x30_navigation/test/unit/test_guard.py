@@ -157,3 +157,9 @@ def test_a_ramp_bent_toward_something_goes_the_guarded_way():
     published = guard.published(Command(0.025, -0.012), guarded, right_front, False)
     assert math.hypot(published.vx, published.vy) == pytest.approx(math.hypot(0.025, 0.012))
     assert math.atan2(published.vy, published.vx) == pytest.approx(math.atan2(-0.024, 0.4))
+
+
+def test_the_turning_room_is_at_least_the_fields():
+    """The field keeps 0.10 rad of turning room: a guard keeping less plans turns it stops."""
+    assert SafetyConfig(yaw_margin_deg=5.0).check_control(LM, 0.5, 0.15, 0.10)
+    assert not SafetyConfig().check_control(LM, 0.5, 0.15, 0.10)

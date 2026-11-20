@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from x30_navigation.core.config.loader import ProcessingConfig
 from x30_navigation.core.config.shift import BacktrackConfig, DetourConfig, PathShiftConfig
@@ -47,7 +48,12 @@ class SafetyConfig:
         0.3, min=0.0, max=5.0, unit='m', live=False, doc='gap kept to obstacles when stopping'
     )
     yaw_margin_deg: float = param(
-        5.0, min=0.0, max=90.0, unit='deg', live=False, doc='turning room kept to obstacles'
+        6.0,
+        min=0.0,
+        max=90.0,
+        unit='deg',
+        live=False,
+        doc='turning room kept to obstacles, >= the control field.yaw_margin (0.10 rad)',
     )
     scan_timeout_sec: float = param(
         0.5, min=0.05, max=5.0, unit='s', live=False, doc='older safety scans stop the robot'
@@ -117,10 +123,20 @@ class SafetyConfig:
         return problems
 
     def check_control(
-        self, lateral_margin: float, human_speed: float = 0.0, margin: float = 0.0
+        self,
+        lateral_margin: float,
+        human_speed: float = 0.0,
+        margin: float = 0.0,
+        yaw_margin: float = 0.0,
     ) -> list[str]:
         """Return why the guard would plan motions the control field refuses (its values)."""
         problems = []
+        if math.radians(self.yaw_margin_deg) < yaw_margin - 1e-9:
+            problems.append(
+                f'safety.yaw_margin_deg {self.yaw_margin_deg:.1f} is below the control field'
+                f' yaw_margin {math.degrees(yaw_margin):.1f} deg: the mux stops turns the guard'
+                ' allows'
+            )
         if self.pass_margin < margin - 1e-9:
             problems.append(
                 f'safety.pass_margin {self.pass_margin:.2f} m is below the control field margin'
