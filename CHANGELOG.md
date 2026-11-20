@@ -3,6 +3,34 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.17.0)
+
+### Added
+- x30_recorder: the inspection cameras recorded on the perception host
+  (`perception_host.launch recorder:=true`, by default), written to its own disk as the data
+  arrives, so nothing is lost when a link drops and nothing crosses the network:
+  - every raw thermal frame of `/hikmicro/thermal/temperature` as a `.npz` (degC per pixel, its
+    time, the robot's pose and the camera's pan, tilt and zoom; written whole or not at all);
+  - the camera's visible and thermal streams copied from RTSP into MP4 segments (`-c copy`, no
+    re-encoding; fragmented, so a cut segment plays), restarted with a growing delay when the
+    camera drops; the password from `HIKMICRO_PASSWORD`, masked in every log;
+  - the acoustic camera's spectra, PRPD and voiceprint frames in chunks, its detections as JSON
+    lines;
+  - a patrol session while the path follower runs a route (and 30 s after), a manual one between
+    `recorder/start` and `recorder/stop`; `recorder/status`;
+  - the oldest sessions removed while less than 10 GB is free, nothing recorded below 3 GB; a
+    writer thread that drops a frame rather than stall the subscriptions.
+- x30_inspection: the raw thermometry frame of each target in its report
+  (`<target>_thermal.npz`, the newest frame once the camera settled; `camera/raw_thermal`,
+  `camera/raw_wait_sec`).
+- x30_utils: `io.write_thermal`, `read_thermal`, `image_temperatures` (the raw frame format of
+  both); the `RECORDED` topic profile (every message kept).
+- x30_msgs: `RecorderStatus`.
+
+### Changed
+- `tools/check_deps.sh --perception` checks the recorder's packages too (ffmpeg, rospy,
+  numpy) and builds x30_msgs and x30_recorder on the perception host.
+
 ## [Unreleased] (0.16.0)
 
 ### Added
