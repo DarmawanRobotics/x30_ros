@@ -177,17 +177,14 @@ class NetraLink:
                 self.log.error('unreadable spool item, quarantined', item=item, error=str(error))
                 self.spool.quarantine(item)
                 continue
-            multipart = {
-                name: (
-                    name,
-                    data,
-                    TYPES.get(os.path.splitext(name)[1], 'application/octet-stream'),
-                )
-                for name, data in files.items()
-            }
+            # always multipart (NETRA refuses anything else), even without a file
+            multipart = {'meta': (None, json.dumps(meta), 'application/json')}
+            for name, data in files.items():
+                kind_of = TYPES.get(os.path.splitext(name)[1], 'application/octet-stream')
+                multipart[name] = (name, data, kind_of)
             try:
-                reply = requests.post(url, headers=self.headers(), data={'meta': json.dumps(meta)},
-                                      files=multipart, timeout=20, verify=self.verify)  # fmt: skip
+                reply = requests.post(url, headers=self.headers(), files=multipart, timeout=20,
+                                      verify=self.verify)  # fmt: skip
             except Exception as error:
                 self.log.warning('upload failed', error=str(error), throttle=30.0)
                 return
