@@ -12,7 +12,7 @@ from x30_navigation.core.controllers.base import Command
 from x30_navigation.core.separation import separation_speed
 from x30_navigation.core.sweep import swept_clearance
 from x30_utils.robot import RobotProfile
-from x30_utils.safety import rotation_room, stopping_yaw_rate
+from x30_utils.safety import ArcCheck, rotation_room, stopping_yaw_rate
 
 STALL_SPEED = 0.03
 
@@ -33,6 +33,8 @@ class MotionGuard:
         self.robot = robot
         self.config = config
         self.lateral_margin = config.lateral_margin
+        # the control mux's check of a turning translation, with the guard's own margins
+        self.arc = ArcCheck(robot.footprint, robot.limits, config.lateral_margin)
 
     def allowed_speed(self, clearance: float, margin: float | None = None) -> float:
         """Return the highest speed (m/s) for a free distance (m) kept margin (stop_margin)."""
@@ -65,9 +67,23 @@ class MotionGuard:
             scale = min(1.0, self.speed_for(body, clearance) / speed)
             vx, vy = vx * scale, vy * scale
         wz = command.wz
+        yaw_margin = math.radians(self.config.yaw_margin_deg)
         if abs(wz) > 1e-6:
-            room = rotation_room(fp, points, wz) - math.radians(self.config.yaw_margin_deg)
+            room = rotation_room(fp, points, wz) - yaw_margin
             allowed = stopping_yaw_rate(room, limits.max_yaw_accel, limits.reaction_time)
             wz = math.copysign(min(abs(wz), allowed), wz)
-        stalled = speed > STALL_SPEED and math.hypot(vx, vy) < STALL_SPEED
-        return Guarded(Command(vx, vy, wz), clearance, stalled)
+        out = self._arc(Command(vx, vy, wz), points, yaw_margin)
+        if math.hypot(out.vx, out.vy) < STALL_SPEED <= math.hypot(vx, vy):
+            out = Command(vx, vy, 0.0)  # the turn sweeps into something: on straight, turn later
+        stalled = speed > STALL_SPEED and math.hypot(out.vx, out.vy) < STALL_SPEED
+        return Guarded(out, clearance, stalled)
+
+    def _arc(self, command: Command, points: np.ndarray, yaw_margin: float) -> Command:
+        """Return the command slowed along its own arc until it stops clear (as the field does)."""
+        person = self.config.human_speed * (
+            self.robot.limits.reaction_time + self.arc.braking_time(command)
+        )
+        scale = self.arc.scale(command, points, self.config.pass_margin + person, yaw_margin)
+        if scale >= 1.0:
+            return command
+        return Command(command.vx * scale, command.vy * scale, command.wz * scale)
