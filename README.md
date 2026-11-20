@@ -101,7 +101,8 @@ From the API documentation (sections 1.2 to 1.5):
 | velocity | axis commands `0x31010130` (+ forward), `0x31010131` (+ right), `0x31010135` (+ turn right) at 50 Hz, obeyed in the **stepping** state and **non-manual** mode (`0x21` codes: manual mode) |
 
 **Two hosts.** On the robot the stack runs on the navigation host (192.168.1.106: the driver,
-control, the LiDAR scans, odometry, localization, mapping, navigation, health, inspection), and
+control, the LiDAR scans, odometry, localization, the site and its routes without a map,
+navigation, health, inspection; the LiDAR and IMU from Deep Robotics' own drivers), and
 the inspection cameras on the perception host (192.168.1.105), both on the navigation host's ROS
 master: `navigation_host.launch` and `perception_host.launch`, by hand or as services under a
 watchdog with `tools/x30_host.sh` ([x30_bringup](x30_bringup/README.md#two-hosts)).
@@ -185,9 +186,9 @@ rosservice call /navigation/start
 rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
 ```
 
-Or without a map, like HotDog and Pashupati: the odometry start (the dock) is the map origin,
-routes are taught and repeated in that frame, tags only correct the drift
-([Odometry only](x30_bringup/README.md#odometry-only)):
+Or without a map, like HotDog and Pashupati, as the X30 runs on site (`navigation_host.launch`
+never maps): the odometry start (the dock) is the map origin, routes are taught and repeated in
+that frame, tags only correct the drift ([Odometry only](x30_bringup/README.md#odometry-only)):
 
 ```bash
 roslaunch x30_bringup bringup.launch control:=true perception:=true odometry:=true \
