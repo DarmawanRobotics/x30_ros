@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_bridge</name>
-  <version>0.17.0</version>
+  <version>0.18.0</version>
   <description>The handheld's UDP gateway to the X30 (teleop protocol v1 of Pashupati, with the X30's own commands and state): the stick as an operator source of the control mux, the commands of the stack (mode, e-stop, routes, patrol, docking, the robot's postures and gaits, the camera recorder, an inspection), the robot's state, JPEG frames of the inspection camera and a downsampled cloud. No ROS on the handheld.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>

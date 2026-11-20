@@ -3,6 +3,24 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.18.0)
+
+### Added
+- x30_bridge: `teleop_udp_node`, the handheld's UDP gateway on the navigation host
+  (`navigation_host.launch bridge:=true` by default, `bringup.launch bridge:=true`, UDP 9870),
+  for the X30Controller app on a Skydroid H12 or any Android on the robot's Wi-Fi. The wire
+  format is Pashupati's teleop protocol v1 (PROTOCOL.md), so its handheld drives the X30 too:
+  - the stick as the control mux's `handheld` source, clamped to the limits, zeroed when the
+    handheld falls silent; one handheld at a time; discovery beacons;
+  - the stack's commands (mode, e-stop, teach and run routes, stop points, localize, dock, the
+    patrol speed, the driver's postures and gaits) on worker threads, acknowledged once per id;
+    the X30's own: `recorder_start`, `recorder_stop`, `inspect`;
+  - the state at 10 Hz with the X30's `recorder` and `substation` parts; JPEG frames of the
+    HIKMICRO camera's visible or thermal stream, FAST-LIO's cloud and the loaded route,
+    subscribed only while a handheld wants them;
+  - the shared secret from `X30_TELEOP_TOKEN` in the environment, never a parameter
+    (`x30_host.sh install navigation` puts it in the private settings file).
+
 ## [Unreleased] (0.17.0)
 
 ### Added
