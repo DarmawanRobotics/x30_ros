@@ -45,3 +45,14 @@ def test_arguments_override_when_set(tmp_path):
     assert p['/grid_mapper_node/rate_hz'] == 1.0
     assert p['/grid_mapper_node/cloud_topic'] == '/cloud_registered_body'  # the rest stays
     assert params('site:=gardu', 'create_site:=true')['/site_manager_node/create_site'] is True
+
+
+def test_without_a_map_no_grid_mapper_and_no_mapping_session():
+    p = params('grid:=false', 'create_site:=true', 'site:=gardu')
+    assert p['/site_manager_node/mapping'] is False
+    assert p['/site_manager_node/create_site'] is True
+    nodes = subprocess.run(
+        ['roslaunch', '--nodes', str(LAUNCH), 'grid:=false'],
+        capture_output=True, text=True, timeout=60, check=False,
+    ).stdout.split()  # fmt: skip
+    assert nodes == ['/site_manager_node', '/route_recorder_node']

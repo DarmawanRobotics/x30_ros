@@ -296,6 +296,14 @@ def test_odometry_only_creates_its_launch_site_without_a_map(make_rig):
         refused.close()
 
 
+def test_a_robot_without_a_map_offers_no_mapping_session(make_rig):
+    rig = make_rig(site='gardu', create_site=True, mapping=False)
+    assert wait_for(lambda: rig.status.last and rig.status.last.site == 'gardu', 5.0)
+    assert rig.call(ListSites, 'site/list').active == 'gardu'  # sites and routes as ever
+    with pytest.raises(rospy.ROSException):
+        rospy.wait_for_service('mapping/start', 0.5)
+
+
 def test_site_load_switches_and_resets_localization(make_rig):
     rig = make_rig()
     write_site(rig.sites, 'lobby')
