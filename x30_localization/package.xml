@@ -2,7 +2,7 @@
 <package format="3">
   <name>x30_localization</name>
   <version>0.15.0</version>
-  <description>Where the X30 is on its site map (the ROS Noetic port of dharma_localization): map -> odom from an SE(2) EKF on top of FAST-LIO, corrected by fiducials in view, operator pose estimates and optional scan matching through a chi-square gate that grows with the uncertainty, and the bridge of FAST-LIO's frames into a gravity-aligned odom -> base_link.</description>
+  <description>Where the X30 is on its site (the ROS Noetic port of dharma_localization, without a map): map -> odom from an SE(2) EKF on top of FAST-LIO, the odometry's start as the map origin, corrected by fiducials in view and operator pose estimates through a chi-square gate that grows with the uncertainty, and the bridge of FAST-LIO's frames into a gravity-aligned odom -> base_link.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>
   <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>
@@ -12,7 +12,6 @@
 
   <build_depend>x30_utils</build_depend>
   <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>nav_msgs</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>rospy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>

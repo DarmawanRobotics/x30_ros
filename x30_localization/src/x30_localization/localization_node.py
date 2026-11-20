@@ -25,7 +25,6 @@ from x30_localization.utils.conversions import (
     status_msg,
 )
 from x30_localization.utils.markers import tag_markers
-from x30_localization.utils.scan_input import ScanInput
 from x30_localization.utils.tag_input import TagInput
 from x30_localization.utils.tag_services import TagServices
 from x30_msgs.msg import LocalizationStatus
@@ -70,8 +69,6 @@ class LocalizationNode(X30Node):
         )
         if lv.enabled:
             self.create_subscription(Imu, lv.imu_topic, self.on_imu, SENSOR)
-        if cfg.scan_match.enabled:
-            ScanInput(self, cfg.scan_match, self.odom, self.base)
         for name, callback in (('start', self.srv_start), ('reset', self.srv_reset),
                                ('assume_origin', self.srv_assume_origin)):  # fmt: skip
             self.create_service(Trigger, f'localization/{name}', callback)
@@ -173,16 +170,6 @@ class LocalizationNode(X30Node):
         """Return the believed map->base for an odometry pose, or None."""
         map_odom = self.localizer.estimator.map_odom
         return None if map_odom is None else map_odom @ odom_base
-
-    def on_scan_measurement(self, measurement, odom_base: Pose2D):
-        """Fuse a scan-to-map match through the gate."""
-        with self.lock:
-            if not self.is_localized():
-                return
-            result, samples = self.localizer.correct(measurement, odom_base, self.now())
-            self.send(samples)
-        if not result.accepted:
-            self.log.info('scan match ' + result.describe(), throttle=10.0)
 
     def on_pose_estimate(self, msg: PoseWithCovarianceStamped):
         """RViz 2D Pose Estimate: the operator sets map->base (no gate)."""

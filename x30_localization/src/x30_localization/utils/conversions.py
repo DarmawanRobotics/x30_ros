@@ -9,8 +9,7 @@ import numpy as np
 
 from x30_localization.core.localizer import Status
 from x30_msgs.msg import LocalizationStatus
-from x30_utils.grid import GridSpec
-from x30_utils.math import Pose2D, yaw_from_quat
+from x30_utils.math import Pose2D
 from x30_utils.ros.convert import (
     planar_covariance,
     pose2d_to_pose,
@@ -57,22 +56,3 @@ def imu_vectors(msg) -> tuple[float, np.ndarray, np.ndarray]:
     """Return (stamp, linear acceleration, angular velocity) of a sensor_msgs/Imu."""
     a, w = msg.linear_acceleration, msg.angular_velocity
     return to_sec(msg.header.stamp), np.array([a.x, a.y, a.z]), np.array([w.x, w.y, w.z])
-
-
-def occupancy(msg, threshold: int) -> tuple[np.ndarray, GridSpec] | str:
-    """Return (occupied cells, grid spec) of an OccupancyGrid, or why it is not usable."""
-    info = msg.info
-    q = info.origin.orientation
-    if abs(yaw_from_quat(q.x, q.y, q.z, q.w)) > 1e-6:
-        return 'rotated map origins are not supported'
-    if info.width == 0 or info.height == 0 or len(msg.data) != info.width * info.height:
-        return f'map data has {len(msg.data)} cells for {info.width} x {info.height}'
-    data = np.asarray(msg.data, dtype=np.int16).reshape(info.height, info.width)
-    spec = GridSpec(
-        float(info.resolution),
-        float(info.origin.position.x),
-        float(info.origin.position.y),
-        int(info.width),
-        int(info.height),
-    )
-    return data >= threshold, spec

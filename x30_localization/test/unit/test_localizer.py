@@ -142,16 +142,22 @@ def test_no_correction_from_a_tag_being_recorded():
 
 
 def test_status_and_uncertain_state_after_a_long_drive():
-    loc = localizer()
-    status = loc.status(0.0)
-    assert status.state is State.NONE and math.isinf(status.sigma_xy)
-    loc.track(Pose2D(), 0.0)
-    loc.assume_origin(0.0)
-    assert loc.status(0.0).source == 'origin'
-    for i in range(1, 400):
-        loc.track(Pose2D(float(i), 0.0, 0.0), float(i))
-    status = loc.status(400.0)
-    assert status.state is State.UNCERTAIN and status.since_correction == pytest.approx(400.0)
+    """No map corrects the drift: LOCALIZED all along by default, UNCERTAIN past a set sigma."""
+    for config, state in (
+        (EstimatorConfig(), State.LOCALIZED),
+        (EstimatorConfig(max_sigma_xy=0.5), State.UNCERTAIN),
+    ):
+        loc = Localizer(MapOdomEstimator(config), TagConfig(min_interval_sec=0.0))
+        status = loc.status(0.0)
+        assert status.state is State.NONE and math.isinf(status.sigma_xy)
+        loc.track(Pose2D(), 0.0)
+        loc.assume_origin(0.0)
+        assert loc.status(0.0).source == 'origin'
+        for i in range(1, 400):
+            loc.track(Pose2D(float(i), 0.0, 0.0), float(i))
+        status = loc.status(400.0)
+        assert status.state is state and status.since_correction == pytest.approx(400.0)
+        assert status.sigma_xy > 0.5  # the drift, reported
 
 
 def test_unknown_tag_and_missing_file():

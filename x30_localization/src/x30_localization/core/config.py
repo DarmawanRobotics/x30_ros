@@ -25,11 +25,12 @@ class EstimatorConfig:
     gate_confidence: float = param(
         0.99, choices=GATE_CONFIDENCES, doc='chi-square gate (3 dof) of automatic corrections'
     )
+    # no map to correct the drift but tags: the state stays LOCALIZED, sigma reports the drift
     max_sigma_xy: float = param(
-        0.5, min=0.01, max=100.0, unit='m', doc='above: state UNCERTAIN (position)'
+        100.0, min=0.01, max=100.0, unit='m', doc='above: state UNCERTAIN (position)'
     )
     max_sigma_yaw_deg: float = param(
-        10.0, min=0.1, max=180.0, unit='deg', doc='above: state UNCERTAIN (heading)'
+        180.0, min=0.1, max=180.0, unit='deg', doc='above: state UNCERTAIN (heading)'
     )
     min_sigma_xy: float = param(
         0.01, min=0.0, max=1.0, unit='m', doc='floor after a correction (no overconfidence)'
@@ -93,33 +94,6 @@ class TagConfig:
 
 
 @dataclass(frozen=True)
-class ScanMatchConfig:
-    """Optional scan-to-map corrections against /map."""
-
-    enabled: bool = param(False, live=False, doc='match the registered cloud against /map')
-    cloud_topic: str = param(
-        '/cloud_registered_body', live=False, doc='deskewed cloud in the LIO body frame'
-    )
-    rate_hz: float = param(1.0, min=0.05, max=10.0, unit='Hz', doc='matches per second, at most')
-    min_height_m: float = param(0.1, min=-1.0, max=5.0, unit='m', doc='band above the floor')
-    max_height_m: float = param(1.5, min=0.0, max=10.0, unit='m', doc='band above the floor')
-    max_range_m: float = param(15.0, min=0.5, max=200.0, unit='m', doc='farther points ignored')
-    xy_window_m: float = param(0.3, min=0.05, max=5.0, unit='m', doc='search window')
-    yaw_window_deg: float = param(6.0, min=0.5, max=45.0, unit='deg', doc='search window')
-    min_score: float = param(0.5, min=0.0, max=1.0, doc='mean likelihood needed')
-    covariance_scale: float = param(
-        4.0, min=1.0, max=1000.0, doc='inflates the match covariance (correlated points)'
-    )
-    occupied_threshold: int = param(65, min=1, max=100, doc='occupancy value of an obstacle')
-
-    def validate(self) -> list[str]:
-        """Return cross-field problems."""
-        if self.min_height_m >= self.max_height_m:
-            return ['min_height_m must be below max_height_m']
-        return []
-
-
-@dataclass(frozen=True)
 class LevelingConfig:
     """Gravity alignment of odom from the IMU while the robot stands still."""
 
@@ -156,9 +130,8 @@ class LocalizationConfig:
         10.0, min=0.0, max=100.0, unit='Hz', live=False, doc='localization/pose; 0: off'
     )
     assume_start_origin: bool = param(
-        False, live=False, doc='the odom origin is the map origin at start (no tag needed)'
+        True, live=False, doc='the odom origin is the map origin at start (no tag needed)'
     )
     estimator: EstimatorConfig = nested(EstimatorConfig)
     tag: TagConfig = nested(TagConfig)
-    scan_match: ScanMatchConfig = nested(ScanMatchConfig)
     leveling: LevelingConfig = nested(LevelingConfig)

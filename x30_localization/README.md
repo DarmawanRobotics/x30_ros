@@ -1,13 +1,15 @@
 # x30_localization
 
-Where the X30 is on its site map, the ROS Noetic port of
-[dharma_localization](https://github.com/DarmawanRobotics/dharma_localization): `map -> odom`
-from an EKF on top of FAST-LIO, corrected by fiducials in view, operator pose estimates and
-optional scan matching, through a gate that grows with the uncertainty.
+Where the X30 is on its site, the ROS Noetic port of
+[dharma_localization](https://github.com/DarmawanRobotics/dharma_localization) without a map:
+`map -> odom` from an EKF on top of FAST-LIO, corrected by fiducials in view and operator pose
+estimates, through a gate that grows with the uncertainty.
 
-A map's frame is the frame its tags were recorded in: a tag in view puts the robot back on that
-map wherever it starts. Any marker detector works as long as it puts the marker frames under the
-camera optical frame on TF (x30_perception's `aruco_detector_node`, `apriltag_ros`).
+The map frame is where the odometry started (`assume_start_origin`: the dock, every time); the
+site's tags were recorded in it, so a tag in view puts the robot back on that frame wherever it
+is, after an odometry restart too. Any marker detector works as long as it puts the marker
+frames under the camera optical frame on TF (x30_perception's `aruco_detector_node`,
+`apriltag_ros`).
 
 ```
 map -> odom -> camera_init -> body -> base_link
@@ -27,7 +29,7 @@ at `publish_hz`.
 |---|---|---|
 | `localization/start` | `std_srvs/Trigger` | localize from a tag in view, **explicitly** (no gate) |
 | `localization/reset` | `std_srvs/Trigger` | forget `map -> odom`; tags in view localize again |
-| `localization/assume_origin` | `std_srvs/Trigger` | `map -> odom` = identity: a new map starts at the odometry origin |
+| `localization/assume_origin` | `std_srvs/Trigger` | `map -> odom` = identity: the odometry origin is the map origin (FAST-LIO run since the start spot) |
 | `localization/record_tags` | `std_srvs/Trigger` | average the map pose of the visible `tag/frames` and merge them into the file |
 | `localization/load_tags` | `x30_msgs/LoadFile` | switch the tags file (inside `sites_dir`); `create` starts an empty one |
 | `localization/status` | `x30_msgs/LocalizationStatus`, latched | `NONE` / `LOCALIZED` / `UNCERTAIN`, source, sigma_xy, sigma_yaw |
@@ -36,7 +38,6 @@ at `publish_hz`.
 | `odometry/restarted` | `std_msgs/Empty` | the odometry started over: `map -> odom` and the level are void |
 | `/initialpose` | `geometry_msgs/PoseWithCovarianceStamped` | RViz 2D Pose Estimate (operator, trusted, no gate) |
 | `/imu/data` | `sensor_msgs/Imu` | leveling (`leveling/imu_topic`) |
-| `/map`, `/cloud_registered_body` | `OccupancyGrid`, `PointCloud2` | scan matching, only with `scan_match/enabled` |
 
 `record_tags` writes site anchors, so it refuses unless the state is `LOCALIZED`, and it never
 records a tag the current `map -> odom` was derived from (circular). It runs beside the node's
@@ -57,11 +58,11 @@ Frames and `base_height` come from the robot profile (`robot/`). Defaults in
 | `tags_file` | `""` | tags file at start (`~` and `$VAR` expanded) |
 | `lio_odom_frame`, `lio_body_frame`, `imu_frame` | `camera_init`, `body`, `imu_link` | the bridge |
 | `publish_hz`, `pose_hz` | `20`, `10` | `map -> odom`, `localization/pose` |
-| `assume_start_origin` | `false` | the odometry origin is the map origin once the bridge is up (x30_bringup's `odometry_only`) |
+| `assume_start_origin` | `true` | the odometry origin is the map origin once the bridge is up (never after an odometry restart) |
 | `estimator/sigma_xy_per_sqrt_m` | `0.03` | drift per metre travelled (not per second) |
 | `estimator/sigma_yaw_deg_per_sqrt_m`, `..._per_sqrt_rad` | `0.1`, `0.5` | heading drift per metre and per radian turned |
 | `estimator/gate_confidence` | `0.99` | chi-square gate of automatic corrections (3 dof) |
-| `estimator/max_sigma_xy`, `max_sigma_yaw_deg` | `0.5`, `10` | above: `UNCERTAIN` |
+| `estimator/max_sigma_xy`, `max_sigma_yaw_deg` | `100`, `180` | above: `UNCERTAIN`; only tags correct the drift, so it stays `LOCALIZED` and sigma reports it |
 | `tag/camera_frame`, `tag/frames` | `camera_color_optical_frame`, `[base_map, charging_dock]` | |
 | `tag/auto_localize`, `tag/auto_correct` | `true`, `true` | tags in view localize / correct through the gate |
 | `tag/max_distance_m`, `tag/max_view_angle_deg` | `4.0`, `60` | farther or more oblique detections are ignored |
@@ -69,7 +70,6 @@ Frames and `base_height` come from the robot profile (`robot/`). Defaults in
 | `tag/record_duration_sec`, `record_min_samples` | `2.0`, `5` | `record_tags`; noisier recordings are refused |
 | `leveling/enabled`, `leveling/imu_topic` | `true`, `/imu/data` | gravity alignment of odom |
 | `leveling/timeout_sec` | `15` | then the bridge goes up unleveled (warning) |
-| `scan_match/enabled` | `false` | scan-to-map corrections against `/map` |
 
 </details>
 
@@ -109,7 +109,7 @@ Arguments: `params_file`, `robot_params`, `tags_file`, `sites_dir` (empty ones o
 
 ## Tests
 
-`catkin_make run_tests_x30_localization`: the estimator, the leveling and the bridge, tags and
-scan matching (unit), and the node against a fake X30 (FAST-LIO TF, a tilted IMU, a tag
+`catkin_make run_tests_x30_localization`: the estimator, the leveling and the bridge and tags
+(unit), and the node against a fake X30 (FAST-LIO TF, a tilted IMU, a tag
 detector) on a private rosmaster: the leveled bridge, record_tags while `map -> odom` keeps
 flowing, relocalizing after an odometry restart, the tags file path guard and a corrupt file.

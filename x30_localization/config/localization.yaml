@@ -1,6 +1,7 @@
 # localization_node on the X30. Only what differs from the dataclass defaults, plus docs; every
 # parameter with its unit and range: README.md. Frames (map, odom, base_link) and base_height
-# come from the robot profile (robot/).
+# come from the robot profile (robot/). No map: the odometry's start is the map origin
+# (assume_start_origin), tags only correct the drift.
 sites_dir: ~/x30/map            # localization/load_tags only accepts files inside this directory
 tags_file: ""                   # the site manager hands <site>/tags.json over with load_tags
 
@@ -17,6 +18,3 @@ tag:
   frames: [base_map, charging_dock]   # the detector's tag frames recorded by record_tags
   auto_localize: true           # a known tag in view localizes while NONE
   auto_correct: true            # while localized, tags in view are fused through the gate
-
-scan_match:
-  enabled: false                # matches /cloud_registered_body against /map when true
