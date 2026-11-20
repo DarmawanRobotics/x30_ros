@@ -67,7 +67,7 @@ After `off`:
 3. `dr_services.sh status` again: nothing under "Deep Robotics autonomy, URDF and bridge", and
    `udp 43897 (x30_driver's reports): free`. A heavy process still listed under "other jy_cog
    processes" is left alone on purpose: look at it first.
-4. The controller app's navigation recorder needs Deep Robotics' navigation; x30_mapping's
+4. The controller app's navigation recorder needs Deep Robotics' navigation; x30_navigation's
    routes replace it. Charging (`charge_start`) belongs to the perception host and stays.
 
 **Which IMU.** On the navigation host `/imu/data` comes from `/yesense_imu_node`. If that is the

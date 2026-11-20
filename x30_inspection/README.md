@@ -25,8 +25,8 @@ time; at shutdown the running one cancels its move or detection.
 
 ## Inspection points
 
-`<sites_dir>/<site>/inspection.yaml`, next to the site's map and routes (x30_mapping). A point is
-where the robot stands, in the map frame, so every route stopping near it inspects it:
+`<sites_dir>/<site>/inspection.yaml`, next to the site's tags and routes (x30_navigation). A point
+is where the robot stands, in the map frame, so every route stopping near it inspects it:
 
 ```yaml
 points:

@@ -35,7 +35,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 [x30_bringup](x30_bringup/README.md) · [x30_utils](x30_utils/README.md) ·
 [x30_msgs](x30_msgs/README.md) · [x30_control](x30_control/README.md) ·
 [x30_perception](x30_perception/README.md) · [x30_odometry](x30_odometry/README.md) ·
-[x30_localization](x30_localization/README.md) · [x30_mapping](x30_mapping/README.md) ·
+[x30_localization](x30_localization/README.md) ·
 [x30_navigation](x30_navigation/README.md) · [x30_health](x30_health/README.md) ·
 [x30_inspection](x30_inspection/README.md) · [x30_sim](x30_sim/README.md) ·
 [tools](tools/README.md) · [CHANGELOG](CHANGELOG.md)
@@ -53,8 +53,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 | [`x30_perception`](x30_perception/README.md) | LiDAR sector scans from the X30's `/livox/lidar` (raw bytes, no Livox package needed) or any PointCloud2: front for avoidance, 360° fail-safe for the protective field; optional depth camera; ArUco fiducials |
 | [`x30_odometry`](x30_odometry/README.md) | FAST-LIO2 on the merged `/livox/lidar` and the body IMU behind a start gate that waits for a still and level IMU; the odometry monitor (stale, jumps, restarts, z drift, tilt, a speed mismatch with the leg odometry) and the trip |
 | [`x30_localization`](x30_localization/README.md) | `map` → `odom` from an EKF with the odometry's start as the origin (no map), corrected by fiducials and pose estimates through a chi-square gate; the gravity-aligned bridge of FAST-LIO into `odom` → `base_link` |
-| [`x30_mapping`](x30_mapping/README.md) | sites (fiducials, routes, no map) and route teaching with stop points |
-| [`x30_navigation`](x30_navigation/README.md) | routes from the active site, a path follower with pluggable controllers, path shifting and stop point inspections, reactive avoidance and tag docking; every command to the control mux |
+| [`x30_navigation`](x30_navigation/README.md) | the sites (fiducials, routes, no map) and route teaching with stop points, routes from the active site, a path follower with pluggable controllers, path shifting and stop point inspections, reactive avoidance and tag docking; every command to the control mux |
 | [`x30_health`](x30_health/README.md) | one health signal: sensor rates and header ages (raw, any type), the expected nodes, the stack's states, the safety scan, TF, the clock and the computer; `health/status` with a speed scale for the mux, and diagnostics |
 | [`x30_inspection`](x30_inspection/README.md) | substation inspection at the stop points (the follower's hook): the HIKMICRO PTZ camera pointed at each target taught there, overheating judged by absolute, ambient and similar criteria (NETA MTS); partial discharge from the Hertzino HZ-FA-371; a report with the thermal, visible, sound map and PRPD images on the robot and on `inspection/report` |
 | [`x30_sim`](x30_sim/README.md) | the X30 in software (`bringup.launch sim:=true`): a kinematic body behind the driver's topics and services, the four Mid-360 ray-cast into `/livox/lidar`, the body IMU, a drifting FAST-LIO stand-in and leg odometry, a tag camera, seeded scenarios, worlds and sites; no Gazebo, no GPU |
@@ -72,9 +71,8 @@ and reads the X30's sensor topics.
  inspection   thermal and partial discharge at the stop points  ◄ x30_inspection
               (hikmicro_driver, hertzino_driver of x30.repos)
  watching     health/status, diagnostics, speed scale  ◄ x30_health
- navigation   route loader · path follower (NeuPAN optional) · avoidance · docking
-              ◄ x30_navigation
- world        sites (fiducials, routes; no map)  ◄ x30_mapping
+ navigation   sites (fiducials, routes; no map) · route teaching · route loader
+              path follower (NeuPAN optional) · avoidance · docking  ◄ x30_navigation
  estimation   localization (EKF) · FAST-LIO odometry · sector scans
               ◄ x30_localization · x30_odometry · x30_perception
  control      control mux: the only /x30/cmd_vel, e-stop, protective field  ◄ x30_control
@@ -147,7 +145,7 @@ FAST-LIO in a mall world, the site drawn from it (its tags and patrol loop), the
 
 ```bash
 roslaunch x30_bringup bringup.launch sim:=true site:=mall control:=true perception:=true \
-  odometry:=true localization:=true mapping:=true navigation:=true health:=true rviz:=true
+  odometry:=true localization:=true navigation:=true health:=true rviz:=true
 rosservice call /navigation/load_path "{path: mall/routes/mall_loop.csv}"
 rosservice call /navigation/start
 ```
@@ -174,7 +172,7 @@ IMU mount first ([x30_odometry](x30_odometry/README.md#check-on-the-robot)):
 
 ```bash
 roslaunch x30_bringup bringup.launch control:=true perception:=true odometry:=true \
-    localization:=true mapping:=true navigation:=true site:=gardu-a
+    localization:=true navigation:=true site:=gardu-a
 rostopic echo -n 1 /odometry/status                 # OK once FAST-LIO runs
 rosservice call /route/start                        # walk the route, then
 rosservice call /route/stop
