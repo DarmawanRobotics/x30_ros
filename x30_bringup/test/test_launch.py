@@ -129,8 +129,7 @@ def test_odometry_only_takes_the_odometry_start_as_the_map_origin(tmp_path):
     assert params['/localization_node/estimator/max_sigma_yaw_deg'] == 180.0
     assert params['/site_manager_node/create_site'] is True
     assert params['/site_manager_node/site'] == 'yard'
-    assert params['/sim_robot_node/initial_pose_hz'] == 0.0  # not on the world's frame
-    assert not (tmp_path / 'yard').exists()  # nothing drawn from the world
+    assert (tmp_path / 'yard' / 'tags.json').is_file()  # the world's, in the start's frame
     normal = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *LAYERS))
     assert '/localization_node/assume_start_origin' not in normal  # the dataclass default
     assert '/localization_node/estimator/max_sigma_xy' not in normal
@@ -160,7 +159,7 @@ def test_sites_dir_reaches_every_layer(tmp_path):
     for node in (*nodes, 'inspection_node'):
         assert params[f'/{node}/sites_dir'] == str(tmp_path), node
     assert params['/inspection_node/reports_dir'] == '/tmp/x30_sim/reports'
-    assert (tmp_path / 'lobby' / 'map.yaml').is_file()  # drawn while the launch file was read
+    assert (tmp_path / 'lobby' / 'tags.json').is_file()  # drawn while the launch file was read
     real = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *layers))
     assert real['/localization_node/sites_dir'] == '~/x30/map'  # the layers' own files
     assert real['/path_loader_node/sites_dir'] == '~/x30/map'

@@ -20,11 +20,14 @@ route through it in CI.
 | four Mid-360, merged | `/livox/lidar`: `livox_ros_driver2/CustomMsg` bytes (the driver's md5, read by x30_perception and FAST-LIO alike), points in `base_link`, frame `livox_frame` |
 | body IMU | `/imu/data` in `imu_link`: specific force (m/s², gravity, linear, centripetal and tangential acceleration at its origin) and rates |
 | FAST-LIO2 | per scan, with the scan's stamp: `/Odometry` and TF `camera_init -> body` (the IMU, no twist, as FAST-LIO), `/cloud_registered_body` (the scan in `body`, nothing within `lio/blind` of `base_link`) |
-| a tag in view | `/initialpose` at the true pose while `localization/status` is `NONE` or not yet published |
 | inspection at a stop point | `sim/inspect` (`std_srvs/Trigger`) answers `clear` |
 | camera + tag detector | TF `camera_color_optical_frame -> <tag>` (`camera/frame`, x30_localization's `tag/camera_frame`) for the world's `camera/tags` in view, in range and not hidden by a wall: localization's tag corrections and docking; the mount `base_link -> camera_color_optical_frame` on `/tf_static` (`camera/publish_mount`, off once the URDF has the camera) |
 | people and boxes | `sim/obstacles` (`geometry_msgs/PoseArray`, map frame) replaces the dynamic circles |
-| the truth | `sim/ground_truth` (PoseStamped, `map`), `sim/collision` (Bool, latched; true on contact, the body stops there) |
+| the truth | `sim/ground_truth` (PoseStamped, `map`: from the robot's start), `sim/collision` (Bool, latched; true on contact, the body stops there) |
+
+The map frame is where the robot started, as on the robot, where it is where the odometry
+started (x30_localization's `assume_start_origin`): there is no map, and the world's poses (its
+tags, its route, the truth, `sim/obstacles`) are given in the frame of the world's `start`.
 
 The URDF transforms (`base_link -> imu_link`, ...) come from robot_state_publisher as on the
 robot; x30_bringup's `lidar_mount` keeps `livox_frame` on `base_link`.
@@ -44,7 +47,7 @@ All in `x30_sim/core` (pure Python + numpy, unit-tested):
 | `scenario.py` | seeded scenario files (below) |
 | `dock.py` | tag camera (field of view, range, incidence, occlusion by walls, noise) and the dock station (sit, stand, charge on the contacts) |
 | `simulation.py` | everything above on one clock |
-| `site_fixture.py` | a site from a world: `map.pgm` + `map.yaml` (map_server trinary, size and CRC), `tags.json`, `routes/*.csv` (x30_utils.io) |
+| `site_fixture.py` | a site from a world: `tags.json`, `routes/*.csv` (x30_utils.io), in the frame of the robot's start |
 
 The body is planar: no gait, pitch or roll, no ceiling, no self-occlusion (rays through the body
 land under it, where x30_perception's footprint filter and FAST-LIO's blind drop them anyway).
@@ -80,14 +83,15 @@ in the middle, a 3 m corridor around it, three pillars, the `base_map` and `char
 and the dock (base_link 1.0 m in front of the dock tag, x30_navigation's `goal/distance`).
 [config/routes/mall_loop.csv](config/routes/mall_loop.csv) is a taught loop with one stop point.
 
-`draw_site` writes a site from a world (map, tags, the world's route), unless it has a map:
+`draw_site` writes a site from a world (its tags and route, in the frame of the robot's start),
+unless it has its tags already:
 
 ```bash
 rosrun x30_sim draw_site --site mall --sites-dir /tmp/x30_sim/sites   # prints the site path
 ```
 
 `sim.launch` runs it while the launch file is read (`site:=`), so the site exists before the
-mapping and localization nodes load it.
+site manager and localization load it.
 
 ## Parameters
 
@@ -111,7 +115,6 @@ base_height, limits, frames) comes from the robot profile (`robot/`).
 | `odometry/*`, `leg_odometry/*` | `0.005` / `0.02` m/√m … | `sigma_x`, `sigma_y`, `sigma_yaw_deg`, `scale_error`, `yaw_bias_deg_per_m` |
 | `latency/lidar_sec` / `odometry_sec` / `command_sec` | `0.05` / `0.01` / `0.02` | s |
 | `obstacle_radius` / `obstacle_height` | `0.25` / `1.7` | `sim/obstacles` circles (live) |
-| `initial_pose_hz` | `1.0` | `/initialpose` while NONE (0: off) |
 | `camera/rate_hz` / `tags` / `mount_xyz` / `range_max` | `10` / `[base_map, charging_dock]` / `0.5 0 0.1` / `4.0` | tag camera (0 Hz: off), `yaw_deg: 180`: rear |
 | `battery/start` / `drain_per_hour` / `charge_per_hour` | `0.9` / `0.2` / `1.0` | |
 
@@ -120,8 +123,8 @@ base_height, limits, frames) comes from the robot profile (`robot/`).
 ```bash
 roslaunch x30_sim sim.launch robot_params:=$(rospack find x30_bringup)/config/robot.yaml site:=mall
 roslaunch x30_sim sim.launch scenario:=person_crossing
-# a person steps onto the route
-rostopic pub -1 /sim/obstacles geometry_msgs/PoseArray "{poses: [{position: {x: 2.0, y: -3.0}}]}"
+# a person steps onto the route, 6.5 m ahead of the start
+rostopic pub -1 /sim/obstacles geometry_msgs/PoseArray "{poses: [{position: {x: 6.5, y: 0.0}}]}"
 ```
 
 | Argument | Default | |
@@ -129,7 +132,7 @@ rostopic pub -1 /sim/obstacles geometry_msgs/PoseArray "{poses: [{position: {x: 
 | `params_file` | | parameters on top of `config/sim.yaml` |
 | `robot_params` | | the robot profile, loaded as `robot/` (x30_bringup loads it itself) |
 | `world` / `scenario` | | file or name (empty: from the files) |
-| `site` / `sites_dir` | / `/tmp/x30_sim/sites` | draw this site from the world unless it has a map |
+| `site` / `sites_dir` | / `/tmp/x30_sim/sites` | draw this site from the world unless it has its tags |
 
 ## Test
 

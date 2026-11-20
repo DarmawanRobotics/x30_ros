@@ -216,14 +216,6 @@ class SimConfig:
     )
     obstacle_radius: float = param(0.25, min=0.01, max=5.0, unit='m', doc='sim/obstacles size')
     obstacle_height: float = param(1.7, min=0.01, max=5.0, unit='m', doc='sim/obstacles height')
-    initial_pose_hz: float = param(
-        1.0,
-        min=0.0,
-        max=10.0,
-        unit='Hz',
-        live=False,
-        doc='/initialpose at the true pose while localization is NONE; 0: off',
-    )
     lidar: LidarConfig = nested(LidarConfig)
     lio: LioConfig = nested(LioConfig)
     imu: ImuConfig = nested(ImuConfig)

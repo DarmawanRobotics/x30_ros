@@ -19,7 +19,8 @@ from x30_msgs.msg import ControlStatus, LocalizationStatus, NavigationStatus
 from x30_msgs.srv import LoadPath
 
 ROUTE = 'mall/routes/mall_loop.csv'  # drawn into the site from the world
-BOX = (4.5, 0.0, 0.3)  # person_crossing: x, y, radius, on the route up the east corridor
+START = (-4.5, -3.0)  # mall_loop's start, facing +x: the map origin (the odometry's start)
+BOX = (4.5 - START[0], 0.0 - START[1], 0.3)  # person_crossing: x, y (map), radius, east
 HALF_WIDTH = 0.235  # robot/footprint/half_width
 ENDS_WITHIN = 0.3  # m, the true pose from the end of the loop (its start)
 
@@ -87,8 +88,7 @@ class StackNeupan(unittest.TestCase):
         status = self.wait('/navigation/status', lambda n: n.state in done, 330.0)
         self.assertEqual(status.state, NavigationStatus.GOAL_REACHED, status.message)
         truth = self.last('/sim/ground_truth').pose.position
-        start = (-4.5, -3.0)  # mall_loop's start and end
-        error = math.hypot(truth.x - start[0], truth.y - start[1])
+        error = math.hypot(truth.x, truth.y)  # mall_loop ends at its start: the map origin
         with self.lock:
             touched, closest = self.touched, self.closest
             following = [m for m in self.messages if re.search(r'\| neupan \d+ ms \|', m)]

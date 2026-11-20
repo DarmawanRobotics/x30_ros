@@ -35,8 +35,9 @@
                     m and rad): check it on the robot (x30_perception README) before relying
                     on the scans
       sim:          x30_sim's simulated X30 in place of x30_driver, the LiDARs, the IMU and
-                    FAST-LIO (odometry_method external); world, scenario: its files; site is drawn
-                    from the world unless it has a map (never with odometry_only)
+                    FAST-LIO (odometry_method external); world, scenario: its files; site gets
+                    the world's tags and route, in the frame of the robot's start, unless it has
+                    its tags already
       sites_dir:    the sites of localization, mapping and navigation (empty: their files'; with
                     sim: /tmp/x30_sim/sites)
       rviz: RViz with the robot model
@@ -98,14 +99,12 @@
     <include file="$(find x30_sim)/launch/sim.launch">
       <arg name="world" value="$(arg world)"/>
       <arg name="scenario" value="$(arg scenario)"/>
-      <!-- a drawn site is in the world's frame, not in the odometry start's -->
-      <arg name="site" value="$(eval '' if arg('odometry_only') else arg('site'))"/>
+      <!-- drawn in the frame of the robot's start, the odometry's -->
+      <arg name="site" value="$(arg site)"/>
       <arg name="sites_dir" value="$(arg sites_dir)"/>
     </include>
     <param name="sim_robot_node/driver_ns" value="$(arg namespace)"/>
     <param if="$(arg leg_odom_tf)" name="sim_robot_node/publish_tf" value="true"/>
-    <!-- its /initialpose would put the robot on the world's frame -->
-    <param if="$(arg odometry_only)" name="sim_robot_node/initial_pose_hz" value="0.0"/>
   </group>
 
   <include file="$(find x30_description)/launch/description.launch">

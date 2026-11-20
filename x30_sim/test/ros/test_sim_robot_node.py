@@ -16,7 +16,6 @@ from sensor_msgs.msg import BatteryState, Imu, PointCloud2
 from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
 
-from x30_msgs.msg import LocalizationStatus
 from x30_perception.core.livox import parse_custom_msg
 from x30_sim.sim_robot_node import SimRobotNode
 from x30_utils.math import Pose2D
@@ -43,7 +42,7 @@ class Rig:
         n = next(NAMES)
         self.ns = f'/sim_test_{n}'
         self.driver = f'{self.ns}/x30'
-        values = {'world_file': WORLD, 'initial_pose_hz': 5.0, 'driver_ns': self.driver}
+        values = {'world_file': WORLD, 'driver_ns': self.driver}
         self.node = SimRobotNode(param_ns=f'{self.ns}/node', overrides={**values, **overrides})
         self.probe = X30Node('probe', param_ns=f'{self.ns}/probe')
         self.livox = Collector(rospy.AnyMsg, '/livox/lidar')
@@ -54,13 +53,9 @@ class Rig:
         self.battery = Collector(BatteryState, f'{self.driver}/battery')
         self.truth = Collector(PoseStamped, 'sim/ground_truth', 200)
         self.collision = Collector(Bool, 'sim/collision')
-        self.initial = Collector(PoseWithCovarianceStamped, '/initialpose')
         self.cmd_pub = rospy.Publisher(f'{self.driver}/cmd_vel', Twist, queue_size=10)
         self.obstacle_pub = rospy.Publisher('sim/obstacles', PoseArray, queue_size=10)
-        self.status_pub = rospy.Publisher(
-            'localization/status', LocalizationStatus, queue_size=1, latch=True
-        )
-        assert connected(self.cmd_pub, self.obstacle_pub, self.status_pub)
+        assert connected(self.cmd_pub, self.obstacle_pub)
 
     def drive(self, vx: float, seconds: float, vy: float = 0.0, wz: float = 0.0):
         """Publish a command at 20 Hz for seconds."""
@@ -90,9 +85,9 @@ class Rig:
     def close(self):
         """Unsubscribe, unadvertise, destroy the nodes."""
         for collector in (self.livox, self.lio, self.cloud, self.imu, self.odom, self.battery,
-                          self.truth, self.collision, self.initial):  # fmt: skip
+                          self.truth, self.collision):  # fmt: skip
             collector.close()
-        for publisher in (self.cmd_pub, self.obstacle_pub, self.status_pub):
+        for publisher in (self.cmd_pub, self.obstacle_pub):
             publisher.unregister()
         self.probe.destroy_node()
         self.node.destroy_node()
@@ -139,7 +134,7 @@ def test_publishes_what_the_stack_expects(rig):
     assert odom.pose.covariance[0] > 0.0 and odom.twist.covariance[35] > 0.0
     assert rig.battery.last.power_supply_status == BatteryState.POWER_SUPPLY_STATUS_UNKNOWN
     assert rig.truth.last.header.frame_id == 'map'
-    assert rig.truth.last.pose.position.x == pytest.approx(-4.5, abs=1e-6)
+    assert rig.truth.last.pose.position.x == pytest.approx(0.0, abs=1e-6)  # the start: origin
     assert rig.collision.wait(1, 2.0) and rig.collision.last.data is False
     assert wait_for(lambda: rig.probe.tf.lookup('camera_init', 'body') is not None, 5.0)
 
@@ -159,7 +154,7 @@ def test_commands_move_the_robot_and_the_odometries_follow(rig):
     """cmd_vel drives the body forward; /Odometry and the leg odometry follow; stale: stop."""
     assert rig.truth.wait(1, 5.0)
     rig.drive(0.5, 1.5)
-    moved = rig.truth.last.pose.position.x + 4.5
+    moved = rig.truth.last.pose.position.x  # from the start, the map origin
     assert moved > 0.2
     assert rig.lio.last.pose.pose.position.x == pytest.approx(moved, abs=0.1)
     assert rig.odom.last.pose.pose.position.x == pytest.approx(moved, abs=0.1)
@@ -177,27 +172,24 @@ def test_imu_reads_the_turn_and_gravity(rig):
     assert rig.imu.last.linear_acceleration.z == pytest.approx(9.81, abs=0.1)
 
 
-def test_initial_pose_only_while_not_localized(rig):
-    """/initialpose at the true pose while localization is silent or NONE, not while LOCALIZED."""
-    assert rig.initial.wait(1, 3.0)
-    msg = rig.initial.last
-    assert msg.header.frame_id == 'map' and msg.pose.pose.position.x == pytest.approx(-4.5)
-    assert msg.pose.covariance[0] > 0.0
-    rig.status_pub.publish(LocalizationStatus(state=LocalizationStatus.LOCALIZED))
-    assert wait_for(lambda: rig.node.localization == LocalizationStatus.LOCALIZED, 3.0)
-    time.sleep(0.3)  # one may still be on its way
-    count = len(rig.initial.messages)
-    time.sleep(0.6)
-    assert len(rig.initial.messages) == count
-    rig.status_pub.publish(LocalizationStatus(state=LocalizationStatus.NONE))
-    assert rig.initial.wait(count + 1, 3.0)
+def test_the_start_is_the_map_origin_and_no_initial_pose(rig):
+    """As on the robot: the true pose from the robot's start, nothing sent on /initialpose."""
+    initial = Collector(PoseWithCovarianceStamped, '/initialpose')
+    try:
+        assert rig.truth.wait(1, 5.0)
+        p = rig.truth.last.pose
+        assert (p.position.x, p.position.y, p.orientation.z) == pytest.approx((0, 0, 0), abs=1e-6)
+        time.sleep(1.0)
+        assert initial.messages == []
+    finally:
+        initial.close()
 
 
 def test_collision_latches_and_stops(rig):
     """A person dropped ahead: driving into them stops the body and latches sim/collision."""
     assert rig.collision.wait(1, 5.0)
     person = PoseArray(poses=[Pose()])
-    person.poses[0].position.x, person.poses[0].position.y = -3.0, -3.0
+    person.poses[0].position.x, person.poses[0].position.y = 1.5, 0.0  # map: 1.5 m ahead
     for _ in range(10):
         rig.obstacle_pub.publish(person)
         if wait_for(lambda: len(rig.node.sim.dynamic) == 1, 0.2):
@@ -205,7 +197,7 @@ def test_collision_latches_and_stops(rig):
     rig.drive(0.6, 3.0)
     assert wait_for(lambda: rig.collision.last.data is True, 2.0)
     front = rig.truth.last.pose.position.x + rig.node.robot.footprint.front
-    assert front == pytest.approx(-3.0 - 0.25, abs=0.06)  # the front edge stopped at the person
+    assert front == pytest.approx(1.5 - 0.25, abs=0.06)  # the front edge stopped at the person
     rig.obstacle_pub.publish(PoseArray())
     time.sleep(0.3)
     assert rig.collision.last.data is True  # stays latched
@@ -282,5 +274,5 @@ def test_diff_robot_never_strafes(make):
     r = make(**{'robot.kinematics': 'diff', 'robot.limits.max_vy': 0.0})
     assert r.truth.wait(1, 5.0)
     r.drive(0.0, 1.0, vy=0.5)
-    assert r.truth.last.pose.position.y == pytest.approx(-3.0, abs=1e-6)
+    assert r.truth.last.pose.position.y == pytest.approx(0.0, abs=1e-6)
     assert math.isfinite(r.truth.last.pose.position.x)
