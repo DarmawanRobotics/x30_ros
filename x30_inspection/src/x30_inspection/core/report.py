@@ -36,10 +36,13 @@ def evidence_prefix(directory: str, target: str) -> str:
     return os.path.join(directory, target)
 
 
-def to_dict(result: PointResult, site: str, x: float, y: float, when: datetime) -> dict:
+def to_dict(
+    result: PointResult, site: str, x: float, y: float, when: datetime, ambient_c: float = 0.0
+) -> dict:
     """Return the JSON of a point's report."""
     return {
         'time': when.isoformat(timespec='seconds'),
+        'stamp': round(when.timestamp(), 3),
         'site': site,
         'point': result.point,
         'x': round(x, 3),
@@ -47,6 +50,7 @@ def to_dict(result: PointResult, site: str, x: float, y: float, when: datetime) 
         'state': result.state,
         'severity': worst(result.findings).name.lower(),
         'duration_sec': round(result.duration_sec, 1),
+        'ambient_c': round(ambient_c, 1),
         'message': result.message,
         'targets': [
             {
@@ -54,6 +58,14 @@ def to_dict(result: PointResult, site: str, x: float, y: float, when: datetime) 
                 'measured': t.measured,
                 'errors': list(t.errors),
                 'files': [os.path.basename(f) for f in t.files],
+                'readings': [
+                    {
+                        'region': r.region,
+                        'max_c': round(r.temp_max, 2),
+                        'min_c': round(r.temp_min, 2),
+                    }
+                    for r in t.readings
+                ],
                 'findings': [
                     {
                         'sensor': f.sensor,

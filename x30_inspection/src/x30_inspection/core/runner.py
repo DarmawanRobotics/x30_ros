@@ -53,6 +53,7 @@ class TargetResult:
     files: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     measured: bool = False
+    readings: list[Reading] = field(default_factory=list)  # every region, as measured
 
 
 @dataclass
@@ -153,6 +154,7 @@ class Runner:
                 name = FRAME if region is None else region.name
                 samples.append(replace(reading, region=name))
             readings.append(median_reading(samples))
+        outcome.readings += readings
         outcome.findings += analyse(target, readings, cfg)
         outcome.files += self.camera.snapshot(prefix)
         outcome.measured = True

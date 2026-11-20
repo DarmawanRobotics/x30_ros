@@ -27,6 +27,8 @@ import yaml
 from x30_utils.io import valid_name, write_text_atomic
 
 PLAN_FILE = 'inspection.yaml'
+# NETRA's plan of the running patrol (x30_fleet writes it), inspected beside the site's own
+NETRA_PLAN_FILE = os.path.join('netra', 'inspection.yaml')
 PAN = (-360.0, 360.0)  # deg; the camera wraps the azimuth itself
 TILT = (-90.0, 90.0)  # deg, the camera's elevation sign
 ZOOM = (1.0, 60.0)
@@ -109,11 +111,19 @@ class Plan:
         return next((p for p in self.points if p.name == name), None)
 
 
-def plan_path(sites_dir: str, site: str) -> str:
-    """Return the plan file of a site; the site name is checked, never a path."""
+def plan_path(sites_dir: str, site: str, name: str = PLAN_FILE) -> str:
+    """Return a plan file of a site; the site name is checked, never a path."""
     if not valid_name(site):
         raise PlanError(f'site {site!r}: use 1-48 of a-z, 0-9, _ and -')
-    return os.path.join(os.path.expanduser(sites_dir), site, PLAN_FILE)
+    return os.path.join(os.path.expanduser(sites_dir), site, name)
+
+
+def load_site(sites_dir: str, site: str) -> Plan:
+    """Return the site's own plan with NETRA's (its points after, their names kept apart)."""
+    own = load(plan_path(sites_dir, site))
+    netra = load(plan_path(sites_dir, site, NETRA_PLAN_FILE))
+    names = {p.name for p in own.points}
+    return Plan(own.points + tuple(p for p in netra.points if p.name not in names))
 
 
 def _number(data: dict, key: str, default: float, low: float, high: float) -> float:
