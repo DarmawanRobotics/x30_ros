@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from pathlib import Path
 import signal
@@ -107,7 +108,10 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     (tmp_path / 'ros.bash').write_text('')
     launched = tmp_path / 'launched'
     fake = bin_dir / 'roslaunch'
-    fake.write_text(f'#!/bin/sh\nprintf "%s\\n" "$ROS_IP" "$@" > {launched}\nexit 3\n')
+    fake.write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$ROS_IP" "$@" > {launched}\n'
+        f'printf "%s" "$X30_LOG_DIR" > {launched}.logs\nexit 3\n'
+    )
     fake.chmod(0o755)
     env = {
         'PATH': f'{bin_dir}:{os.environ["PATH"]}',
@@ -116,7 +120,9 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
         'X30_LAUNCH_ARGS': "hertzino:=false hikmicro_host:='10.0.0.9'",
         'X30_SETTLE_SEC': '0',
         'ROS_MASTER_URI': 'http://127.0.0.1:9',
+        'ROS_LOG_DIR': str(tmp_path / 'ros_logs'),
     }
+    env.pop('X30_LOG_DIR', None)
     out = host('start', 'perception', env=env)
     assert out.returncode == 3, out.stdout + out.stderr  # the launch's exit, through the watchdog
     assert launched.read_text().splitlines() == [
@@ -269,3 +275,20 @@ def test_the_sweep_runs_beside_the_stack_and_says_the_same_once(ros, systemd, tm
     assert process.wait(10) == 0
     out = process.stdout.read()
     assert out.count('sweep: stop 42 move_base') == 1, out  # logged once until it changes
+
+
+def test_ros_logs_are_kept_within_a_budget_the_oldest_runs_first(tmp_path):
+    spec = importlib.util.spec_from_file_location('x30_logs', TOOLS / 'x30_logs.py')
+    logs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(logs)
+    for age, name in enumerate(('run-old', 'run-mid', 'run-new', 'run-newest')):
+        run = tmp_path / name
+        run.mkdir()
+        (run / 'rosout.log').write_bytes(bytes(1024 * 1024))  # 1 MB each
+        os.utime(run, (1000.0 + age, 1000.0 + age))
+    (tmp_path / 'latest').symlink_to(tmp_path / 'run-newest')
+    removed, left = logs.prune(tmp_path, budget=int(2.5 * 1024 * 1024), keep=1)
+    assert removed == ['run-old', 'run-mid'] and left <= 2.5 * 1024 * 1024
+    assert (tmp_path / 'latest').is_symlink() and (tmp_path / 'run-new').is_dir()
+    removed, _ = logs.prune(tmp_path, budget=0, keep=2)  # the newest two always stay
+    assert removed == [] and (tmp_path / 'run-new').is_dir()
