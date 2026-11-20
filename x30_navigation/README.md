@@ -60,7 +60,13 @@ callback beside the others (a separate callback group), it is a concurrent servi
 
 The follower checks once that its guard is at least as cautious as the control mux's field: it
 reads the mux's `field/*` from the parameter server, where every X30Node writes the values it
-runs with.
+runs with (the margins, the person's speed and the turning room). The guard checks what the
+field checks, a turning translation along its arc included (one function of x30_utils.safety
+for both), and it checks what is published: the ramps of the command shaper are comfort and
+never outrun it, and a ramp bent toward something goes the guarded way. A turn that would sweep
+into a point goes on straight and turns later. So the field only stands by: the mux never cuts
+what the follower sends (`test_guard_field.py` drives the follower through the field), where
+it used to limit NeuPAN's passes and stop the robot in the pocket of the detour tests.
 
 ## Docking on the X30
 
