@@ -37,8 +37,8 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 [x30_perception](x30_perception/README.md) · [x30_odometry](x30_odometry/README.md) ·
 [x30_localization](x30_localization/README.md) ·
 [x30_navigation](x30_navigation/README.md) · [x30_health](x30_health/README.md) ·
-[x30_inspection](x30_inspection/README.md) · [x30_sim](x30_sim/README.md) ·
-[tools](tools/README.md) · [CHANGELOG](CHANGELOG.md)
+[x30_inspection](x30_inspection/README.md) · [x30_recorder](x30_recorder/README.md) ·
+[x30_sim](x30_sim/README.md) · [tools](tools/README.md) · [CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -56,6 +56,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 | [`x30_navigation`](x30_navigation/README.md) | the sites (fiducials, routes, no map) and route teaching with stop points, routes from the active site, a path follower with pluggable controllers, path shifting and stop point inspections, reactive avoidance and tag docking; every command to the control mux |
 | [`x30_health`](x30_health/README.md) | one health signal: sensor rates and header ages (raw, any type), the expected nodes, the stack's states, the safety scan, TF, the clock and the computer; `health/status` with a speed scale for the mux, and diagnostics |
 | [`x30_inspection`](x30_inspection/README.md) | substation inspection at the stop points (the follower's hook): the HIKMICRO PTZ camera pointed at each target taught there, overheating judged by absolute, ambient and similar criteria (NETA MTS); partial discharge from the Hertzino HZ-FA-371; a report with the thermal, visible, sound map and PRPD images on the robot and on `inspection/report` |
+| [`x30_recorder`](x30_recorder/README.md) | the inspection cameras recorded on the perception host while a route runs or on request: every raw thermal frame (`.npz`, degC per pixel, with the robot's pose and the camera's pan, tilt and zoom), the visible and thermal video (RTSP copied into MP4 segments), the acoustic camera's data; disk limits and retention |
 | [`x30_sim`](x30_sim/README.md) | the X30 in software (`bringup.launch sim:=true`): a kinematic body behind the driver's topics and services, the four Mid-360 ray-cast into `/livox/lidar`, the body IMU, a drifting FAST-LIO stand-in and leg odometry, a tag camera, seeded scenarios, worlds and sites; no Gazebo, no GPU |
 
 ## Stack
@@ -69,6 +70,7 @@ and reads the X30's sensor topics.
 
 ```
  inspection   thermal and partial discharge at the stop points  ◄ x30_inspection
+              the cameras recorded on the perception host  ◄ x30_recorder
               (hikmicro_driver, hertzino_driver of x30.repos)
  watching     health/status, diagnostics, speed scale  ◄ x30_health
  navigation   sites (fiducials, routes; no map) · route teaching · route loader
@@ -101,9 +103,10 @@ From the API documentation (sections 1.2 to 1.5):
 **Two hosts.** On the robot the stack runs on the navigation host (192.168.1.106: the driver,
 control, the LiDAR scans, odometry, localization, the site and its routes without a map,
 navigation, health, inspection; the LiDAR and IMU from Deep Robotics' own drivers), and
-the inspection cameras on the perception host (192.168.1.105), both on the navigation host's ROS
-master: `navigation_host.launch` and `perception_host.launch`, by hand or as services under a
-watchdog with `tools/x30_host.sh` ([x30_bringup](x30_bringup/README.md#two-hosts)).
+the inspection cameras and their recorder on the perception host (192.168.1.105), both on the
+navigation host's ROS master: `navigation_host.launch` and `perception_host.launch`, by hand or
+as services under a watchdog with `tools/x30_host.sh`
+([x30_bringup](x30_bringup/README.md#two-hosts)).
 
 **This computer must be in the motion host's `network.toml`** (its IP and port 43897, as the
 Application Manual 4.3.2 describes; restart the motion program afterwards). Otherwise the robot
@@ -336,8 +339,8 @@ On a new robot, in an open area, with someone at the handheld:
 |---|---|
 | `FAST_LIO` (hku-mars, ROS 1) | the LiDAR-inertial odometry of x30_odometry; `--recursive` for its ikd-Tree |
 | `livox_ros_driver` | the Livox `CustomMsg` FAST-LIO is built with (the same md5 as the X30's `livox_ros_driver2`); it needs the [Livox SDK](https://github.com/Livox-SDK/Livox-SDK) installed first: `git clone https://github.com/Livox-SDK/Livox-SDK.git && cd Livox-SDK/build && cmake .. && make && sudo make install` |
-| `hikmicro_driver` | the HIKMICRO thermal + visible PTZ camera (`hikmicro:=true`); its `hikmicro_msgs` for x30_inspection |
-| `hertzino_driver` | the Hertzino acoustic camera (`hertzino:=true`); its `hertzino_msgs` for x30_inspection |
+| `hikmicro_driver` | the HIKMICRO thermal + visible PTZ camera (`hikmicro:=true`); its `hikmicro_msgs` for x30_inspection and x30_recorder |
+| `hertzino_driver` | the Hertzino acoustic camera (`hertzino:=true`); its `hertzino_msgs` for x30_inspection and x30_recorder |
 
 **NeuPAN**, for the path follower's `neupan` controller (an MPC that walks around the safety
 scan's points, heading included; [x30_navigation](x30_navigation/README.md#neupan)), is
@@ -347,8 +350,8 @@ installed apart, in a venv beside ROS: `bash tools/install_neupan.sh` on the nav
 and stays out of this repository: the controller imports it at run time.
 
 Everything else comes from rosdep. Without them the stack still builds and runs: odometry with
-`odometry_method:=external`, the cameras and the inspection off (x30_inspection needs the two
-message packages; CI builds them alone). The camera passwords come from `HIKMICRO_PASSWORD`
+`odometry_method:=external`, the cameras, the inspection and the recorder off (x30_inspection
+and x30_recorder need the two message packages; CI builds them alone). The camera passwords come from `HIKMICRO_PASSWORD`
 and `HERTZINO_PASSWORD` in the environment, never from a launch argument.
 
 **Robot without internet** ([tools/README.md](tools/README.md)): `tools/pack_sources.sh` packs
