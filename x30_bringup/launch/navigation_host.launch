@@ -42,7 +42,6 @@
     <arg name="odometry" value="true"/>
     <arg name="odometry_method" value="$(arg odometry_method)"/>
     <arg name="localization" value="true"/>
-    <arg name="mapping" value="true"/>  <!-- the site and its routes -->
     <arg name="site" value="$(arg site)"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
     <arg name="navigation" value="true"/>

@@ -9,9 +9,9 @@ import pytest
 import rospy
 from std_srvs.srv import Trigger
 
-from x30_mapping.site_manager_node import SiteManagerNode
 from x30_msgs.msg import LocalizationStatus, SiteStatus
 from x30_msgs.srv import ListSites, LoadFile, LoadSite
+from x30_navigation.site_manager_node import SiteManagerNode
 from x30_utils.ros import X30Node
 from x30_utils.testing.harness import Collector, delete_params, wait_for
 

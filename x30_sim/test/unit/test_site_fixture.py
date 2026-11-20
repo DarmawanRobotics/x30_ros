@@ -76,9 +76,9 @@ def test_bad_route_name_is_refused(tmp_path):
         write_site(WORLD, SiteLayout(str(tmp_path), 'mall'), {'../evil': ROUTE})
 
 
-def test_x30_mapping_site_store_reads_the_site(tmp_path):
-    """Cross-check with x30_mapping's SiteStore (as the site manager reads), if installed."""
-    site_store = pytest.importorskip('x30_mapping.core.site_store')
+def test_the_site_manager_store_reads_the_site(tmp_path):
+    """Cross-check with x30_navigation's SiteStore (as the site manager reads), if installed."""
+    site_store = pytest.importorskip('x30_navigation.core.sites.store')
     store = site_store.SiteStore(str(tmp_path))
     write_site(WORLD, store.layout('mall'), {'loop': ROUTE})
     assert store.tags('mall') == (2, [])

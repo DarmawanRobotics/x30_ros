@@ -6,8 +6,8 @@ import os
 
 import pytest
 
-from x30_mapping.core.config import SiteConfig
-from x30_mapping.core.site_store import SiteStore
+from x30_navigation.core.config.sites import SiteConfig
+from x30_navigation.core.sites.store import SiteStore
 from x30_utils.config import build
 from x30_utils.io import PathError
 

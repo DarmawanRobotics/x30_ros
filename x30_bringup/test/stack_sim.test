@@ -17,7 +17,6 @@
     <arg name="perception" value="true"/>
     <arg name="odometry" value="true"/>
     <arg name="localization" value="true"/>
-    <arg name="mapping" value="true"/>
     <arg name="navigation" value="true"/>
     <arg name="health" value="true"/>
   </include>

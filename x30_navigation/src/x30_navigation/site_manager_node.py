@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from std_srvs.srv import Trigger, TriggerRequest
 
-from x30_mapping.core.config import SiteConfig
-from x30_mapping.core.site_store import SiteStore, SiteSummary, valid_name
-from x30_mapping.utils.calls import Caller
 from x30_msgs.msg import SiteStatus
 from x30_msgs.srv import ListSites, LoadFile, LoadFileRequest, LoadSite
+from x30_navigation.core.config.sites import SiteConfig
+from x30_navigation.core.sites.store import SiteStore, SiteSummary, valid_name
+from x30_navigation.utils.calls import Caller
 from x30_utils.io import expand, write_text_atomic
 from x30_utils.ros import X30Node, run
 

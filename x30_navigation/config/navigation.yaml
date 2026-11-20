@@ -1,6 +1,14 @@
 # x30_navigation defaults on the X30, one section per node: loaded at the launch namespace (a
 # params_file has the same layout). Every parameter: README.md. The robot (frames, footprint,
 # limits) comes from the robot profile (robot/); every command goes to the control mux.
+site_manager_node:              # a site: a folder of routes and tags, in the frame of the start
+  site: ""                      # site loaded at start; empty: the one of the last run
+  create_site: true             # create `site` at start when it is missing
+
+route_recorder_node:
+  min_spacing_m: 0.2            # a waypoint after this much motion
+  output_path: ""               # routes while no site is active; empty: refuse
+
 path_loader_node:
   sites_dir: ~/x30/map          # routes are loaded from inside this directory only
   route: ""                     # route CSV loaded at start ("": the remembered one)

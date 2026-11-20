@@ -1,4 +1,4 @@
-"""Configuration of site_manager_node and route_recorder_node."""
+"""Configuration of site_manager_node and route_recorder_node: the sites and their routes."""
 
 from __future__ import annotations
 

@@ -9,6 +9,8 @@ import yaml
 
 LAUNCH = Path(__file__).resolve().parents[2] / 'launch' / 'navigation.launch'
 NODES = (
+    'site_manager_node',
+    'route_recorder_node',
     'path_loader_node',
     'path_follower_node',
     'obstacle_avoidance_node',
@@ -40,15 +42,22 @@ def test_defaults_land_in_each_node():
     assert p['/path_loader_node/sites_dir'] == '~/x30/map'
     assert p['/obstacle_avoidance_node/policy'] == 'vfh'
     assert p['/docking_node/charge/confirm_timeout_sec'] == 0.0
-    assert not any(name.startswith('/planner_node/') for name in p)
+    assert p['/site_manager_node/create_site'] is True
+    assert p['/route_recorder_node/min_spacing_m'] == 0.2
+    assert not any(name.startswith(('/planner_node/', '/grid_mapper_node/')) for name in p)
 
 
 def test_arguments_override_when_set(tmp_path):
     extra = tmp_path / 'site.yaml'
     extra.write_text('path_follower_node:\n  loop_route: true\n')
-    p = params('sites_dir:=/data/map', 'route:=gardu/routes/a.csv', f'params_file:={extra}')
-    assert p['/path_loader_node/sites_dir'] == '/data/map'
+    p = params(
+        'sites_dir:=/data/map', 'site:=gardu', 'route:=gardu/routes/a.csv', f'params_file:={extra}'
+    )
+    for node in ('site_manager_node', 'route_recorder_node', 'path_loader_node'):
+        assert p[f'/{node}/sites_dir'] == '/data/map', node
+    assert p['/site_manager_node/site'] == 'gardu'
     assert p['/path_loader_node/route'] == 'gardu/routes/a.csv'
+    assert params('create_site:=false')['/site_manager_node/create_site'] is False
     assert p['/path_follower_node/loop_route'] is True
     assert p['/path_follower_node/controller'] == 'holonomic'  # the rest stays
 

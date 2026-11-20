@@ -17,7 +17,6 @@ LAYERS = (
     'odometry:=true',
     'odometry_method:=external',
     'localization:=true',
-    'mapping:=true',
     'navigation:=true',
 )
 
@@ -143,7 +142,7 @@ def test_no_map_the_odometry_start_is_the_origin(tmp_path):
 
 
 def test_sites_dir_reaches_every_layer(tmp_path):
-    layers = ('localization:=true', 'mapping:=true', 'navigation:=true', 'inspection:=true')
+    layers = ('localization:=true', 'navigation:=true', 'inspection:=true')
     args = ('sim:=true', 'site:=lobby', f'sites_dir:={tmp_path}', *layers)
     params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
     nodes = ('localization_node', 'site_manager_node', 'path_loader_node')
@@ -234,7 +233,7 @@ def test_the_navigation_host_passes_its_arguments(tmp_path):
     assert '/localization_node/assume_start_origin' not in params  # its default: the start
     assert '/inspection_node/sites_dir' not in params
     # the arguments of the map it had: an old service setting is no map either
-    old = ('odometry_only:=false', 'mapping:=true')
+    old = ('odometry_only:=false', 'mapping:=false')  # roslaunch ignores them
     nodes = roslaunch('--nodes', str(HOSTS / 'navigation_host.launch'), *old).split()
     assert '/grid_mapper_node' not in nodes and '/planner_node' not in nodes
 

@@ -15,6 +15,7 @@ setup(
             'x30_navigation.core.follower',
             'x30_navigation.core.path',
             'x30_navigation.core.shift',
+            'x30_navigation.core.sites',
             'x30_navigation.utils',
         ],
         package_dir={'': 'src'},
