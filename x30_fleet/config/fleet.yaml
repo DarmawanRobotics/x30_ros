@@ -1,0 +1,11 @@
+# fleet_uplink_node (x30_fleet): the X30 in NETRA (robot API v1, the substation module)
+server_url: ''                  # NETRA, e.g. https://netra.example.com (empty: spool only)
+token_env: X30_NETRA_TOKEN      # the robot token's variable, never a parameter
+robot_id: x30-01                # the robot's id in NETRA (Robots, Add)
+verify_tls: true
+telemetry_hz: 1.0
+upload_period_sec: 5.0
+spool_dir: ~/x30/spool          # routes and inspections wait here until NETRA has them
+sites_dir: ~/x30/map            # NETRA's routes and plans: <site>/netra/
+battery_topic: /x30/battery
+driver_diagnostics_topic: /x30/diagnostics
