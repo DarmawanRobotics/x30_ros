@@ -202,6 +202,10 @@ env_file() { # <role> <user> <ws>
   say "X30_LAUNCH_ARGS=\"\""
   say "ROS_MASTER_URI=http://$NAV_IP:$MASTER_PORT"
   say "ROS_IP=$(role_ip "$role")"
+  say "# logs: each node's JSON lines (default ~/x30/logs, rotated; empty: none), ROS's own"
+  say "# within a budget at every start (MB)"
+  say "# X30_LOG_DIR=/home/$2/x30/logs"
+  say "# X30_ROS_LOG_MB=2048"
   if [ "$role" = navigation ]; then
     say "# the NeuPAN venv (tools/install_neupan.sh), for controller:=neupan"
     if [ -x "$ws/neupan/bin/python" ]; then
