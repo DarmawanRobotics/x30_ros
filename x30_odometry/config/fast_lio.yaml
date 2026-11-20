@@ -46,7 +46,7 @@ mapping:
 
 publish:
   path_en: false                # FAST-LIO appends to /path forever (RAM and bandwidth grow)
-  scan_publish_en: true         # /cloud_registered_body: the registered scan for the mapping
+  scan_publish_en: true         # /cloud_registered_body: the scan in body (RViz, README check)
   dense_publish_en: false
   scan_bodyframe_pub_en: true
 
