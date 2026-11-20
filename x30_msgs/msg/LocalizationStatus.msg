@@ -6,7 +6,7 @@ uint8 UNCERTAIN = 2       # localized, but the uncertainty grew past the limits
 
 std_msgs/Header header
 uint8 state
-string source             # last correction: tag:<frame>, pose_estimate, origin, scan_match
+string source             # last correction: tag:<frame>, pose_estimate, origin
 float32 sigma_xy          # m, 1-sigma position uncertainty (largest axis)
 float32 sigma_yaw         # rad, 1-sigma heading uncertainty
 float32 since_correction  # s since the last accepted correction

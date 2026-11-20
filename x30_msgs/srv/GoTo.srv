@@ -1,7 +1,0 @@
-# Plan from the robot to a pose (map frame), load the path and start navigation.
-float64 x                 # m
-float64 y                 # m
-float64 yaw               # rad
----
-bool success
-string message
