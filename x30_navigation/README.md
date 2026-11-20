@@ -65,8 +65,9 @@ field checks, a turning translation along its arc included (one function of x30_
 for both), and it checks what is published: the ramps of the command shaper are comfort and
 never outrun it, and a ramp bent toward something goes the guarded way. A turn that would sweep
 into a point goes on straight and turns later. So the field only stands by: the mux never cuts
-what the follower sends (`test_guard_field.py` drives the follower through the field), where
-it used to limit NeuPAN's passes and stop the robot in the pocket of the detour tests.
+what the follower sends (`test_guard_field.py` drives the follower through the field, and puts
+the field after the guard in 2000 random scenes of points close by and hard turns), where it
+used to limit NeuPAN's passes and stop the robot in the pocket of the detour tests.
 
 ## Docking on the X30
 
@@ -168,6 +169,7 @@ rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
 | `battery_topic`, `odom_topic` | `/x30/battery`, `/x30/odom` | x30_driver's battery and leg odometry |
 | `sites_dir`, `route` | | `path_loader_node`'s, when set |
 | `docking` | `true` | start `docking_node` |
+| `planner` | `true` | start `planner_node`; `false` for a robot without a map (it plans on one) |
 | `controller` | | the path follower's, when set (else navigation.yaml's `holonomic`) |
 | `dune_checkpoint` | `models/dune_x30.pth` | NeuPAN's DUNE model (a `params_file` may give another) |
 | `python` | `$X30_PYTHON` | the path follower's interpreter: the NeuPAN venv |

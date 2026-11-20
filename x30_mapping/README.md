@@ -25,8 +25,10 @@ never a crash.
 
 A site needs no map. `create_site` creates the launch `site` at start when it is missing, an
 empty folder for its routes and tags: odometry only (x30_bringup's `odometry_only`), where the
-map frame is where the odometry started and the grid mapper stays idle. `mapping/start` still
-maps such a site later. `create_site` and `start_mapping` exclude each other.
+map frame is where the odometry started. A robot that never maps (`grid:=false`, the X30's
+navigation host) runs the site manager and the route recorder alone: no grid mapper, and the
+site manager's `mapping: false` offers no `mapping/start`, `mapping/stop` or `mapping/save`.
+`create_site` and `start_mapping` exclude each other.
 
 ## Nodes
 
@@ -95,6 +97,7 @@ rosservice call /route/stop
 | `sites_dir` | | the sites directory of the three nodes |
 | `site`, `start_mapping` | | the site at start; map it at start when it is new |
 | `create_site` | | create `site` at start when it is missing, without a map (odometry only) |
+| `grid` | `true` | `grid_mapper_node` and the mapping sessions; `false`: a robot without a map |
 | `respawn`, `output` | `true`, `screen` | |
 
 Empty arguments override nothing.

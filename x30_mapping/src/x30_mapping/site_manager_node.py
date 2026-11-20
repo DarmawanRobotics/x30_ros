@@ -47,18 +47,22 @@ class SiteManagerNode(MappingServices, X30Node):
         self.caller = Caller(self, self.config.service_timeout_sec)
         self._map_pub = self.latched(OccupancyGrid, '/map')
         self._status_pub = self.latched(SiteStatus, 'site/status')
-        self.create_subscription(OccupancyGrid, 'mapping/grid', self._on_grid, LATCHED)
         self.create_subscription(
             LocalizationStatus, 'localization/status', self._on_localization, LATCHED
         )
         self.clients_ = self._make_clients()
-        for srv_type, name, callback in (
+        services = [
             (ListSites, 'site/list', self._on_list),
             (LoadSite, 'site/load', self._on_load),
-            (StartMapping, 'mapping/start', self._on_mapping_start),
-            (Trigger, 'mapping/stop', self._on_mapping_stop),
-            (Trigger, 'mapping/save', self._on_mapping_save),
-        ):
+        ]
+        if self.config.mapping:  # a robot without a map offers no mapping session
+            self.create_subscription(OccupancyGrid, 'mapping/grid', self._on_grid, LATCHED)
+            services += [
+                (StartMapping, 'mapping/start', self._on_mapping_start),
+                (Trigger, 'mapping/stop', self._on_mapping_stop),
+                (Trigger, 'mapping/save', self._on_mapping_save),
+            ]
+        for srv_type, name, callback in services:
             self.create_service(srv_type, name, callback)  # one site operation at a time
         self.after(0.1, self._on_startup)
         self._auto_mapping = None
@@ -181,8 +185,10 @@ class SiteManagerNode(MappingServices, X30Node):
         if not site:
             if self.config.create_site:
                 self.log.warning('create_site: no site given (site:=), routes are refused')
-            else:
+            elif self.config.mapping:
                 self.log.info('no site yet: mapping/start creates one')
+            else:
+                self.log.warning('no site yet: give one (site:=), routes are refused')
             return
         if not self.store.exists(site) and not self._create_at_start(site):
             self.message = f'site {site!r} not found in {self.store.root}'

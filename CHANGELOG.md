@@ -3,6 +3,31 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.15.0)
+
+### Added
+- A robot without a map: mapping.launch `grid:=false` (the site manager and the route recorder
+  alone, the site manager's `mapping: false` offering no `mapping/*`), navigation.launch
+  `planner:=false`.
+
+### Changed
+- The navigation host never maps: `navigation_host.launch` is odometry only, with no
+  `odometry_only` or `mapping` argument (old ones in a service's settings are ignored); it runs
+  the site and its routes, no grid mapper, no mapping session, no planner. `odometry_only:=true`
+  in bringup.launch maps nothing either, and x30_health expects only what runs.
+
+### Fixed
+- The control mux's field took a command right on its limit for one over it. The follower's
+  guard, with the field's margins, lands there, and floating-point noise made it LIMITED, or a
+  stop where the guard's speed was under the field's 0.02 m/s: 124 of 20 000 of the guard's
+  commands in random scenes. Under 1e-9 over a limit, a command now passes untouched.
+- The arc check (x30_utils.safety) spread its poses over each command's stopping arc, so the
+  guard and the field, with their own margins, looked at different poses and a short contact
+  seen by one was missed by the other: 1 in 8 000 of the guard's commands turning near points.
+  The poses are every 3 cm of the fastest point from the start (up to 120), the same for a
+  command scaled down: none in 200 000. CI's NeuPAN pass of a box had limited 2 commands on one
+  machine and none on another; the random scenes of `test_guard_field.py` found both causes.
+
 ## [Unreleased] (0.14.0)
 
 ### Added

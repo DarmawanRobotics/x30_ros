@@ -8,6 +8,8 @@
       start_mapping: map `site` at start when it is new (mapping mode; empty: from the files)
       create_site:   create `site` at start when it is missing, without a map (odometry only;
                      empty: from the files)
+      grid:          grid_mapper_node and the mapping sessions (false: a robot without a map,
+                     its sites hold routes, tags and inspection points only)
   -->
   <arg name="params_file" default=""/>
   <arg name="robot_params" default=""/>
@@ -15,6 +17,7 @@
   <arg name="site" default=""/>
   <arg name="start_mapping" default=""/>
   <arg name="create_site" default=""/>
+  <arg name="grid" default="true"/>
   <arg name="respawn" default="true"/>
   <arg name="output" default="screen"/>
 
@@ -33,8 +36,9 @@
          type="bool" value="$(arg start_mapping)"/>
   <param if="$(eval arg('create_site') != '')" name="site_manager_node/create_site"
          type="bool" value="$(arg create_site)"/>
+  <param unless="$(arg grid)" name="site_manager_node/mapping" type="bool" value="false"/>
 
-  <node pkg="x30_mapping" type="grid_mapper_node" name="grid_mapper_node"
+  <node if="$(arg grid)" pkg="x30_mapping" type="grid_mapper_node" name="grid_mapper_node"
         output="$(arg output)" respawn="$(arg respawn)" respawn_delay="2"/>
   <node pkg="x30_mapping" type="site_manager_node" name="site_manager_node"
         output="$(arg output)" respawn="$(arg respawn)" respawn_delay="2"/>

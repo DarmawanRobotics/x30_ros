@@ -45,11 +45,16 @@ The X30 Pro has two computers for software (Application Manual chapter 1): the *
 host** (192.168.1.106, the intelligent controller on the back, x86 with an NVIDIA GPU) and the
 **perception host** (192.168.1.105, inside the body, an RK3588). Both are on the robot's switch
 (192.168.1.x) and on the LiDAR switch (192.168.2.x), and both run Deep Robotics' LiDAR and IMU
-drivers. The stack is split by what each part needs to be next to:
+drivers from power-up, each into its own ROS master (API documentation 2.1 and 3.1:
+`/livox/lidar`, `/lidar_points`, `/imu/data`). The stack uses the navigation host's: FAST-LIO and
+the protective field's scans on the computer their LiDAR data arrives on, no network between
+them. It never runs a LiDAR driver of its own (a second driver would fight Deep Robotics' for
+the LiDAR), and the perception host needs none for it: its own stays for Deep Robotics'
+elevation map and charging. The stack is split by what each part needs to be next to:
 
 | | navigation host (.106): `navigation_host.launch` | perception host (.105): `perception_host.launch` |
 |---|---|---|
-| runs | the driver, `robot_state_publisher`, the control mux, the LiDAR scans, FAST-LIO, localization, mapping, navigation (NeuPAN with `controller:=neupan`), health, the inspection with its sites and reports | the inspection cameras: hikmicro_driver (PTZ, RTSP video), hertzino_driver |
+| runs | the driver, `robot_state_publisher`, the control mux, the LiDAR scans, FAST-LIO, localization, the site and its routes (no map: [Odometry only](#odometry-only)), navigation (NeuPAN with `controller:=neupan`), health, the inspection with its sites and reports | the inspection cameras: hikmicro_driver (PTZ, RTSP video), hertzino_driver |
 | why | the motion host reports to its UDP 43897; the protective field stays on the same computer as the LiDAR driver and the mux, so the network between the hosts never blinds it; FAST-LIO and NeuPAN want its x86 cores | decoding the cameras' video off the computer that drives; the inspection calls the cameras' services, small messages |
 | ROS | the robot's master (Deep Robotics' roscore, kept by `dr_services.sh`), `ROS_IP=192.168.1.106` | the navigation host's master, `ROS_IP=192.168.1.105`; Deep Robotics' own master here stays for its own nodes |
 | Deep Robotics | `tools/dr_services.sh off`: its autonomy, URDF and bridge off | untouched: the elevation map, charging and its drivers |
@@ -65,7 +70,7 @@ host), and runs each host's launch file by hand or as a systemd service under a 
 # both hosts: ~/x30_ws with x30_ros and x30.repos in src
 eval "$(bash ~/x30_ws/src/x30_ros/tools/x30_host.sh env navigation)"   # .105: perception
 bash ~/x30_ws/src/x30_ros/tools/x30_host.sh check
-roslaunch x30_bringup navigation_host.launch odometry_only:=true site:=gardu controller:=neupan
+roslaunch x30_bringup navigation_host.launch site:=gardu controller:=neupan
 roslaunch --wait x30_bringup perception_host.launch                    # on .105, after the env
 
 # or as a service, started at boot: settings in /etc/x30/<role>.env
@@ -174,7 +179,10 @@ launch refuses `leg_odom_tf:=true` (`base_link` would have two parents).
 `odometry_only:=true` walks taught routes without a map, like HotDog and Pashupati. FAST-LIO's
 start is the map origin (localization's `assume_start_origin`), the site is created without a
 map (the site manager's `create_site`), routes are taught and repeated in that frame, and
-nothing is mapped: the grid mapper stays idle. It is a mode of `localization:=true`.
+nothing maps: no grid mapper, no mapping session (`mapping/*` is not offered), no planner. It is
+a mode of `localization:=true`. On the robot it is the only one: `navigation_host.launch` has no
+map and no argument for one (an old `odometry_only:=` or `mapping:=` in a service's settings is
+ignored).
 
 ```bash
 roslaunch x30_bringup bringup.launch control:=true perception:=true odometry:=true \
@@ -210,8 +218,9 @@ with `rosservice call /x30/non_manual_mode` before the repeat) or through the co
   (a recorded tag in view relocalizes too). `localization/assume_origin` takes FAST-LIO's start
   as the origin, which is right only while FAST-LIO has run since the start spot; a respawned
   `localization_node` does the same.
-- **No planner.** `planner/go_to` plans on a map and refuses without one. Routes, stop points
-  with their inspection, avoidance, the protective field and docking need none.
+- **No planner.** It plans on a map, so it does not run. Routes, stop points with their
+  inspection, path shift and the detours around obstacles, the protective field and docking
+  need none.
 
 A site can still be mapped later (`mapping/start`), in this frame.
 

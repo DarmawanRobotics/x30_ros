@@ -9,6 +9,8 @@
       odom_topic:    the robot's nav_msgs/Odometry with the body twist (x30_driver)
       sites_dir, route: path_loader_node's, when set
       docking:       start docking_node
+      planner:       start planner_node: paths on the site's map (false: a robot without a map,
+                     whose planner could plan nothing)
       controller:    the path follower's controller, when set (else navigation.yaml's)
       dune_checkpoint: the DUNE model of controller neupan (default: the X30's, models/)
       python:        the path follower's interpreter (default: $X30_PYTHON, else the system's):
@@ -21,6 +23,7 @@
   <arg name="sites_dir" default=""/>
   <arg name="route" default=""/>
   <arg name="docking" default="true"/>
+  <arg name="planner" default="true"/>
   <arg name="controller" default=""/>
   <arg name="dune_checkpoint" default="$(find x30_navigation)/models/dune_x30.pth"/>
   <arg name="python" default="$(optenv X30_PYTHON)"/>
@@ -39,7 +42,7 @@
          value="$(arg sites_dir)"/>
   <param if="$(eval arg('route') != '')" name="path_loader_node/route" value="$(arg route)"/>
 
-  <node pkg="x30_navigation" type="planner_node" name="planner_node"
+  <node if="$(arg planner)" pkg="x30_navigation" type="planner_node" name="planner_node"
         output="$(arg output)" respawn="$(arg respawn)" respawn_delay="2"/>
   <node pkg="x30_navigation" type="path_loader_node" name="path_loader_node"
         output="$(arg output)" respawn="$(arg respawn)" respawn_delay="2"/>

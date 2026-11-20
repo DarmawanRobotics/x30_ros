@@ -17,6 +17,9 @@ from x30_utils.robot import RobotProfile
 from x30_utils.safety import ArcCheck, rotation_room, stopping_yaw_rate
 
 EPS = 1e-6
+# a command on the field's boundary passes untouched: what it is over by there is floating-point
+# noise (the follower's guard checks with the field's margins, and lands right on it)
+TOLERANCE = 1e-9
 
 
 class FieldState(Enum):
@@ -75,7 +78,7 @@ class ProtectiveField:
         lim = self.limits
         person = self.config.human_speed * (lim.reaction_time + self.arc.braking_time(out))
         scale = self.arc.scale(out, points, margin + person, self.config.yaw_margin)
-        if scale >= 1.0:
+        if scale >= 1.0 - TOLERANCE:
             return out
         out = out.scaled(scale)
         vx, vy, wz = out.vx, out.vy, out.wz
@@ -99,7 +102,7 @@ class ProtectiveField:
         room = self.clearance(cmd, points) - margin
         lim = self.limits
         allowed = separation_speed(room, lim.max_decel, lim.reaction_time, self.config.human_speed)
-        if allowed >= speed:
+        if allowed >= speed - TOLERANCE:
             return cmd.vx, cmd.vy
         if allowed < self.config.min_speed:
             return 0.0, 0.0
@@ -112,7 +115,7 @@ class ProtectiveField:
             return wz
         room = rotation_room(self.footprint, points, wz) - self.config.yaw_margin
         allowed = stopping_yaw_rate(room, self.limits.max_yaw_accel, self.limits.reaction_time)
-        if allowed >= abs(wz):
+        if allowed >= abs(wz) - TOLERANCE:
             return wz
         if allowed < self.config.min_yaw_rate:
             return 0.0

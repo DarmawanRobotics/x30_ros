@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # x30_ros across the X30's two computers: the navigation host (192.168.1.106, the intelligent
 # controller: the robot's ROS master, the driver, control, LiDAR scans, odometry, localization,
-# mapping, navigation, health, inspection) and the perception host (192.168.1.105: the
-# inspection cameras). Sets each one's ROS network, checks that the two see each other, and
+# routes without a map, navigation, health, inspection) and the perception host (192.168.1.105:
+# the inspection cameras). Sets each one's ROS network, checks that the two see each other, and
 # starts each one's launch file, by hand or as a systemd service (x30_bringup README, "Two
 # hosts").
 set -euo pipefail
@@ -194,7 +194,7 @@ env_file() { # <role> <user> <ws>
   say "X30_WS=$ws"
   say "# arguments of x30_bringup ${role}_host.launch, in quotes, e.g."
   if [ "$role" = navigation ]; then
-    say "# X30_LAUNCH_ARGS=\"site:=gardu odometry_only:=true controller:=neupan\""
+    say "# X30_LAUNCH_ARGS=\"site:=gardu controller:=neupan\""
     say "#   lidar_frame:=livox_frame lidar_pose:='0.3 0 0.1 0 0 0'\""
   else
     say "# X30_LAUNCH_ARGS=\"hertzino:=false\""
@@ -268,7 +268,7 @@ EOF
 }
 
 cmd_install() { # <role>
-  local role=$1 user ws env unit after=''
+  local role=$1 user ws env unit after='' what
   role_ip "$role" > /dev/null
   if [ "$(id -u)" != 0 ] && [ -z "${X30_ETC:-}" ]; then
     say "run it with sudo: sudo bash $HERE/x30_host.sh install $role"
@@ -302,7 +302,8 @@ cmd_install() { # <role>
   say "wrote $unit"
   "$SYSTEMCTL" daemon-reload
   "$SYSTEMCTL" enable "x30-$role.service"
-  say "next: the settings in $env (X30_LAUNCH_ARGS$([ "$role" = perception ] && printf ', the passwords'))"
+  [ "$role" = perception ] && what='X30_LAUNCH_ARGS, the passwords' || what='X30_LAUNCH_ARGS'
+  say "next: the settings in $env ($what)"
   say "then: sudo systemctl start x30-$role; journalctl -u x30-$role -f"
 }
 

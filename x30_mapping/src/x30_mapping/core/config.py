@@ -175,6 +175,11 @@ class SiteConfig:
     start_mapping: bool = param(
         False, live=False, doc='map `site` at start when it is a new site (mapping mode)'
     )
+    mapping: bool = param(
+        True,
+        live=False,
+        doc='mapping/start, stop and save with grid_mapper_node; false: a robot without a map',
+    )
     service_timeout_sec: float = param(
         5.0, min=0.5, max=60.0, unit='s', live=False, doc='waiting for localization and mapper'
     )
@@ -186,6 +191,8 @@ class SiteConfig:
         """Return cross-field problems."""
         if self.create_site and self.start_mapping:
             return ['create_site (odometry only) and start_mapping (mapping mode): one of them']
+        if self.start_mapping and not self.mapping:
+            return ['start_mapping needs mapping (a robot without a map maps nothing)']
         return []
 
 

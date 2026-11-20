@@ -141,6 +141,20 @@ def test_odometry_only_takes_the_odometry_start_as_the_map_origin(tmp_path):
     assert 'odometry_only:=true is a mode of localization:=true' in out
 
 
+def test_odometry_only_maps_nothing():
+    layers = ('localization:=true', 'mapping:=true', 'navigation:=true', 'health:=true')
+    nodes = roslaunch('--nodes', str(LAUNCH), 'odometry_only:=true', *layers).split()
+    assert '/site_manager_node' in nodes and '/route_recorder_node' in nodes
+    assert '/grid_mapper_node' not in nodes and '/planner_node' not in nodes
+    params = yaml.safe_load(
+        roslaunch('--dump-params', str(LAUNCH), 'odometry_only:=true', *layers)
+    )
+    assert params['/site_manager_node/mapping'] is False  # no mapping/start
+    expected = params['/health_monitor_node/nodes/expected']
+    assert '/grid_mapper_node' not in expected and '/planner_node' not in expected
+    assert '/route_recorder_node' in expected and '/path_follower_node' in expected
+
+
 def test_sites_dir_reaches_every_layer(tmp_path):
     layers = ('localization:=true', 'mapping:=true', 'navigation:=true', 'inspection:=true')
     args = ('sim:=true', 'site:=lobby', f'sites_dir:={tmp_path}', *layers)
@@ -189,6 +203,9 @@ def test_the_navigation_host_runs_all_but_the_cameras_and_what_its_watchdog_watc
     ):
         assert node in nodes, node
     assert not [n for n in nodes if n.startswith(('/hikmicro', '/hertzino'))]
+    # no map, ever: the site and its routes, no grid mapper, no planner (it plans on a map)
+    assert '/site_manager_node' in nodes and '/route_recorder_node' in nodes
+    assert '/grid_mapper_node' not in nodes and '/planner_node' not in nodes
     script = (Path(__file__).resolve().parents[2] / 'tools' / 'x30_host.sh').read_text()
     critical = re.search(r'^CRITICAL=\((.*)\)$', script, re.MULTILINE).group(1).split()
     assert critical and set(critical) <= set(nodes)
@@ -221,14 +238,19 @@ def test_the_black_box_records_the_robot_in_rolling_splits(tmp_path):
 
 
 def test_the_navigation_host_passes_its_arguments(tmp_path):
-    args = ('odometry_only:=true', 'site:=gardu', 'controller:=neupan', 'inspection:=false')
+    args = ('site:=gardu', 'controller:=neupan', 'inspection:=false')
     out = roslaunch('--dump-params', str(HOSTS / 'navigation_host.launch'), *args)
     params = yaml.safe_load(out)
     assert params['/path_follower_node/controller'] == 'neupan'
     assert params['/site_manager_node/site'] == 'gardu'
-    assert params['/site_manager_node/create_site'] is True
+    assert params['/site_manager_node/create_site'] is True  # odometry only, always
+    assert params['/site_manager_node/mapping'] is False
     assert params['/localization_node/assume_start_origin'] is True
     assert '/inspection_node/sites_dir' not in params
+    # the arguments of the map it had: an old service setting is no map either
+    old = ('odometry_only:=false', 'mapping:=true')
+    nodes = roslaunch('--nodes', str(HOSTS / 'navigation_host.launch'), *old).split()
+    assert '/grid_mapper_node' not in nodes and '/planner_node' not in nodes
 
 
 def fake_driver(root: Path, name: str, node: str):

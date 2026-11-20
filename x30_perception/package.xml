@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_perception</name>
-  <version>0.14.0</version>
+  <version>0.15.0</version>
   <description>What the X30 sees around it (the ROS Noetic port of dharma_perception): LiDAR obstacle sectors for avoidance and a fail-safe 360 degree safety scan for the protective field, from the X30's Livox CustomMsg bytes or any PointCloud2, an optional depth camera, and ArUco fiducials on a throttled camera.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>
