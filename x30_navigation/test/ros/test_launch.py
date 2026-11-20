@@ -32,6 +32,8 @@ def params(*args: str) -> dict:
 def test_the_nodes_and_docking_behind_its_argument():
     assert roslaunch('--nodes', str(LAUNCH)).split() == [f'/{n}' for n in NODES]
     assert '/docking_node' not in roslaunch('--nodes', str(LAUNCH), 'docking:=false').split()
+    without_a_map = roslaunch('--nodes', str(LAUNCH), 'planner:=false').split()
+    assert without_a_map == [f'/{n}' for n in NODES if n != 'planner_node']
 
 
 def test_defaults_land_in_each_node():
