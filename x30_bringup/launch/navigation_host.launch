@@ -4,23 +4,27 @@
     drives or guards the robot, next to the LiDAR driver and the robot's ROS master (Deep
     Robotics' roscore, kept by tools/dr_services.sh; the perception host's nodes join it). That
     is bringup.launch with the driver (the motion host reports to this host's UDP 43897), the
-    control mux, the LiDAR scans of the protective field, FAST-LIO, localization, mapping,
-    navigation, health and the inspection (its sites and reports live here; its cameras run on
-    the perception host: perception_host.launch). Network: ROS_IP=192.168.1.106
+    control mux, the LiDAR scans of the protective field, FAST-LIO, localization, the site and
+    its routes, navigation, health and the inspection (its sites and reports live here; its
+    cameras run on the perception host: perception_host.launch). Network: ROS_IP=192.168.1.106
     (tools/x30_host.sh env navigation).
-      site, odometry_only, sites_dir, controller, reports_dir, lidar_frame, lidar_pose:
-                 bringup.launch's
-      mapping, health, inspection: those layers (on by default)
+    No map, ever (odometry only, like HotDog and Pashupati): FAST-LIO's start is the origin, the
+    robot starts on the same spot every time, routes are taught and repeated in that frame and
+    tags correct the drift. Nothing maps: no grid mapper, no mapping session, no planner.
+    The LiDAR and the IMU are Deep Robotics' own drivers on this host (/livox/lidar,
+    /imu/data, kept running by tools/dr_services.sh): never a second driver here.
+      site:      the site (routes, tags, inspection points), created when missing; empty: the
+                 last run's
+      sites_dir, controller, reports_dir, lidar_frame, lidar_pose: bringup.launch's
+      health, inspection: those layers (on by default)
       odometry_method: fast_lio, or external when another estimator publishes /Odometry
       blackbox: the last hours of status, commands, pose and log in a rolling rosbag
                  (scripts/blackbox): blackbox_dir, blackbox_minutes per split, blackbox_splits
                  kept (3 h, about 0.5 GB)
   -->
   <arg name="site" default=""/>
-  <arg name="odometry_only" default="false"/>
   <arg name="sites_dir" default=""/>
   <arg name="controller" default=""/>
-  <arg name="mapping" default="true"/>
   <arg name="health" default="true"/>
   <arg name="inspection" default="true"/>
   <arg name="reports_dir" default=""/>
@@ -38,8 +42,8 @@
     <arg name="odometry" value="true"/>
     <arg name="odometry_method" value="$(arg odometry_method)"/>
     <arg name="localization" value="true"/>
-    <arg name="odometry_only" value="$(arg odometry_only)"/>
-    <arg name="mapping" value="$(arg mapping)"/>
+    <arg name="odometry_only" value="true"/>
+    <arg name="mapping" value="true"/>  <!-- the site and its routes: no map (odometry only) -->
     <arg name="site" value="$(arg site)"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
     <arg name="navigation" value="true"/>
