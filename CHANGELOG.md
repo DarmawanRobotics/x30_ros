@@ -3,6 +3,19 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.15.0)
+
+### Added
+- A robot without a map: mapping.launch `grid:=false` (the site manager and the route recorder
+  alone, the site manager's `mapping: false` offering no `mapping/*`), navigation.launch
+  `planner:=false`.
+
+### Changed
+- The navigation host never maps: `navigation_host.launch` is odometry only, with no
+  `odometry_only` or `mapping` argument (old ones in a service's settings are ignored); it runs
+  the site and its routes, no grid mapper, no mapping session, no planner. `odometry_only:=true`
+  in bringup.launch maps nothing either, and x30_health expects only what runs.
+
 ## [Unreleased] (0.14.0)
 
 ### Added
