@@ -51,7 +51,7 @@ elevation map and charging. The stack is split by what each part needs to be nex
 
 | | navigation host (.106): `navigation_host.launch` | perception host (.105): `perception_host.launch` |
 |---|---|---|
-| runs | the driver, `robot_state_publisher`, the control mux, the LiDAR scans, FAST-LIO, localization, the site and its routes ([No map](#no-map)), navigation (NeuPAN with `controller:=neupan`), health, the inspection with its sites and reports | the inspection cameras: hikmicro_driver (PTZ, RTSP video), hertzino_driver; their recorder (x30_recorder: raw thermal frames, video, acoustic data, `recorder:=false` off) |
+| runs | the driver, `robot_state_publisher`, the control mux, the LiDAR scans, FAST-LIO, localization, the site and its routes ([No map](#no-map)), navigation (NeuPAN with `controller:=neupan`), health, the inspection with its sites and reports, the handheld's UDP gateway (x30_bridge, `bridge:=false` off) | the inspection cameras: hikmicro_driver (PTZ, RTSP video), hertzino_driver; their recorder (x30_recorder: raw thermal frames, video, acoustic data, `recorder:=false` off) |
 | why | the motion host reports to its UDP 43897; the protective field stays on the same computer as the LiDAR driver and the mux, so the network between the hosts never blinds it; FAST-LIO and NeuPAN want its x86 cores | decoding the cameras' video off the computer that drives; the inspection calls the cameras' services, small messages; the recordings written where the cameras' data arrives, never over the network |
 | ROS | the robot's master (Deep Robotics' roscore, kept by `dr_services.sh`), `ROS_IP=192.168.1.106` | the navigation host's master, `ROS_IP=192.168.1.105`; Deep Robotics' own master here stays for its own nodes |
 | Deep Robotics | `tools/dr_services.sh off`: its autonomy, URDF and bridge off | untouched: the elevation map, charging and its drivers |
@@ -145,6 +145,7 @@ enough to go.
 | `hikmicro`, `hikmicro_host`, `hikmicro_password` | `false`, `192.168.1.64`, empty | the HIKMICRO thermal PTZ camera (hikmicro_driver, from x30.repos); leave the password empty: the driver reads `HIKMICRO_PASSWORD` (a password argument goes to the parameter server, which roslaunch prints) |
 | `hertzino`, `hertzino_host`, `hertzino_password` | `false`, `192.168.2.204`, empty | the Hertzino acoustic camera (hertzino_driver, from x30.repos); leave the password empty: the driver reads `HERTZINO_PASSWORD` |
 | `lidar_frame`, `lidar_pose` | `livox_frame`, `0 0 0 0 0 0` | `base_link` → the frame of `/livox/lidar` (`x y z yaw pitch roll`, m and rad) |
+| `bridge` | `false` (`navigation_host.launch`: `true`) | the handheld's UDP gateway (x30_bridge, UDP 9870, the control mux's `handheld` source); its shared secret is `X30_TELEOP_TOKEN` in the environment, never an argument |
 | `rviz` | `false` | RViz with the robot model |
 
 ## Nodes
@@ -162,6 +163,7 @@ enough to go.
 | `health_monitor_node` (`health:=true`) | `/` | `health/status`, `diagnostics` |
 | `inspection_node` (`inspection:=true`) | `/` | `inspection/inspect` (the follower's hook), `inspection/add_target`, `inspection/report`, `inspection/status` |
 | the camera drivers (`hikmicro:=true`, `hertzino:=true`) | `hikmicro`, `hertzino` | see their READMEs |
+| `teleop_udp_node` (`bridge:=true`) | `/` | UDP 9870 for the handheld; `control/remote/handheld/cmd_vel` out, the stack's services and status in |
 | `rviz` (`rviz:=true`) | `x30` | |
 
 The driver publishes no TF by default (`publish_tf: false`): `odom` → `base_link` belongs to

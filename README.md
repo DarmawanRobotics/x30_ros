@@ -38,7 +38,8 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 [x30_localization](x30_localization/README.md) ·
 [x30_navigation](x30_navigation/README.md) · [x30_health](x30_health/README.md) ·
 [x30_inspection](x30_inspection/README.md) · [x30_recorder](x30_recorder/README.md) ·
-[x30_sim](x30_sim/README.md) · [tools](tools/README.md) · [CHANGELOG](CHANGELOG.md)
+[x30_bridge](x30_bridge/README.md) · [x30_sim](x30_sim/README.md) · [tools](tools/README.md) ·
+[CHANGELOG](CHANGELOG.md)
 
 ## Packages
 
@@ -57,6 +58,7 @@ Docs: [x30_driver](x30_driver/README.md) · [x30_description](x30_description/RE
 | [`x30_health`](x30_health/README.md) | one health signal: sensor rates and header ages (raw, any type), the expected nodes, the stack's states, the safety scan, TF, the clock and the computer; `health/status` with a speed scale for the mux, and diagnostics |
 | [`x30_inspection`](x30_inspection/README.md) | substation inspection at the stop points (the follower's hook): the HIKMICRO PTZ camera pointed at each target taught there, overheating judged by absolute, ambient and similar criteria (NETA MTS); partial discharge from the Hertzino HZ-FA-371; a report with the thermal, visible, sound map and PRPD images on the robot and on `inspection/report` |
 | [`x30_recorder`](x30_recorder/README.md) | the inspection cameras recorded on the perception host while a route runs or on request: every raw thermal frame (`.npz`, degC per pixel, with the robot's pose and the camera's pan, tilt and zoom), the visible and thermal video (RTSP copied into MP4 segments), the acoustic camera's data; disk limits and retention |
+| [`x30_bridge`](x30_bridge/README.md) | the handheld's UDP gateway (teleop protocol v1 of Pashupati with the X30's commands): the X30Controller app on a Skydroid H12 or any Android drives through the control mux, teaches and runs routes, starts the recorder and an inspection, and sees the state, the inspection camera and the cloud; no ROS on the handheld |
 | [`x30_sim`](x30_sim/README.md) | the X30 in software (`bringup.launch sim:=true`): a kinematic body behind the driver's topics and services, the four Mid-360 ray-cast into `/livox/lidar`, the body IMU, a drifting FAST-LIO stand-in and leg odometry, a tag camera, seeded scenarios, worlds and sites; no Gazebo, no GPU |
 
 ## Stack
@@ -69,6 +71,7 @@ robot's own perception and navigation software: the stack drives the robot throu
 and reads the X30's sensor topics.
 
 ```
+ handheld     UDP gateway of the X30Controller app  ◄ x30_bridge
  inspection   thermal and partial discharge at the stop points  ◄ x30_inspection
               the cameras recorded on the perception host  ◄ x30_recorder
               (hikmicro_driver, hertzino_driver of x30.repos)
@@ -102,7 +105,8 @@ From the API documentation (sections 1.2 to 1.5):
 
 **Two hosts.** On the robot the stack runs on the navigation host (192.168.1.106: the driver,
 control, the LiDAR scans, odometry, localization, the site and its routes without a map,
-navigation, health, inspection; the LiDAR and IMU from Deep Robotics' own drivers), and
+navigation, health, inspection, the handheld's gateway; the LiDAR and IMU from Deep Robotics'
+own drivers), and
 the inspection cameras and their recorder on the perception host (192.168.1.105), both on the
 navigation host's ROS master: `navigation_host.launch` and `perception_host.launch`, by hand or
 as services under a watchdog with `tools/x30_host.sh`
