@@ -9,7 +9,6 @@ import yaml
 
 LAUNCH = Path(__file__).resolve().parents[2] / 'launch' / 'navigation.launch'
 NODES = (
-    'planner_node',
     'path_loader_node',
     'path_follower_node',
     'obstacle_avoidance_node',
@@ -32,8 +31,6 @@ def params(*args: str) -> dict:
 def test_the_nodes_and_docking_behind_its_argument():
     assert roslaunch('--nodes', str(LAUNCH)).split() == [f'/{n}' for n in NODES]
     assert '/docking_node' not in roslaunch('--nodes', str(LAUNCH), 'docking:=false').split()
-    without_a_map = roslaunch('--nodes', str(LAUNCH), 'planner:=false').split()
-    assert without_a_map == [f'/{n}' for n in NODES if n != 'planner_node']
 
 
 def test_defaults_land_in_each_node():
@@ -43,7 +40,7 @@ def test_defaults_land_in_each_node():
     assert p['/path_loader_node/sites_dir'] == '~/x30/map'
     assert p['/obstacle_avoidance_node/policy'] == 'vfh'
     assert p['/docking_node/charge/confirm_timeout_sec'] == 0.0
-    assert p['/planner_node/costmap/inflation_radius'] == 0.8
+    assert not any(name.startswith('/planner_node/') for name in p)
 
 
 def test_arguments_override_when_set(tmp_path):

@@ -39,7 +39,6 @@ def test_every_layer_behind_its_argument():
         '/grid_mapper_node',
         '/site_manager_node',
         '/route_recorder_node',
-        '/planner_node',
         '/path_loader_node',
         '/path_follower_node',
         '/obstacle_avoidance_node',

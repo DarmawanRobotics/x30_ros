@@ -1,9 +1,10 @@
 # x30_navigation
 
 Where the X30 walks to, the ROS Noetic port of
-[dharma_navigation](https://github.com/DarmawanRobotics/dharma_navigation): a planner on the site
-map, routes from the active site, a path follower with pluggable controllers, reactive
-avoidance and tag-based docking. Every command goes to the control mux
+[dharma_navigation](https://github.com/DarmawanRobotics/dharma_navigation) without its map and
+planner: routes from the active site, taught and repeated in the frame of the odometry's start,
+a path follower with pluggable controllers, reactive avoidance and tag-based docking. Every
+command goes to the control mux
 (`control/nav_cmd_vel`, x30_control), never to the robot's `cmd_vel`: the mux's protective field
 and e-stop always apply.
 
@@ -11,26 +12,21 @@ and e-stop always apply.
 
 | Node | Role |
 |---|---|
-| `planner_node` | `planner/go_to {x, y, yaw}`: plan on `/map` with a footprint costmap, hand the path to the follower (`navigation/set_path`, `navigation/start`), replan around blockages; refused for a site without a map (an empty `/map`) |
 | `path_loader_node` | `navigation/load_path`: read a route CSV inside `sites_dir`, resample and smooth it (stop points never move), publish it latched |
 | `path_follower_node` | follow the route: join it, follow, final x / y / yaw approach, stop points with inspection hooks, pause reasons; publishes `control/nav_cmd_vel` |
 | `obstacle_avoidance_node` | a reactive policy on `perception/sector_scan` around the direction of travel → `navigation/avoidance` (heading offset, speed scale, emergency stop) |
 | `docking_node` | `docking/dock`: centre on the dock tag (TF), walk to the docked pose, settle, sit and start charging (robot hooks); `docking/undock`, `docking/cancel` |
 
 ```
-planner/go_to ─► planner_node ─► navigation/set_path ─┐
-navigation/load_path ─► path_loader_node ─► navigation/waypoints ─┤
-                                                      ▼
+navigation/load_path ─► path_loader_node ─► navigation/waypoints ─┐
+navigation/set_path (a path from elsewhere) ──────────────────────┤
+                                                                  ▼
 perception/safety_scan, navigation/avoidance ─► path_follower_node ─► control/nav_cmd_vel ─► control_mux_node ─► /x30/cmd_vel
 control/status, localization/status, /x30/battery, /x30/odom ─┘
 ```
 
 | Interface | Type | |
 |---|---|---|
-| `planner/go_to` | `x30_msgs/GoTo` | plan to x, y, yaw (map frame), load it and walk |
-| `planner/plan` | `x30_msgs/PlanPath` | plan only |
-| `planner/cancel` | `std_srvs/Trigger` | stop walking (never waits for a plan in progress) |
-| `planner/status`, `planner/path`, `planner/costmap` | `PlannerStatus`, `Path`, `OccupancyGrid` (latched) | state, remaining, replans; plan; costmap (`publish_costmap`) |
 | `navigation/set_path` | `x30_msgs/SetPath` | give the follower a path |
 | `navigation/start`, `stop`, `pause`, `resume` | `std_srvs/Trigger` | run, stop (zero), hold, resume |
 | `navigation/load_path` | `x30_msgs/LoadPath` | load a route CSV inside `sites_dir` |
@@ -42,7 +38,7 @@ control/status, localization/status, /x30/battery, /x30/odom ─┘
 | `docking/dock`, `docking/undock`, `docking/cancel` | `std_srvs/Trigger` | dock and charge, stop charging and leave, stop |
 | `docking/status`, `docking/goal` | `DockingStatus` (latched), `PoseStamped` | state, errors to the dock, attempt, charging; docked pose |
 
-In: `/map`, `perception/safety_scan`, `perception/sector_scan`, `control/status`,
+In: `perception/safety_scan`, `perception/sector_scan`, `control/status`,
 `localization/status`, the robot's battery and odometry (`battery_topic`, `odom_topic`).
 
 ## On rospy
@@ -52,9 +48,6 @@ callback beside the others (a separate callback group), it is a concurrent servi
 
 - `navigation/start` waits for the robot pose (`pose_wait_sec`) while the follower's tick and
   inputs keep running;
-- `planner/go_to` and `planner/plan` wait for the follower's services beside the planner's
-  subscriptions and status, one at a time with its monitor; `planner/cancel` never waits for
-  them;
 - hooks (start, stop, inspection, docking) are asynchronous calls with a timeout whose answers
   come back as the node's callbacks.
 
@@ -97,7 +90,7 @@ start and applies live changes within a second (all or none; read-only values un
 
 `controller: neupan` runs [NeuPAN](https://github.com/hanruihua/NeuPAN) (Han et al., T-RO
 2025): one MPC that tracks the route ahead and keeps the footprint off the safety scan's points
-directly, no costmap and no map (odometry only works). DUNE, a small network trained for the
+directly, with no costmap and no map. DUNE, a small network trained for the
 footprint, gives the distance from the body to every point at every planned pose. On the X30 the
 MPC plans the forward and sideways speed and the yaw rate: the `holonomic` kinematics patched
 into NeuPAN for the X30 ([tools/neupan](../tools/neupan)), so the body turns with the route and
@@ -112,7 +105,7 @@ roslaunch x30_bringup bringup.launch navigation:=true controller:=neupan ...
 - **It keeps its own clearance**: reactive avoidance stands by. Path shift (`avoidance_mode:
   path_shift`, the default) still picks the side to pass an obstacle on: NeuPAN alone stands
   before one right on the route, with no side to prefer, until the follower's detour. The
-  follower's guard, its BLOCKED state (the planner replans, the detours) and the control mux's
+  follower's guard, its BLOCKED state (the detours) and the control mux's
   protective field stay as they are and keep the last word.
 - **Its model**: [models/dune_x30.pth](models/dune_x30.pth), trained for the X30's footprint
   (1000 x 470 mm) on points up to 8 m away, with its record
@@ -159,7 +152,6 @@ roslaunch x30_bringup bringup.launch navigation:=true controller:=neupan ...
 roslaunch x30_navigation navigation.launch robot_params:=$(rospack find x30_bringup)/config/robot.yaml
 rosservice call /navigation/load_path "{path: gardu-a/routes/patrol.csv}"
 rosservice call /navigation/start
-rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
 ```
 
 | Argument | Default | |
@@ -169,7 +161,6 @@ rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
 | `battery_topic`, `odom_topic` | `/x30/battery`, `/x30/odom` | x30_driver's battery and leg odometry |
 | `sites_dir`, `route` | | `path_loader_node`'s, when set |
 | `docking` | `true` | start `docking_node` |
-| `planner` | `true` | start `planner_node`; `false` for a robot without a map (it plans on one) |
 | `controller` | | the path follower's, when set (else navigation.yaml's `holonomic`) |
 | `dune_checkpoint` | `models/dune_x30.pth` | NeuPAN's DUNE model (a `params_file` may give another) |
 | `python` | `$X30_PYTHON` | the path follower's interpreter: the NeuPAN venv |
@@ -177,11 +168,11 @@ rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
 
 ## Tests
 
-`catkin_make run_tests_x30_navigation`: the planner, the follower (controllers, path shifting,
-backtracking, stop points), avoidance policies, docking and path processing (unit, 277); the five
-nodes on a private rosmaster (following with pauses, e-stop and re-arm, start waiting for the
-pose, cancel never blocked by a slow send, replanning and a blind scan, routes inside the sites
-directory, docking with its hooks, a clean SIGINT while ticking); and the launch file's
+`catkin_make run_tests_x30_navigation`: the follower (controllers, path shifting, backtracking,
+stop points, its guard through the control mux's field), avoidance policies, docking and path
+processing (unit); the four nodes on a private rosmaster (following with pauses, e-stop and
+re-arm, start waiting for the pose, a blind scan, routes inside the sites directory, docking
+with its hooks, a clean SIGINT while ticking); and the launch file's
 parameters and remaps. NeuPAN's checks and its model's record always; its driving (a pole on
 the route, a 1 m passage, a wall across, the turn of an L, a robot without strafing) needs NeuPAN:
 `$X30_PYTHON -m pytest test/unit/test_neupan.py test/unit/test_dune_model.py`, as CI's `neupan`

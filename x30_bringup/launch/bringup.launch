@@ -18,9 +18,9 @@
       odometry_only: navigation without a map (with localization): FAST-LIO's start is the map
                     origin, so the robot starts on the same spot (the dock) every time; the site is
                     created without a map, routes are taught and repeated in that frame, tags
-                    only correct the drift; nothing maps: no grid mapper, no mapping session, no
-                    planner, which plans on a map (README, Odometry only)
-      navigation:   the planner, route loader, path follower, avoidance and docking
+                    only correct the drift; nothing maps: no grid mapper, no mapping session
+                    (README, Odometry only)
+      navigation:   the route loader, path follower, avoidance and docking
                     (x30_navigation), commanding the control mux; controller: the path
                     follower's (empty: navigation.yaml's holonomic; neupan: NeuPAN, which avoids
                     by itself, from the venv of tools/install_neupan.sh through X30_PYTHON)
@@ -146,7 +146,6 @@
     <arg name="odom_topic" value="/$(arg namespace)/odom"/>
     <arg name="sites_dir" value="$(arg sites_dir)"/>
     <arg name="controller" value="$(arg controller)"/>
-    <arg name="planner" value="$(eval not arg('odometry_only'))"/>
   </include>
 
   <group if="$(arg health)">
@@ -164,9 +163,8 @@
       + (['/localization_node'] if arg('localization') else [])
       + (([] if arg('odometry_only') else ['/grid_mapper_node'])
          + ['/site_manager_node', '/route_recorder_node'] if arg('mapping') else [])
-      + (([] if arg('odometry_only') else ['/planner_node'])
-         + ['/path_loader_node', '/path_follower_node', '/obstacle_avoidance_node',
-            '/docking_node'] if arg('navigation') else [])))</rosparam>
+      + (['/path_loader_node', '/path_follower_node', '/obstacle_avoidance_node',
+          '/docking_node'] if arg('navigation') else [])))</rosparam>
     <rosparam param="health_monitor_node/sensors/topics" subst_value="true">$(eval str(
       ['/livox/lidar:5.0', '/imu/data:100.0', '/' + arg('namespace') + '/odom:20.0']
       + (['/Odometry:8.0'] if arg('odometry') else [])))</rosparam>

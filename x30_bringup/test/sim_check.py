@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rostest: the whole stack on x30_sim localizes, walks to a goal around a corner, tags correct."""
+"""rostest: the whole stack on x30_sim localizes, walks the patrol loop, a tag corrects drift."""
 
 from __future__ import annotations
 
@@ -12,15 +12,22 @@ from geometry_msgs.msg import PoseStamped
 import rospy
 import rostest
 from std_msgs.msg import Bool
+from std_srvs.srv import Trigger
 import tf2_ros
 
-from x30_msgs.msg import ControlStatus, HealthStatus, LocalizationStatus, PlannerStatus
-from x30_msgs.srv import GoTo
+from x30_msgs.msg import (
+    ControlStatus,
+    HealthStatus,
+    LocalizationStatus,
+    NavigationStatus,
+    WaypointPath,
+)
+from x30_msgs.srv import LoadPath
 
-GOAL = (4.5, 0.0, math.pi / 2)  # up the east corridor of mall_loop, from the start at (-4.5, -3)
-ARRIVED_WITHIN = 0.15  # m, the true pose from the goal (0.25 m without the tag corrections)
+ROUTE = 'mall/routes/mall_loop.csv'  # the patrol loop of mall_loop, drawn into the site
+ARRIVED_WITHIN = 0.15  # m, the true pose from the loop's end (0.25 m without the tag corrections)
 LOCALIZED_WITHIN = 0.10  # m, map -> base_link from the true pose
-STARTS_WITHIN = 0.30  # m, map -> base_link from the true pose before the goal is sent
+STARTS_WITHIN = 0.30  # m, map -> base_link from the true pose before the loop starts
 
 
 class StackSim(unittest.TestCase):
@@ -34,7 +41,8 @@ class StackSim(unittest.TestCase):
         for topic, msg_type in (
             ('/localization/status', LocalizationStatus),
             ('/control/status', ControlStatus),
-            ('/planner/status', PlannerStatus),
+            ('/navigation/status', NavigationStatus),
+            ('/navigation/waypoints', WaypointPath),
             ('/health/status', HealthStatus),
             ('/sim/ground_truth', PoseStamped),
             ('/sim/collision', Bool),
@@ -76,11 +84,16 @@ class StackSim(unittest.TestCase):
         p, t = seen.transform.translation, truth.pose.position
         return math.hypot(p.x - t.x, p.y - t.y)
 
-    def test_localizes_and_walks_to_the_goal(self):
-        """/initialpose from the simulator, go_to around a corner, a tag on the way, arrival."""
+    def call(self, name: str, srv_type=Trigger, **request):
+        rospy.wait_for_service(name, timeout=30.0)
+        answer = rospy.ServiceProxy(name, srv_type)(**request)
+        self.assertTrue(answer.success, f'{name}: {answer.message}')
+        return answer
+
+    def test_localizes_and_walks_the_loop(self):
+        """Localized at the start, the loop walked round its corners, a tag on the way, arrival."""
         self.wait('/localization/status', lambda s: s.state == LocalizationStatus.LOCALIZED, 60.0)
-        # the planner plans from map -> base_link, which shows the pose estimate a little later
-        # (FAST-LIO's TF lags): planned from the pose before, the start was inside the shops
+        # map -> base_link shows the pose estimate a little later (FAST-LIO's TF lags)
         end = time.monotonic() + 30.0
         while self.off_truth() > STARTS_WITHIN:
             self.assertLess(
@@ -90,19 +103,20 @@ class StackSim(unittest.TestCase):
         self.wait(
             '/control/status', lambda s: s.armed and s.field == ControlStatus.FIELD_CLEAR, 30
         )
-        rospy.wait_for_service('/planner/go_to', timeout=30.0)
-        answer = rospy.ServiceProxy('/planner/go_to', GoTo)(*GOAL)
-        self.assertTrue(answer.success, answer.message)
-        done = (PlannerStatus.ARRIVED, PlannerStatus.FAILED, PlannerStatus.CANCELLED)
-        status = self.wait('/planner/status', lambda s: s.state in done, 150.0)
-        self.assertEqual(status.state, PlannerStatus.ARRIVED, status.message)
+        self.call('/navigation/load_path', LoadPath, path=ROUTE)
+        goal = self.wait('/navigation/waypoints', lambda w: len(w.waypoints) > 0, 10.0)
+        goal = goal.waypoints[-1]  # the loop's end, in the map frame
+        self.call('/navigation/start')
+        done = (NavigationStatus.GOAL_REACHED, NavigationStatus.FAILED)
+        status = self.wait('/navigation/status', lambda n: n.state in done, 200.0)
+        self.assertEqual(status.state, NavigationStatus.GOAL_REACHED, status.message)
         truth = self.last('/sim/ground_truth').pose.position
-        error = math.hypot(truth.x - GOAL[0], truth.y - GOAL[1])
+        error = math.hypot(truth.x - goal.x, truth.y - goal.y)
         seen = self.tf.lookup_transform('map', 'base_link', rospy.Time(0), rospy.Duration(2.0))
         estimate = seen.transform.translation
         drift = math.hypot(estimate.x - truth.x, estimate.y - truth.y)
         rospy.loginfo(
-            'arrived %.3f m from the goal, localized %.3f m off (true pose)', error, drift
+            "arrived %.3f m from the loop's end, localized %.3f m off (true pose)", error, drift
         )
         self.assertLess(drift, LOCALIZED_WITHIN)
         self.assertLess(error, ARRIVED_WITHIN)

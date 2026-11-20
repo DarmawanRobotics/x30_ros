@@ -5,8 +5,7 @@ from __future__ import annotations
 import math
 
 from geometry_msgs.msg import PoseStamped, Twist
-from nav_msgs.msg import OccupancyGrid, Path
-import numpy as np
+from nav_msgs.msg import Path
 
 from x30_msgs.msg import (
     AvoidanceCommand,
@@ -19,12 +18,10 @@ from x30_msgs.msg import (
 from x30_navigation.core.avoidance.base import AvoidanceOut
 from x30_navigation.core.controllers.base import Command
 from x30_navigation.core.follower.state import Report, StopEvent
-from x30_navigation.core.planning.costmap import Costmap, MapGrid
 from x30_navigation.core.scan import SectorScanData
-from x30_utils.grid import GridSpec
 from x30_utils.io import RoutePoint
 from x30_utils.math import Pose2D
-from x30_utils.ros.convert import msg_yaw, pose2d_to_pose
+from x30_utils.ros.convert import pose2d_to_pose
 
 
 def scan_data(msg: SectorScan) -> SectorScanData:
@@ -131,32 +128,4 @@ def stop_event_msg(event: StopEvent, frame: str, stamp) -> StopPointEvent:
         message=event.message,
     )
     msg.header.frame_id, msg.header.stamp = frame, stamp
-    return msg
-
-
-def map_grid(msg: OccupancyGrid) -> MapGrid:
-    """Return the core grid of an OccupancyGrid; raise ValueError when it cannot be used."""
-    width, height = int(msg.info.width), int(msg.info.height)
-    if width * height == 0 or len(msg.data) != width * height:
-        raise ValueError('the map is empty or its size does not match its data')
-    if abs(msg_yaw(msg.info.origin.orientation)) > 1e-6:
-        raise ValueError('maps with a rotated origin are not supported')
-    data = np.asarray(msg.data, dtype=np.int8).reshape(height, width)
-    resolution = round(float(msg.info.resolution), 6)
-    origin = msg.info.origin.position
-    return MapGrid(data, GridSpec(resolution, float(origin.x), float(origin.y), width, height))
-
-
-def costmap_msg(costmap: Costmap, frame: str, stamp) -> OccupancyGrid:
-    """Return a costmap as an OccupancyGrid: lethal 100, cost scaled to 0..99."""
-    cost = costmap.cost
-    data = np.where(np.isfinite(cost), np.clip((cost - 1.0) * 15.0, 0, 99), 100)
-    msg = OccupancyGrid()
-    msg.header.frame_id, msg.header.stamp = frame, stamp
-    spec = costmap.spec
-    msg.info.resolution = float(spec.resolution)
-    msg.info.width, msg.info.height = spec.width, spec.height
-    msg.info.origin.position.x, msg.info.origin.position.y = spec.origin_x, spec.origin_y
-    msg.info.origin.orientation.w = 1.0
-    msg.data = data.astype(np.int8).ravel().tolist()
     return msg

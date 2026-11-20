@@ -14,7 +14,6 @@ setup(
             'x30_navigation.core.docking',
             'x30_navigation.core.follower',
             'x30_navigation.core.path',
-            'x30_navigation.core.planning',
             'x30_navigation.core.shift',
             'x30_navigation.utils',
         ],

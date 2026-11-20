@@ -89,7 +89,7 @@ def test_blocked_rear_ends_the_back_up_early():
 
 
 def test_blocked_way_back_reports_blocked_with_the_reason():
-    """The way to the route past the stop is blocked: BLOCKED at once, the planner replans."""
+    """The way to the route past the stop is blocked: BLOCKED at once, with the reason."""
     rig = at_stop()
     rig.obstacles = person(4.9, 0.0)
     run_tracking_x(rig, 10.0, until=lambda d: d.report.state is S.BLOCKED)

@@ -6,7 +6,7 @@ catkin_python_setup()
 catkin_package()
 
 catkin_install_python(
-  PROGRAMS scripts/planner_node scripts/path_loader_node scripts/path_follower_node
+  PROGRAMS scripts/path_loader_node scripts/path_follower_node
            scripts/obstacle_avoidance_node scripts/docking_node scripts/train_dune
            scripts/bench_neupan
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

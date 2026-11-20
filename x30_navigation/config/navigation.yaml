@@ -1,14 +1,6 @@
 # x30_navigation defaults on the X30, one section per node: loaded at the launch namespace (a
 # params_file has the same layout). Every parameter: README.md. The robot (frames, footprint,
 # limits) comes from the robot profile (robot/); every command goes to the control mux.
-planner_node:
-  costmap:
-    margin: 0.1                 # m
-    inflation_radius: 0.8       # m, paths keep away from walls up to here
-  monitor:
-    replan_after_sec: 3.0       # s of follower BLOCKED before planning around it
-    max_replans: 5
-
 path_loader_node:
   sites_dir: ~/x30/map          # routes are loaded from inside this directory only
   route: ""                     # route CSV loaded at start ("": the remembered one)
@@ -21,7 +13,7 @@ path_follower_node:
   speed:
     cruise: 0.4                 # m/s, never above robot/limits/max_vx (0.75)
   safety:
-    blocked_timeout_sec: 10.0   # s standing still (measured): BLOCKED (the planner replans)
+    blocked_timeout_sec: 10.0   # s standing still (measured): BLOCKED
     lateral_margin: 0.10        # m, at least the control mux's field/lateral_margin
     human_speed: 0.5            # m/s, at least the control mux's field/human_speed
   inspection:
