@@ -184,3 +184,33 @@ def test_partly_blind_remote_does_not_translate_toward_blocked_sectors():
     fully = ScanView(ScanState.BLIND, np.empty((0, 2)), 72, 'x', blind, width)
     out = FIELD.limit(Command(0.3, 0.0, 0.0), fully, remote=True).command
     assert out.vx == pytest.approx(CFG.remote_degraded_speed)  # blind sensor: creep only
+
+
+def close_scene(rng) -> list:
+    """Return points close around the robot: clusters and wall pieces, 0.2 to 1.4 m out."""
+    parts = []
+    for _ in range(rng.integers(1, 5)):
+        r, a = rng.uniform(0.2, 1.4), rng.uniform(-math.pi, math.pi)
+        centre = np.array([r * math.cos(a), r * math.sin(a)])
+        if rng.random() < 0.5:
+            d, s = rng.uniform(-math.pi, math.pi), np.linspace(-0.5, 0.5, 30)
+            parts.append(centre + np.column_stack((s * math.cos(d), s * math.sin(d))))
+        else:
+            parts.append(centre + rng.normal(0.0, 0.1, size=(rng.integers(3, 30), 2)))
+    return np.vstack(parts).tolist()
+
+
+def test_what_the_field_lets_through_it_lets_through_again():
+    """On a limit what a command is over by is floating-point noise: it passes untouched."""
+    rng = np.random.default_rng(11)
+    fields = (FIELD, ProtectiveField(ROBOT, FieldConfig()))  # the person's term too
+    limited = 0
+    for _ in range(300):
+        points = close_scene(rng)
+        cmd = Command(rng.uniform(-0.3, 0.8), rng.uniform(-0.4, 0.4), rng.uniform(-1.0, 1.0))
+        for field in fields:
+            first = field.limit(cmd, ok(points), remote=False)
+            limited += first.state is FieldState.LIMITED
+            again = field.limit(first.command, ok(points), remote=False)
+            assert again.state is FieldState.CLEAR and again.command == first.command
+    assert limited > 50
