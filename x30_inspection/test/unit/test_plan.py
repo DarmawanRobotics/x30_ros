@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
+from x30_inspection.core import plan as plans
 from x30_inspection.core.plan import (
     Plan,
     PlanError,
@@ -139,3 +140,17 @@ def test_new_point_named_after_an_existing_one_is_refused():
     plan = parse(yaml.safe_load(TEXT))
     with pytest.raises(PlanError, match='exists'):
         add_target(plan, '', 99.0, 0.0, 1.5, Target('bay1', 0, 0))
+
+
+def test_netras_plan_is_inspected_beside_the_sites_own(tmp_path):
+    site = tmp_path / 'gardu'
+    (site / 'netra').mkdir(parents=True)
+    own = {'points': [{'name': 'bay1', 'x': 1.0, 'y': 2.0, 'targets': []}]}
+    netra = {'points': [{'name': 'bay1', 'x': 9.0, 'y': 9.0, 'targets': []},
+                        {'name': 'netra_stop0', 'x': 5.0, 'y': 0.0, 'targets': []}]}  # fmt: skip
+    (site / 'inspection.yaml').write_text(yaml.safe_dump(own))
+    (site / 'netra' / 'inspection.yaml').write_text(yaml.safe_dump(netra))
+    plan = plans.load_site(str(tmp_path), 'gardu')
+    assert [p.name for p in plan.points] == ['bay1', 'netra_stop0']  # the site's own name wins
+    assert plan.find('bay1').x == 1.0
+    assert plans.load_site(str(tmp_path), 'other').points == ()

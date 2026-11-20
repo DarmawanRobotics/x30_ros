@@ -87,15 +87,16 @@ at mounting position A, (47.15, −1, 117) at B, (7.15, −1, 117) at C) rather 
 | `env navigation\|perception` | the exports of that host: `ROS_MASTER_URI=http://192.168.1.106:11311`, its `ROS_IP`, no `ROS_HOSTNAME`, `PYTHONNOUSERSITE=1`, and `X30_PYTHON` when NeuPAN's venv is there; `eval` it |
 | `check` | this host's role, `ROS_IP` one of its addresses, the other host answering ping, NTP, the master answering (on the navigation host with the systemd service running it), every registered node reachable from here (a name that does not resolve: `/etc/hosts`), the other host's clock against this one's (below); on the navigation host Deep Robotics' autonomy off, on the perception host the cameras' ports (HIKMICRO 80 and 554, Hertzino 80 and 443, at the addresses of `X30_LAUNCH_ARGS` or `/etc/x30/perception.env`) |
 | `start navigation\|perception` | what the service runs: ROS and the workspace sourced, the network set (the service's settings win), ROS's logs pruned to `X30_ROS_LOG_MB` (2048, `x30_logs.py`: the oldest runs first, the newest 5 kept), each node's JSON lines log in `X30_LOG_DIR` (`~/x30/logs`; empty: none), on the navigation host `dr_services.sh off` until Deep Robotics' boot settled, then the host's launch file with `X30_LAUNCH_ARGS` under `x30_watchdog.py`, waiting for Deep Robotics' master (never one of its own: it would go with every restart, and Deep Robotics' LiDAR and IMU drivers with it); on the navigation host the watchdog runs `dr_services.sh sweep` every 30 s, so what one of Deep Robotics' services starts again late goes again (the journal names it) |
-| `install navigation\|perception` | with sudo: `/etc/x30/<role>.env` (kept when it exists; mode 600, the cameras' passwords and the handheld's token go there) and `/etc/systemd/system/x30-<role>.service` (`Type=notify`, `WatchdogSec=60`, `Restart=on-failure`, never given up on: `StartLimitIntervalSec=0`), enabled; the navigation host's starts after Deep Robotics' services (`jy_*`) and the one running the ROS master, as found (run it with the robot up) |
+| `install navigation\|perception` | with sudo: `/etc/x30/<role>.env` (kept when it exists; mode 600, the cameras' passwords, the handheld's token and NETRA's go there) and `/etc/systemd/system/x30-<role>.service` (`Type=notify`, `WatchdogSec=60`, `Restart=on-failure`, never given up on: `StartLimitIntervalSec=0`), enabled; the navigation host's starts after Deep Robotics' services (`jy_*`) and the one running the ROS master, as found (run it with the robot up) |
 
 `X30_NAV_IP` and `X30_PER_IP` change the two addresses. The service's settings:
 
 ```bash
 # /etc/x30/navigation.env (shell words: a quoted value stays one argument)
-X30_LAUNCH_ARGS="site:=gardu controller:=neupan lidar_pose:='0.3 0 0.1 0 0 0'"
+X30_LAUNCH_ARGS="site:=gardu controller:=neupan lidar_pose:='0.3 0 0.1 0 0 0' netra_url:=https://netra.example.com netra_robot_id:=x30-01"
 X30_PYTHON=/home/ysc/x30_ws/neupan/bin/python
 X30_TELEOP_TOKEN=...            # the handheld's shared secret (x30_bridge, the same in the app)
+X30_NETRA_TOKEN=...             # NETRA's robot token (x30_fleet; NETRA: Robots, the robot's token)
 # /etc/x30/perception.env
 X30_LAUNCH_ARGS=""
 HIKMICRO_PASSWORD=...

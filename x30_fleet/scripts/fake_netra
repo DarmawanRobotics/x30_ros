@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""fake_netra: see x30_fleet.tools.fake_netra."""
+
+from x30_fleet.tools.fake_netra import main
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,29 @@
+<launch>
+  <!--
+    fleet_uplink_node (x30_fleet): the X30 in the NETRA command center, on the navigation host.
+    Its robot token comes from X30_NETRA_TOKEN in the environment, never a parameter.
+      server_url:   NETRA (empty: the file's, spool only)
+      robot_id:     the robot's id in NETRA (empty: the file's)
+      sites_dir:    where NETRA's routes and plans go (empty: the file's)
+      robot_ns:     the driver's namespace (battery, diagnostics)
+      params_file:  parameters on top of config/fleet.yaml
+  -->
+  <arg name="server_url" default=""/>
+  <arg name="robot_id" default=""/>
+  <arg name="sites_dir" default=""/>
+  <arg name="robot_ns" default="x30"/>
+  <arg name="params_file" default=""/>
+  <arg name="respawn" default="true"/>
+  <arg name="output" default="screen"/>
+
+  <node pkg="x30_fleet" type="fleet_uplink_node" name="fleet_uplink_node" output="$(arg output)"
+        respawn="$(arg respawn)" respawn_delay="2">
+    <rosparam command="load" file="$(find x30_fleet)/config/fleet.yaml"/>
+    <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+    <param if="$(eval arg('server_url') != '')" name="server_url" value="$(arg server_url)"/>
+    <param if="$(eval arg('robot_id') != '')" name="robot_id" value="$(arg robot_id)"/>
+    <param if="$(eval arg('sites_dir') != '')" name="sites_dir" value="$(arg sites_dir)"/>
+    <param name="battery_topic" value="/$(arg robot_ns)/battery"/>
+    <param name="driver_diagnostics_topic" value="/$(arg robot_ns)/diagnostics"/>
+  </node>
+</launch>

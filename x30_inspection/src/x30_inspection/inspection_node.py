@@ -92,10 +92,10 @@ class InspectionNode(X30Node):
         return pose.x, pose.y
 
     def plan(self) -> plans.Plan:
-        """Return the plan of the active site (empty without a site)."""
+        """Return the plan of the active site and NETRA's (empty without a site)."""
         if not self.site:
             return plans.Plan()
-        return plans.load(plans.plan_path(self.config.sites_dir, self.site))
+        return plans.load_site(self.config.sites_dir, self.site)
 
     # ---------------------------------------------------------------- inspect
     def srv_inspect(self, _request, response):
@@ -139,7 +139,9 @@ class InspectionNode(X30Node):
         runner.checks.append(AcousticCheck(self.acoustic, cfg.acoustic, self.is_closing))
         result = runner.inspect(point, lambda t: report.evidence_prefix(directory, t.name),
                                 self.is_closing)  # fmt: skip
-        report.write(directory, report.to_dict(result, self.site, here[0], here[1], when))
+        ambient = self.config.thermal.ambient_c
+        record = report.to_dict(result, self.site, here[0], here[1], when, ambient)
+        report.write(directory, record)
         self.prune_reports()
         msg = report_msg(result, self.site, here[0], here[1], directory, self.stamp())
         self.report_pub.publish(msg)

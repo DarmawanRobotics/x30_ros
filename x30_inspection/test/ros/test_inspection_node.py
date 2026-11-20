@@ -139,6 +139,10 @@ def test_inspects_the_point_where_the_robot_stopped(make):
     assert raw['meta'] == {'frame_id': 'thermal_optical', 'target': 'phases'}
     saved = json.loads((folder / 'report.json').read_text())
     assert saved['severity'] == 'critical' and saved['x'] == pytest.approx(1.2)
+    assert saved['ambient_c'] == 30.0 and saved['stamp'] > 0
+    phases = saved['targets'][0]['readings']  # every strip as measured, for NETRA
+    assert [r['region'] for r in phases] == ['strip1', 'strip2', 'strip3']
+    assert phases[1]['max_c'] == pytest.approx(70.0) and phases[0]['max_c'] == pytest.approx(35.0)
     assert (folder.parent / 'findings.csv').read_text().count('\n') == 1 + len(msg.findings)
     assert rig.status.wait_until(lambda s: s.last_point == 'bay1' and s.last_severity == 3, 5.0)
 

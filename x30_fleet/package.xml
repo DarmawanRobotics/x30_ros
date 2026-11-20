@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>x30_fleet</name>
+  <version>0.19.0</version>
+  <description>The X30 in the NETRA command center (robot API v1 of Pashupati, the substation module): telemetry, patrol and stop events and alerts over one WebSocket; NETRA's patrols on the robot's routes with their inspection plan; the substation inspections of x30_inspection and the taught routes uploaded through a spool on disk; NETRA's commands as the stack's services.</description>
+  <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
+  <license>Apache-2.0</license>
+  <url type="repository">https://github.com/DarmawanRobotics/x30_ros</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
+
+  <build_depend>x30_utils</build_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>python3-requests</exec_depend>
+  <exec_depend>python3-websocket</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>x30_bridge</exec_depend>
+  <exec_depend>x30_msgs</exec_depend>
+  <exec_depend>x30_utils</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>roslaunch</test_depend>
+  <test_depend>tf2_ros</test_depend>
+  <test_depend>x30_inspection</test_depend>
+</package>

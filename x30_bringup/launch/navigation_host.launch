@@ -19,6 +19,9 @@
       health, inspection: those layers (on by default)
       bridge:    the handheld's UDP gateway (x30_bridge, on by default): the X30Controller app
                  on the robot's Wi-Fi, its shared secret from X30_TELEOP_TOKEN
+      netra_url, netra_robot_id: the NETRA command center (x30_fleet's uplink, on when
+                 netra_url is set; fleet:=true without it only spools), its token from
+                 X30_NETRA_TOKEN
       odometry_method: fast_lio, or external when another estimator publishes /Odometry
       blackbox: the last hours of status, commands, pose and log in a rolling rosbag
                  (scripts/blackbox): blackbox_dir, blackbox_minutes per split, blackbox_splits
@@ -30,6 +33,9 @@
   <arg name="health" default="true"/>
   <arg name="inspection" default="true"/>
   <arg name="bridge" default="true"/>
+  <arg name="netra_url" default=""/>
+  <arg name="netra_robot_id" default=""/>
+  <arg name="fleet" default="$(eval arg('netra_url') != '')"/>
   <arg name="reports_dir" default=""/>
   <arg name="lidar_frame" default="livox_frame"/>
   <arg name="lidar_pose" default="0 0 0 0 0 0"/>
@@ -55,6 +61,9 @@
     <arg name="lidar_frame" value="$(arg lidar_frame)"/>
     <arg name="lidar_pose" value="$(arg lidar_pose)"/>
     <arg name="bridge" value="$(arg bridge)"/>
+    <arg name="fleet" value="$(arg fleet)"/>
+    <arg name="netra_url" value="$(arg netra_url)"/>
+    <arg name="netra_robot_id" value="$(arg netra_robot_id)"/>
   </include>
 
   <node if="$(arg blackbox)" pkg="x30_bringup" type="blackbox" name="blackbox" respawn="true"
