@@ -3,6 +3,39 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.14.0)
+
+### Added
+- A black box on the navigation host (`navigation_host.launch blackbox:=true`, the default;
+  `scripts/blackbox`): the last 3 h of every layer's status, the commands before and after the
+  control mux, the pose, the battery, the safety scan, the inspection and `/rosout_agg` in a
+  rolling rosbag, 10 min splits in `~/x30/blackbox` (`blackbox_dir`, `blackbox_minutes`,
+  `blackbox_splits`).
+- Report retention (x30_inspection): at start and after every report whole days go, never
+  today's: older than `reports_keep_days` (0: kept), then the oldest while less than
+  `reports_min_free_gb` (6 GB) is free.
+- The service keeps ROS's logs within `X30_ROS_LOG_MB` (2 GB, `tools/x30_logs.py`: the oldest
+  runs first, the newest 5 kept) and writes each node's JSON lines log to `X30_LOG_DIR`
+  (`~/x30/logs`, rotated) by default.
+- The follower's check of the control field compares the turning room too (`field/yaw_margin`).
+
+### Changed
+- The arc check of a turning translation moved from x30_control to `x30_utils.safety`: the
+  field and the follower's guard share it.
+- The follower's `safety/yaw_margin_deg` is 6 (was 5): at least the field's 0.10 rad.
+
+### Fixed
+- The follower's guard was less cautious than the control mux's field, so the mux cut what the
+  follower sent. The guard now checks the turning arc as the field does (a turn that would sweep
+  into a point goes on straight and turns later) and checks what is published: the shaper's
+  ramps never outrun it, a ramp bent toward something goes the guarded way. NeuPAN past a box:
+  35 of 500 commands limited by the field, now none; the pocket of the detour tests, driven
+  through the field: stopped 397 times and stuck in the gap, now through without a cut.
+- systemd stopped restarting a service that failed 5 times in 10 s: `StartLimitIntervalSec=0`.
+- Log floods: localization logged each correction of a tag in view (twice a second), now once a
+  minute per tag; the control mux logged each change of the protective field (dozens a second
+  beside a person), now each state at most once a second.
+
 ## [Unreleased] (0.13.0)
 
 ### Added

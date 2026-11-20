@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>x30_odometry</name>
-  <version>0.13.0</version>
+  <version>0.14.0</version>
   <description>The LiDAR-inertial odometry of the X30 (the ROS Noetic port of dharma_odometry): FAST-LIO2 on the merged Livox LiDARs and the body IMU behind a start gate that waits for a still and level IMU, and a monitor that says when the odometry can no longer be trusted (stale, jumps, restarts, z drift, a tilted start, a speed mismatch with the leg odometry) and how far the robot went.</description>
   <maintainer email="darmawandeveloper@gmail.com">Agus Darmawan</maintainer>
   <license>Apache-2.0</license>
