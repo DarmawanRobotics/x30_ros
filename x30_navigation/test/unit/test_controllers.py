@@ -28,7 +28,15 @@ def make(name, config=None, limits=LIMITS):
 
 
 def test_every_builtin_is_registered():
-    assert CONTROLLERS.names() == ['holonomic', 'lqr', 'mppi', 'pid', 'pure_pursuit', 'stanley']
+    assert CONTROLLERS.names() == [
+        'holonomic',
+        'lqr',
+        'mppi',
+        'neupan',
+        'pid',
+        'pure_pursuit',
+        'stanley',
+    ]
 
 
 @pytest.mark.parametrize('name', ['holonomic', 'lqr', 'mppi', 'pid', 'pure_pursuit', 'stanley'])
@@ -151,3 +159,23 @@ def test_pure_pursuit_steers_toward_the_carrot():
         TrackRequest(route, 2.0, Pose2D(2.0, -0.3, 0.0), 0.4, 0.05)
     )
     assert left.wz > 0.0 and left.vx == pytest.approx(0.4)
+
+
+def test_a_controller_that_avoids_takes_over_from_reactive_not_from_path_shift():
+    from x30_navigation.core.config.follower import FollowerConfig
+    from x30_navigation.core.controllers.holonomic import HolonomicController
+    from x30_navigation.core.follower.tracker import Tracker
+    from x30_utils.robot import RobotProfile
+
+    class Avoiding(HolonomicController):
+        avoids = True
+
+    route = route_of(straight_route(0.0, 10.0))
+    for mode in ('path_shift', 'reactive'):
+        config = FollowerConfig(avoidance_mode=mode)
+        plain = Tracker(route, RobotProfile(), config, make('holonomic'))
+        assert plain.shifting == (mode == 'path_shift')
+        assert plain.reacting == (mode == 'reactive')
+        avoiding = Tracker(route, RobotProfile(), config, Avoiding(None, LIMITS))
+        assert avoiding.shifting == (mode == 'path_shift')  # the side to pass on
+        assert not avoiding.reacting  # its own clearance, no heading biases on top

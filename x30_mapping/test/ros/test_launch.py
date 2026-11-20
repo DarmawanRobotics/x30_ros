@@ -28,6 +28,7 @@ def test_defaults_land_in_each_node():
     assert p['/grid_mapper_node/cloud_topic'] == '/cloud_registered_body'
     assert p['/grid_mapper_node/grid/resolution'] == 0.05
     assert p['/site_manager_node/start_mapping'] is False
+    assert p['/site_manager_node/create_site'] is False
     assert p['/route_recorder_node/min_spacing_m'] == 0.2
     assert not any(f'/{node}/sites_dir' in p for node in NODES)  # the dataclass default
 
@@ -43,3 +44,4 @@ def test_arguments_override_when_set(tmp_path):
     assert p['/site_manager_node/start_mapping'] is True
     assert p['/grid_mapper_node/rate_hz'] == 1.0
     assert p['/grid_mapper_node/cloud_topic'] == '/cloud_registered_body'  # the rest stays
+    assert params('site:=gardu', 'create_site:=true')['/site_manager_node/create_site'] is True

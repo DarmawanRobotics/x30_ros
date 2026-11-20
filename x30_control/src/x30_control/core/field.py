@@ -8,14 +8,13 @@ import math
 
 import numpy as np
 
-from x30_control.core.arc import ArcCheck
 from x30_control.core.command import ZERO, Command, speed_ratio
 from x30_control.core.config import FieldConfig
 from x30_control.core.scan import ScanState, ScanView
 from x30_control.core.separation import separation_speed
 from x30_control.core.sweep import swept_clearance
 from x30_utils.robot import RobotProfile
-from x30_utils.safety import rotation_room, stopping_yaw_rate
+from x30_utils.safety import ArcCheck, rotation_room, stopping_yaw_rate
 
 EPS = 1e-6
 

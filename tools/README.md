@@ -7,6 +7,9 @@ nothing downloaded on the robot.
 |---|---|---|
 | `dr_services.sh status\|off\|on` | the navigation host (192.168.1.106) | Deep Robotics' own localization, navigation, mapping, URDF and bridge off, now and at boot, and back on |
 | `check_deps.sh [--tests] [--gui]` | the robot | what the build and the stack need, checked offline: the apt packages, the sources of x30.repos, the Livox SDK |
+| `install_neupan.sh [--venv DIR] [--wheels DIR]`, `--download DIR`, `--check` | the navigation host | NeuPAN for the `neupan` controller: a venv with PyTorch (CPU), cvxpy and NeuPAN with the patches of [neupan/](neupan) |
+| `x30_host.sh env\|check\|start\|install` | each host | the ROS network of the navigation (192.168.1.106) and the perception host (192.168.1.105), whether they see each other, and each one's launch file by hand or as the service `x30-<role>` |
+| `x30_watchdog.py` | (the service) | the host's roslaunch under systemd's watchdog: restarts it when the master restarts or a critical node stays away |
 | `pack_sources.sh [OUT] [--skip PATH]` | a computer with internet | x30_ros, the repositories of x30.repos and the Livox SDK in one archive (about 5 MB) |
 
 ## Deep Robotics' own autonomy
@@ -74,6 +77,74 @@ at mounting position A, (47.15, −1, 117) at B, (7.15, −1, 117) at C) rather 
 [x30_odometry/config/fast_lio.yaml](../x30_odometry/config/fast_lio.yaml) is minus that position
 (the axes are the body's in both cases). Check it before the first map:
 `rosnode info /yesense_imu_node`, and the frame of `rostopic echo -n 1 /imu/data/header`.
+
+## Two hosts and the watchdog
+
+`x30_host.sh` (x30_bringup README, "Two hosts", has the split and the why):
+
+| | |
+|---|---|
+| `env navigation\|perception` | the exports of that host: `ROS_MASTER_URI=http://192.168.1.106:11311`, its `ROS_IP`, no `ROS_HOSTNAME`, `PYTHONNOUSERSITE=1`, and `X30_PYTHON` when NeuPAN's venv is there; `eval` it |
+| `check` | this host's role, `ROS_IP` one of its addresses, the other host answering ping, NTP, the master answering (on the navigation host with the systemd service running it), every registered node reachable from here (a name that does not resolve: `/etc/hosts`), the other host's clock against this one's (below); on the navigation host Deep Robotics' autonomy off, on the perception host the cameras' ports (HIKMICRO 80 and 554, Hertzino 80 and 443, at the addresses of `X30_LAUNCH_ARGS` or `/etc/x30/perception.env`) |
+| `start navigation\|perception` | what the service runs: ROS and the workspace sourced, the network set (the service's settings win), ROS's logs pruned to `X30_ROS_LOG_MB` (2048, `x30_logs.py`: the oldest runs first, the newest 5 kept), each node's JSON lines log in `X30_LOG_DIR` (`~/x30/logs`; empty: none), on the navigation host `dr_services.sh off` until Deep Robotics' boot settled, then the host's launch file with `X30_LAUNCH_ARGS` under `x30_watchdog.py`, waiting for Deep Robotics' master (never one of its own: it would go with every restart, and Deep Robotics' LiDAR and IMU drivers with it); on the navigation host the watchdog runs `dr_services.sh sweep` every 30 s, so what one of Deep Robotics' services starts again late goes again (the journal names it) |
+| `install navigation\|perception` | with sudo: `/etc/x30/<role>.env` (kept when it exists; mode 600, the cameras' passwords go there) and `/etc/systemd/system/x30-<role>.service` (`Type=notify`, `WatchdogSec=60`, `Restart=on-failure`, never given up on: `StartLimitIntervalSec=0`), enabled; the navigation host's starts after Deep Robotics' services (`jy_*`) and the one running the ROS master, as found (run it with the robot up) |
+
+`X30_NAV_IP` and `X30_PER_IP` change the two addresses. The service's settings:
+
+```bash
+# /etc/x30/navigation.env (shell words: a quoted value stays one argument)
+X30_LAUNCH_ARGS="site:=gardu odometry_only:=true controller:=neupan lidar_pose:='0.3 0 0.1 0 0 0'"
+X30_PYTHON=/home/ysc/x30_ws/neupan/bin/python
+# /etc/x30/perception.env
+X30_LAUNCH_ARGS=""
+HIKMICRO_PASSWORD=...
+HERTZINO_PASSWORD=...
+```
+
+`x30_watchdog.py [--critical NODE]... [--grace 45] [--startup 240] [--period 5] -- roslaunch ...`
+runs the launch and tells systemd READY once the master and the critical nodes answer, then
+pings `WATCHDOG=1` with a status line (`systemctl status x30-navigation`) while they do. It ends
+with an error, for systemd to restart the service, when the master restarted (`/run_id`
+changed), when the master or a critical node stays away longer than the grace, when the start
+takes longer than `--startup`, or when roslaunch exits; a hung watchdog stops pinging and
+systemd restarts it after 60 s. Stopping the service stops roslaunch with SIGINT first.
+`--sweep CMD [--sweep-sec 30]` runs a command beside the stack and logs what it says (the same
+output once).
+
+The clock row takes the stamps of a small topic the other host publishes (`/x30/odom` from the
+navigation host, the cameras' state from the perception host) against this host's clock when
+they arrive: `in step` within 0.1 s, else how far apart. Nothing in x30_ros compares one host's
+stamps with the other's clock (the inspection calls the camera drivers' services), so a skew
+breaks no node; logs, reports and bags of the two hosts disagree by it. Without internet the
+navigation host can be the perception host's clock: `chrony` serving the robot's network on
+the navigation host (`allow 192.168.1.0/24`, `local stratum 10`) and following it on the
+perception host (`server 192.168.1.106 iburst`), or once after boot
+`sudo date -s "$(ssh ysc@192.168.1.106 date -Ins)"` on the perception host.
+
+## NeuPAN
+
+`install_neupan.sh` puts NeuPAN in a venv on the navigation host, `~/x30_ws/neupan`: the venv
+sees the system's and ROS's packages, PyTorch comes for the CPU only (about 200 MB, no CUDA),
+cvxpy, cvxpylayers and the solvers at versions that still run on Python 3.8, and NeuPAN is
+built from its `py38` branch at a pinned commit with the patches of [neupan/](neupan) (the
+holonomic kinematics). It ends with `--check`: the versions and `NeuPAN with the holonomic
+kinematics: ok`. The path follower runs with the venv's python when `X30_PYTHON` points at it
+(navigation.launch's `launch-prefix`), so the rest of the stack never loads PyTorch.
+
+```bash
+bash tools/install_neupan.sh                       # on the navigation host, with internet
+echo 'export X30_PYTHON=~/x30_ws/neupan/bin/python' >> ~/.bashrc
+bash tools/install_neupan.sh --download ~/wheels   # or: on a computer with internet ...
+bash tools/install_neupan.sh --wheels ~/wheels     # ... then on the robot, no internet
+```
+
+`--download` fetches every wheel for Python 3.8 on x86_64 (any OS with pip and git) and builds
+NeuPAN's own. A `~/.local` setuptools or numpy never leaks in (`PYTHONNOUSERSITE=1`, as for
+catkin). Without `python3-venv` it says so (`sudo apt install python3-venv`).
+
+How fast NeuPAN solves on the navigation host, before the robot walks with it (a few seconds,
+the robot standing still): `$X30_PYTHON $(rospack find x30_navigation)/scripts/bench_neupan`
+(x30_navigation README, "NeuPAN").
 
 ## Robot without internet
 

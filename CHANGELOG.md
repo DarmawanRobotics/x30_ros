@@ -3,6 +3,121 @@
 All notable changes to x30_ros. Format: [Keep a Changelog](https://keepachangelog.com),
 versions follow [SemVer](https://semver.org).
 
+## [Unreleased] (0.14.0)
+
+### Added
+- A black box on the navigation host (`navigation_host.launch blackbox:=true`, the default;
+  `scripts/blackbox`): the last 3 h of every layer's status, the commands before and after the
+  control mux, the pose, the battery, the safety scan, the inspection and `/rosout_agg` in a
+  rolling rosbag, 10 min splits in `~/x30/blackbox` (`blackbox_dir`, `blackbox_minutes`,
+  `blackbox_splits`).
+- Report retention (x30_inspection): at start and after every report whole days go, never
+  today's: older than `reports_keep_days` (0: kept), then the oldest while less than
+  `reports_min_free_gb` (6 GB) is free.
+- The service keeps ROS's logs within `X30_ROS_LOG_MB` (2 GB, `tools/x30_logs.py`: the oldest
+  runs first, the newest 5 kept) and writes each node's JSON lines log to `X30_LOG_DIR`
+  (`~/x30/logs`, rotated) by default.
+- The follower's check of the control field compares the turning room too (`field/yaw_margin`).
+
+### Changed
+- The arc check of a turning translation moved from x30_control to `x30_utils.safety`: the
+  field and the follower's guard share it.
+- The follower's `safety/yaw_margin_deg` is 6 (was 5): at least the field's 0.10 rad.
+
+### Fixed
+- The follower's guard was less cautious than the control mux's field, so the mux cut what the
+  follower sent. The guard now checks the turning arc as the field does (a turn that would sweep
+  into a point goes on straight and turns later) and checks what is published: the shaper's
+  ramps never outrun it, a ramp bent toward something goes the guarded way. NeuPAN past a box:
+  35 of 500 commands limited by the field, now none; the pocket of the detour tests, driven
+  through the field: stopped 397 times and stuck in the gap, now through without a cut.
+- systemd stopped restarting a service that failed 5 times in 10 s: `StartLimitIntervalSec=0`.
+- Log floods: localization logged each correction of a tag in view (twice a second), now once a
+  minute per tag; the control mux logged each change of the protective field (dozens a second
+  beside a person), now each state at most once a second.
+
+## [Unreleased] (0.13.0)
+
+### Added
+- Two hosts (x30_bringup): `navigation_host.launch` for the navigation host (192.168.1.106: the
+  driver, control, the LiDAR scans, FAST-LIO, localization, mapping, navigation, health, the
+  inspection) and `perception_host.launch` for the perception host (192.168.1.105: the
+  inspection cameras), on the navigation host's ROS master.
+- `tools/x30_host.sh env|check|start|install`: each host's ROS network, a check that the two see
+  each other (master, ping, every node's address, clock), each host's launch file by hand or as
+  the systemd service `x30-<role>` with its settings in `/etc/x30/<role>.env`; on the navigation
+  host Deep Robotics' autonomy goes off until its boot settled.
+- `tools/x30_watchdog.py`: the service's main process, under systemd's watchdog; it restarts the
+  host's stack when the master restarted, the master or a critical node (driver, control mux,
+  LiDAR scans, path follower) stays away past a grace, the start never comes up or roslaunch
+  exits.
+- `tools/check_deps.sh --perception`: the perception host's camera drivers only, with a build
+  line for them; on the navigation host a row for NeuPAN's venv.
+- `tools/dr_services.sh sweep`: what of Deep Robotics' autonomy runs again, stopped, one line
+  each, without its kill scripts. The navigation host's watchdog runs it every 30 s
+  (`x30_watchdog.py --sweep`), so what one of Deep Robotics' services starts again late goes
+  again and is named in the journal.
+- `x30_host.sh install navigation` orders the service after Deep Robotics' services (`jy_*`)
+  and the one running the ROS master, as found on the robot.
+- `x30_host.sh check` (its ROS rows in `tools/x30_check.py`): how far the other host's clock is
+  from this one's (the stamps of a small topic it publishes on arrival), the systemd service
+  running the master and Deep Robotics' autonomy on the navigation host, the cameras' ports on
+  the perception host (at the addresses of the service's launch arguments).
+
+## [Unreleased] (0.12.0)
+
+### Added
+- Path follower controller `neupan` (x30_navigation): [NeuPAN](https://github.com/hanruihua/NeuPAN)
+  tracks the route ahead and keeps the footprint off the safety scan's points in one MPC,
+  planning forward and sideways speed and the yaw rate (the `holonomic` kinematics patched into
+  NeuPAN for the X30, `tools/neupan`; `diff` for a robot that cannot strafe), within the robot
+  profile's speeds and accelerations; a solve every 0.1 s. Reactive avoidance stands by for it,
+  path shift still picks the side; NeuPAN or its patches missing: the follower says how to
+  install them. `controller:=` for navigation.launch and bringup.launch, `python:=` (default
+  `$X30_PYTHON`) for the follower's interpreter.
+- DUNE for the X30's footprint (`models/dune_x30.pth`, 1.5 mm mean distance error, at most 8 mm
+  too far) with its record (`dune_x30.json`: footprint, training, errors); the controller
+  refuses a model of another footprint or points beyond its training range. `train_dune`
+  trains one for any robot profile (`--measure` re-measures one).
+- `tools/install_neupan.sh`: NeuPAN in a venv beside ROS (PyTorch for the CPU, cvxpy,
+  cvxpylayers, NeuPAN's py38 branch with the X30 patches), online or from wheels `--download`
+  fetched elsewhere; `--check`.
+- Path controllers get the footprint and the accelerations of the robot profile
+  (`ControllerLimits`); a controller that keeps its own clearance (`avoids`) turns reactive
+  avoidance off.
+- `stack_neupan.test` (registered when `X30_PYTHON` is set) and CI's `neupan` job: NeuPAN
+  installed as on the robot, its unit tests and the patrol loop around a box on x30_sim.
+- NeuPAN's latest solve time in `navigation/status` (`| neupan 23 ms |`); a warning from the
+  follower (every 30 s) while more than one solve in ten of the last 50 overruns the step.
+- `bench_neupan` (x30_navigation): NeuPAN's solves timed on this computer, the follower's
+  controller from the robot profile and navigation.yaml on an open route and in a corridor past
+  a box, the robot standing still; exit 1 when the slow ones overrun the step. CI's `neupan` job
+  runs it on the runner.
+
+### Fixed
+- `X30Node`: unknown parameters are looked for once the node is built, not 0.5 s after it
+  started: a slow constructor (the path follower with NeuPAN) no longer gets its own, still
+  being declared, reported as typos.
+
+## [Unreleased] (0.11.0)
+
+### Added
+- `odometry_only:=true` (x30_bringup): navigation without a map, like HotDog and Pashupati.
+  FAST-LIO's start is the map origin (localization's `assume_start_origin`, the state kept
+  `LOCALIZED` while only tags correct the drift), the launch site is created without a map
+  (x30_mapping's `create_site`, also a mapping.launch argument, exclusive with
+  `start_mapping`), routes are taught and repeated in that frame; with `sim` nothing is drawn
+  from the world and the simulator sends no `/initialpose`. Refused without `localization`.
+- `stack_odometry.test`: on x30_sim, a route taught on the stick without a map and repeated by
+  the follower to within 0.15 m of its stop point.
+
+### Fixed
+- `planner_node`: the empty `/map` of a site without a map is no `map not usable` error.
+- `route_recorder_node`: no `no fresh map->base TF` warning at the first `route/start` while its
+  TF listener fills.
+- The sim stack tests keep what the nodes remember (site, last route, trip) in their run's
+  directory, not in `~/.x30`: parallel and repeated runs no longer share it.
+
 ## [Unreleased] (0.10.0)
 
 ### Added

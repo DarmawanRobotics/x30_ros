@@ -201,6 +201,20 @@ def test_dry_run_changes_nothing(jy):
     assert log.read_text() == '' and nav.poll() is None
 
 
+def test_sweep_stops_what_came_back_quietly_and_never_runs_their_scripts(jy):
+    """The watchdog's sweep while x30_ros runs: a kill_nav.sh may stop processes by name."""
+    root, log, spawn = jy
+    assert services(root, 'sweep').stdout == ''  # nothing back: nothing said
+    nav, driver = spawn('nav/bin/move_base'), spawn('drivers/livox_lidar_publisher2')
+    out = services(root, 'sweep')
+    assert out.returncode == 0, out.stdout + out.stderr
+    lines = out.stdout.splitlines()
+    assert len(lines) == 1 and lines[0].startswith(f'stop {nav.pid} {root}/nav/'), lines
+    assert wait_until(lambda: nav.poll() is not None) and driver.poll() is None
+    assert log.read_text() == ''  # no kill_nav.sh, no kill_mapping.sh
+    assert (root / 'system' / 'conf' / 'autorun_slam').read_text() == 'true\n'  # off's to set
+
+
 def test_elsewhere_or_unknown_commands_are_refused(tmp_path):
     out = services(tmp_path / 'nowhere', 'status')
     assert out.returncode == 1 and 'run this on the navigation host' in out.stdout
@@ -295,6 +309,31 @@ def test_check_deps_builds_past_a_user_site_that_breaks_setuptools(system, tmp_p
     assert out.returncode == 0, out.stdout
     assert re.search(r'python\s+WARN\s+setuptools in .*user.* breaks catkin', out.stdout)
     assert 'everything there: PYTHONNOUSERSITE=1 catkin_make' in out.stdout
+
+
+def test_check_deps_for_the_perception_host_checks_its_camera_drivers_only(system):
+    src, env, installed, sdk = system
+    sdk.unlink()  # no FAST-LIO there: neither the SDK nor its sources
+    shutil.rmtree(src / 'fast_lio')
+    shutil.rmtree(src / 'livox_ros_driver')
+    out = run('check_deps.sh', '--perception', '--src', str(src), env=env)
+    assert out.returncode == 0, out.stdout
+    assert 'of the perception host' in out.stdout and 'livox' not in out.stdout
+    assert 'neupan' not in out.stdout
+    whitelist = 'x30_utils;x30_bringup;hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
+    assert f"-DCATKIN_WHITELIST_PACKAGES='{whitelist}'" in out.stdout
+    script = TOOLS / 'check_deps.sh'
+    assert set(array(script, 'PERCEPTION_BUILD')) <= set(array(script, 'BUILD'))
+    installed.write_text(installed.read_text().replace('libtinyxml2-dev\n', ''))
+    missing = run('check_deps.sh', '--perception', '--src', str(src), env=env)
+    assert missing.returncode == 1 and 'sudo apt install -y libtinyxml2-dev' in missing.stdout
+
+
+def test_check_deps_tells_whether_neupan_is_there(system):
+    src, env, _, _ = system
+    out = run('check_deps.sh', '--src', str(src), env=env)
+    assert re.search(r'neupan\s+--\s+no .*/neupan: for controller neupan', out.stdout)
+    assert out.returncode == 0  # optional
 
 
 def test_check_deps_adds_the_test_packages_when_asked(system):

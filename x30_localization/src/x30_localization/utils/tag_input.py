@@ -98,7 +98,12 @@ class TagInput:
                 samples = loc.on_tag(measurement, Pose2D.from_matrix(m_odom_base), node.now())
                 node.send(samples)
             if samples:
-                node.log.info('map->odom from a tag', tag=frame, auto_start=not was)
+                # a tag in view corrects about twice a second: a start is always logged (its
+                # 1 us throttle starts the window), a correction once a minute per tag
+                node.log.info(
+                    'map->odom from a tag', tag=frame, auto_start=not was,
+                    throttle=60.0 if was else 1e-6, key=f'tag {frame}',
+                )  # fmt: skip
                 node.publish_status()
             elif 'rejected' in loc.message:
                 node.log.warning(loc.message, throttle=5.0)

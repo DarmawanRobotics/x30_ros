@@ -169,6 +169,9 @@ class SiteConfig:
     sites_dir: str = param(SITES_DIR, live=False, doc='one directory per site')
     site: str = param('', live=False, doc='site loaded at start; empty: the one of the last run')
     state_file: str = param('~/.x30/site', live=False, doc='remembers the active site')
+    create_site: bool = param(
+        False, live=False, doc='create `site` at start when missing: no map, routes and tags'
+    )
     start_mapping: bool = param(
         False, live=False, doc='map `site` at start when it is a new site (mapping mode)'
     )
@@ -178,6 +181,12 @@ class SiteConfig:
     refresh_sec: float = param(
         2.0, min=0.5, max=60.0, unit='s', live=False, doc='site/status refresh (tags, routes)'
     )
+
+    def validate(self) -> list[str]:
+        """Return cross-field problems."""
+        if self.create_site and self.start_mapping:
+            return ['create_site (odometry only) and start_mapping (mapping mode): one of them']
+        return []
 
 
 @dataclass(frozen=True)

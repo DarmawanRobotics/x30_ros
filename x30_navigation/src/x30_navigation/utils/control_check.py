@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import rospy
 
-FIELD_PARAMETERS = ('field/lateral_margin', 'field/human_speed', 'field/margin')
+FIELD_PARAMETERS = (
+    'field/lateral_margin',
+    'field/human_speed',
+    'field/margin',
+    'field/yaw_margin',
+)
 POLL_SEC = 5.0
 
 
@@ -34,7 +39,7 @@ class ControlFieldCheck:
         if values[0] is None:
             return
         self.timer.shutdown()
-        problems = self.check(values[0], values[1] or 0.0, values[2] or 0.0)
+        problems = self.check(values[0], *(value or 0.0 for value in values[1:]))
         for problem in problems:
             self.node.log.error(self.problem, detail=problem)
         if not problems:

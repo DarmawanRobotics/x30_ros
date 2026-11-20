@@ -35,14 +35,21 @@ class Command:
         return Command(self.vx * factor, self.vy * factor, self.wz)
 
 
+DEFAULT_FOOTPRINT = ((0.4, 0.28), (-0.4, 0.28), (-0.4, -0.28), (0.4, -0.28))
+"""The robot profile's default footprint corners (m, base_link), counter-clockwise."""
+
+
 @dataclass(frozen=True)
 class ControllerLimits:
-    """What the robot can do, from the robot profile, and the control period."""
+    """What the robot can do and the body it moves, from the robot profile; the control period."""
 
     max_vx: float = 0.8
     max_vy: float = 0.4
     max_wz: float = 1.0
     period_sec: float = 0.05
+    max_accel: float = 0.5
+    max_yaw_accel: float = 1.5
+    footprint: tuple = DEFAULT_FOOTPRINT
 
 
 @dataclass(frozen=True)
@@ -69,11 +76,15 @@ class PathController(ABC):
 
     Config: ClassVar[type] = NoConfig
     strafes: ClassVar[bool] = False
+    avoids: ClassVar[bool] = False
+    """True: the controller keeps its own clearance from the obstacle points, so reactive
+    avoidance stands by; path shift still picks the side it passes on."""
 
     def __init__(self, config=None, limits: ControllerLimits | None = None):
         self.config = config if config is not None else self.Config()
         self.limits = limits or ControllerLimits()
         self.debug: dict = {}
+        self.warning = ''  # a standing problem the follower logs (solves too slow), '' when none
 
     def reset(self):
         """Forget internal state (new route, restart)."""

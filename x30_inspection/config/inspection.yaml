@@ -4,6 +4,8 @@
 enabled: true
 sites_dir: ~/x30/map          # the sites of x30_mapping and x30_navigation
 reports_dir: ~/x30/reports    # <YYYYMMDD>/<HHMMSS>_<point>/report.json and the images
+reports_keep_days: 0          # days kept (0: until the disk needs room)
+reports_min_free_gb: 6.0      # GB: the oldest days go while less is free (0: never)
 match_radius_m: 1.5           # a stop this close to an inspection point inspects it
 max_duration_sec: 150.0       # one point (the follower's hooks/inspection_timeout_sec: more)
 camera: # the HIKMICRO PTZ camera (hikmicro_driver)

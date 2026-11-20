@@ -179,6 +179,18 @@ def test_cancel_is_not_blocked_by_a_slow_send(rig):
     assert r.status.wait_until(lambda m: m.state == P.CANCELLED, 2.0), r.last()
 
 
+def test_a_site_without_a_map_leaves_nothing_to_plan_on(rig):
+    """The empty /map of a site without one (odometry only): go_to refused until a map comes."""
+    r = rig()
+    r.map_pub.publish(OccupancyGrid())  # what site_manager_node sends for such a site
+    assert wait_for(lambda: r.planner.grid is None, 5.0)
+    answer = call(GoTo, 'planner/go_to', x=8.0, y=4.0, yaw=0.0)
+    assert not answer.success and 'no map' in answer.message
+    assert not r.follower.calls
+    r.map_pub.publish(room_map())
+    assert wait_for(lambda: r.planner.grid is not None, 5.0)
+
+
 def test_go_to_waits_for_the_robot_pose(rig):
     """go_to right after LOCALIZED: the pose comes late; services and status keep running."""
     r = rig(hidden=True)

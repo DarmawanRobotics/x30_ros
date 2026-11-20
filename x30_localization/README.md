@@ -57,7 +57,7 @@ Frames and `base_height` come from the robot profile (`robot/`). Defaults in
 | `tags_file` | `""` | tags file at start (`~` and `$VAR` expanded) |
 | `lio_odom_frame`, `lio_body_frame`, `imu_frame` | `camera_init`, `body`, `imu_link` | the bridge |
 | `publish_hz`, `pose_hz` | `20`, `10` | `map -> odom`, `localization/pose` |
-| `assume_start_origin` | `false` | the odometry origin is the map origin at start |
+| `assume_start_origin` | `false` | the odometry origin is the map origin once the bridge is up (x30_bringup's `odometry_only`) |
 | `estimator/sigma_xy_per_sqrt_m` | `0.03` | drift per metre travelled (not per second) |
 | `estimator/sigma_yaw_deg_per_sqrt_m`, `..._per_sqrt_rad` | `0.1`, `0.5` | heading drift per metre and per radian turned |
 | `estimator/gate_confidence` | `0.99` | chi-square gate of automatic corrections (3 dof) |

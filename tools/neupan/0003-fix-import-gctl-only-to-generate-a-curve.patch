@@ -1,0 +1,55 @@
+From 8539e8e2a95d5574798748b70584db6189cf8b30 Mon Sep 17 00:00:00 2001
+From: Agus Darmawan <99527506+agus-darmawan@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 01:56:08 +0700
+Subject: [PATCH 3/3] fix: import gctl only to generate a curve
+
+---
+ neupan/blocks/initial_path.py | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/neupan/blocks/initial_path.py b/neupan/blocks/initial_path.py
+index f523c42..a9af873 100644
+--- a/neupan/blocks/initial_path.py
++++ b/neupan/blocks/initial_path.py
+@@ -21,7 +21,6 @@ along with NeuPAN planner. If not, see <https://www.gnu.org/licenses/>.
+ 
+ import numpy as np
+ from math import tan, inf, cos, sin, sqrt
+-from gctl import curve_generator
+ from neupan.util import WrapToPi, distance
+ import math
+ 
+@@ -59,7 +58,7 @@ class InitialPath:
+         self.arrive_index_threshold = kwargs.get("arrive_index_threshold", 1)
+         self.arrive_flag = False
+ 
+-        self.cg = curve_generator()
++        self._cg = None  # gctl, imported when a curve is generated (it imports tkinter)
+         # initial path and gear
+         self.initial_path = None
+ 
+@@ -459,6 +458,21 @@ class InitialPath:
+ 
+         return next_state
+ 
++    @property
++    def cg(self):
++
++        '''
++        the curve generator of gctl, imported on first use: a path given as points
++        (set_initial_path) never needs it, nor its tkinter and matplotlib
++        '''
++
++        if self._cg is None:
++            from gctl import curve_generator
++
++            self._cg = curve_generator()
++
++        return self._cg
++
+     @property
+     def cur_waypoints(self):
+         return self.waypoints
+-- 
+2.43.0
+

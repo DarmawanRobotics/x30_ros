@@ -1,0 +1,57 @@
+<launch>
+  <!--
+    The navigation host (192.168.1.106, the intelligent controller on the back): everything that
+    drives or guards the robot, next to the LiDAR driver and the robot's ROS master (Deep
+    Robotics' roscore, kept by tools/dr_services.sh; the perception host's nodes join it). That
+    is bringup.launch with the driver (the motion host reports to this host's UDP 43897), the
+    control mux, the LiDAR scans of the protective field, FAST-LIO, localization, mapping,
+    navigation, health and the inspection (its sites and reports live here; its cameras run on
+    the perception host: perception_host.launch). Network: ROS_IP=192.168.1.106
+    (tools/x30_host.sh env navigation).
+      site, odometry_only, sites_dir, controller, reports_dir, lidar_frame, lidar_pose:
+                 bringup.launch's
+      mapping, health, inspection: those layers (on by default)
+      odometry_method: fast_lio, or external when another estimator publishes /Odometry
+      blackbox: the last hours of status, commands, pose and log in a rolling rosbag
+                 (scripts/blackbox): blackbox_dir, blackbox_minutes per split, blackbox_splits
+                 kept (3 h, about 0.5 GB)
+  -->
+  <arg name="site" default=""/>
+  <arg name="odometry_only" default="false"/>
+  <arg name="sites_dir" default=""/>
+  <arg name="controller" default=""/>
+  <arg name="mapping" default="true"/>
+  <arg name="health" default="true"/>
+  <arg name="inspection" default="true"/>
+  <arg name="reports_dir" default=""/>
+  <arg name="lidar_frame" default="livox_frame"/>
+  <arg name="lidar_pose" default="0 0 0 0 0 0"/>
+  <arg name="odometry_method" default="fast_lio"/>
+  <arg name="blackbox" default="true"/>
+  <arg name="blackbox_dir" default="$(env HOME)/x30/blackbox"/>
+  <arg name="blackbox_minutes" default="10"/>
+  <arg name="blackbox_splits" default="18"/>
+
+  <include file="$(find x30_bringup)/launch/bringup.launch">
+    <arg name="control" value="true"/>
+    <arg name="perception" value="true"/>
+    <arg name="odometry" value="true"/>
+    <arg name="odometry_method" value="$(arg odometry_method)"/>
+    <arg name="localization" value="true"/>
+    <arg name="odometry_only" value="$(arg odometry_only)"/>
+    <arg name="mapping" value="$(arg mapping)"/>
+    <arg name="site" value="$(arg site)"/>
+    <arg name="sites_dir" value="$(arg sites_dir)"/>
+    <arg name="navigation" value="true"/>
+    <arg name="controller" value="$(arg controller)"/>
+    <arg name="health" value="$(arg health)"/>
+    <arg name="inspection" value="$(arg inspection)"/>
+    <arg name="reports_dir" value="$(arg reports_dir)"/>
+    <arg name="lidar_frame" value="$(arg lidar_frame)"/>
+    <arg name="lidar_pose" value="$(arg lidar_pose)"/>
+  </include>
+
+  <node if="$(arg blackbox)" pkg="x30_bringup" type="blackbox" name="blackbox" respawn="true"
+        respawn_delay="10" output="log"
+        args="$(arg blackbox_dir) $(arg blackbox_minutes) $(arg blackbox_splits)"/>
+</launch>

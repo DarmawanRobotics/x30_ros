@@ -127,3 +127,39 @@ def test_a_point_passed_in_the_margin_band_is_held_like_the_field_holds_it():
     assert passing.command.vx > hitting.command.vx + 0.05
     assert SafetyConfig(pass_margin=0.1).check_control(LM, 0.5, 0.15)
     assert not safety.check_control(LM, safety.human_speed, 0.15)
+
+
+def test_a_turn_that_sweeps_into_something_goes_on_straight():
+    """The field's arc check: the corner beside a point turns into it; straight on it passes."""
+    guard = MotionGuard(ROBOT, SafetyConfig())
+    beside = np.array([[FP.front, FP.half_width + 0.06]])
+    assert guard.limit(Command(0.4), beside, False).command == Command(0.4)
+    assert guard.limit(Command(0.0, 0.0, 0.6), beside, False).command.wz == pytest.approx(0.6)
+    turning = guard.limit(Command(0.4, 0.0, 0.6), beside, False)
+    assert turning.command == Command(0.4, 0.0, 0.0) and not turning.stalled
+
+
+def test_a_slowing_ramp_never_outruns_the_guard():
+    guard = MotionGuard(ROBOT, SafetyConfig())
+    ahead = np.array([[FP.front + 0.6, 0.0]])
+    allowed = guard.limit(Command(0.4), ahead, False).command
+    assert allowed.vx < 0.35  # the guard slows the target
+    published = guard.published(Command(0.38), allowed, ahead, False)  # the ramp still at 0.38
+    assert published.vx == pytest.approx(allowed.vx)
+
+
+def test_a_ramp_bent_toward_something_goes_the_guarded_way():
+    """From a standstill the smoothed sideways speed bends the ramp: the guarded way instead."""
+    guard = MotionGuard(ROBOT, SafetyConfig())
+    right_front = np.array([[0.5, -0.5]])
+    guarded = guard.limit(Command(0.4, -0.024), right_front, False).command
+    assert math.hypot(guarded.vx, guarded.vy) > 0.39
+    published = guard.published(Command(0.025, -0.012), guarded, right_front, False)
+    assert math.hypot(published.vx, published.vy) == pytest.approx(math.hypot(0.025, 0.012))
+    assert math.atan2(published.vy, published.vx) == pytest.approx(math.atan2(-0.024, 0.4))
+
+
+def test_the_turning_room_is_at_least_the_fields():
+    """The field keeps 0.10 rad of turning room: a guard keeping less plans turns it stops."""
+    assert SafetyConfig(yaw_margin_deg=5.0).check_control(LM, 0.5, 0.15, 0.10)
+    assert not SafetyConfig().check_control(LM, 0.5, 0.15, 0.10)

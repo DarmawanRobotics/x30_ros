@@ -9,6 +9,10 @@
       odom_topic:    the robot's nav_msgs/Odometry with the body twist (x30_driver)
       sites_dir, route: path_loader_node's, when set
       docking:       start docking_node
+      controller:    the path follower's controller, when set (else navigation.yaml's)
+      dune_checkpoint: the DUNE model of controller neupan (default: the X30's, models/)
+      python:        the path follower's interpreter (default: $X30_PYTHON, else the system's):
+                     the venv of tools/install_neupan.sh for controller neupan
   -->
   <arg name="params_file" default=""/>
   <arg name="robot_params" default=""/>
@@ -17,13 +21,20 @@
   <arg name="sites_dir" default=""/>
   <arg name="route" default=""/>
   <arg name="docking" default="true"/>
+  <arg name="controller" default=""/>
+  <arg name="dune_checkpoint" default="$(find x30_navigation)/models/dune_x30.pth"/>
+  <arg name="python" default="$(optenv X30_PYTHON)"/>
   <arg name="respawn" default="true"/>
   <arg name="output" default="screen"/>
 
   <rosparam if="$(eval arg('robot_params') != '')" command="load" ns="robot"
             file="$(arg robot_params)"/>
   <rosparam command="load" file="$(find x30_navigation)/config/navigation.yaml"/>
+  <!-- before params_file, which may give another model -->
+  <param name="path_follower_node/neupan/dune_checkpoint" value="$(arg dune_checkpoint)"/>
   <rosparam if="$(eval arg('params_file') != '')" command="load" file="$(arg params_file)"/>
+  <param if="$(eval arg('controller') != '')" name="path_follower_node/controller"
+         value="$(arg controller)"/>
   <param if="$(eval arg('sites_dir') != '')" name="path_loader_node/sites_dir"
          value="$(arg sites_dir)"/>
   <param if="$(eval arg('route') != '')" name="path_loader_node/route" value="$(arg route)"/>
@@ -33,7 +44,8 @@
   <node pkg="x30_navigation" type="path_loader_node" name="path_loader_node"
         output="$(arg output)" respawn="$(arg respawn)" respawn_delay="2"/>
   <node pkg="x30_navigation" type="path_follower_node" name="path_follower_node"
-        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="1">
+        output="$(arg output)" respawn="$(arg respawn)" respawn_delay="1"
+        launch-prefix="$(arg python)">
     <remap from="battery" to="$(arg battery_topic)"/>
     <remap from="odom" to="$(arg odom_topic)"/>
   </node>

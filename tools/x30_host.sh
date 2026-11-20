@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+# x30_ros across the X30's two computers: the navigation host (192.168.1.106, the intelligent
+# controller: the robot's ROS master, the driver, control, LiDAR scans, odometry, localization,
+# mapping, navigation, health, inspection) and the perception host (192.168.1.105: the
+# inspection cameras). Sets each one's ROS network, checks that the two see each other, and
+# starts each one's launch file, by hand or as a systemd service (x30_bringup README, "Two
+# hosts").
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+usage: x30_host.sh env navigation|perception      the ROS network of this shell:
+                                                 eval "$(bash tools/x30_host.sh env perception)"
+       x30_host.sh check                          the network, the master, every node, the clocks;
+                                                 Deep Robotics' autonomy (navigation host), the
+                                                 cameras (perception host)
+       x30_host.sh start navigation|perception    the host's launch file (what the service runs)
+       sudo bash x30_host.sh install navigation|perception
+                                                 the service x30-<role>, its settings in
+                                                 /etc/x30/<role>.env
+EOF
+  exit 2
+}
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+NAV_IP=${X30_NAV_IP:-192.168.1.106}
+PER_IP=${X30_PER_IP:-192.168.1.105}
+MASTER_PORT=11311
+ETC=${X30_ETC:-/etc/x30}
+SYSTEMD_DIR=${X30_SYSTEMD_DIR:-/etc/systemd/system}
+SYSTEMCTL=${X30_SYSTEMCTL:-systemctl}
+PROC=${X30_PROC:-/proc}
+SETTLE_SEC=${X30_SETTLE_SEC:-10}
+# the navigation host's nodes that drive and guard the robot: the watchdog restarts the stack
+# when one stays away (a respawn takes seconds)
+CRITICAL=(/x30/x30_driver /control_mux_node /lidar_sector_node /path_follower_node)
+
+say() { printf '%s\n' "$*"; }
+
+role_ip() { # <role>
+  case "$1" in
+    navigation) say "$NAV_IP" ;;
+    perception) say "$PER_IP" ;;
+    *) usage ;;
+  esac
+}
+
+workspace() { # the catkin workspace holding this checkout: <ws>/src/x30_ros/tools
+  (cd "$HERE/../../.." && pwd)
+}
+
+cmd_env() { # <role>
+  local ip
+  ip=$(role_ip "$1")
+  say "export ROS_MASTER_URI=http://$NAV_IP:$MASTER_PORT"
+  say "export ROS_IP=$ip"
+  say "unset ROS_HOSTNAME"
+  say "export PYTHONNOUSERSITE=1"
+  if [ "$1" = navigation ] && [ -x "$(workspace)/neupan/bin/python" ]; then
+    say "export X30_PYTHON=$(workspace)/neupan/bin/python"
+  fi
+}
+
+local_ips() { hostname -I 2>/dev/null || ip -o -4 addr show 2>/dev/null | awk '{print $4}'; }
+
+row() { printf '%-8s %-5s %s\n' "$1" "$2" "$3"; }
+
+dr_row() { # Deep Robotics' autonomy on the navigation host: off, or what of it runs
+  local running
+  [ -d "${JY_COG:-$HOME/jy_cog}" ] || return 0
+  running=$(bash "$HERE/dr_services.sh" sweep --dry-run 2>/dev/null | grep -c '^stop ' || true)
+  if [ "$running" = 0 ]; then
+    row deeprob ok "its autonomy is off"
+  else
+    row deeprob WARN "$running processes of its autonomy run: bash tools/dr_services.sh off"
+  fi
+}
+
+launch_args() { # <role>: X30_LAUNCH_ARGS here, else the service's
+  if [ -n "${X30_LAUNCH_ARGS:-}" ]; then
+    say "$X30_LAUNCH_ARGS"
+  elif [ -r "$ETC/$1.env" ]; then
+    # systemd's quotes around the value, not around one word of it
+    sed -n 's/^X30_LAUNCH_ARGS=//p' "$ETC/$1.env" | tail -n 1 | sed 's/^"\(.*\)"$/\1/'
+  fi
+}
+
+cmd_check() {
+  local ips role='' other problems=0 pid unit='' cameras=()
+  ips=" $(local_ips | tr '\n' ' ') "
+  case "$ips" in
+    *" $NAV_IP "*) role=navigation other=$PER_IP ;;
+    *" $PER_IP "*) role=perception other=$NAV_IP ;;
+  esac
+  if [ -n "$role" ]; then
+    row host ok "the $role host"
+  else
+    row host WARN "neither $NAV_IP nor $PER_IP here: a laptop? (ROS_IP: one of this computer's)"
+    other=$NAV_IP
+  fi
+  if [ -z "${ROS_IP:-}" ]; then
+    row ros_ip MISS "ROS_IP unset: eval \"\$(bash tools/x30_host.sh env ${role:-perception})\""
+    problems=1
+  elif [[ "$ROS_IP" == 127.* ]]; then
+    row ros_ip MISS "ROS_IP $ROS_IP: loopback, the other host cannot reach this one's nodes"
+    problems=1
+  elif [[ "$ips" != *" $ROS_IP "* ]]; then
+    row ros_ip MISS "ROS_IP $ROS_IP is not an address of this computer"
+    problems=1
+  else
+    row ros_ip ok "$ROS_IP"
+  fi
+  if ping -c 1 -W 1 "$other" > /dev/null 2>&1; then
+    row network ok "$other answers"
+  else
+    row network MISS "$other does not answer ping"
+    problems=1
+  fi
+  if command -v timedatectl > /dev/null; then
+    case "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" in
+      yes) row ntp ok "synchronized" ;;
+      *) row ntp WARN "not synchronized: the clock row says how far the hosts are apart" ;;
+    esac
+  fi
+  if [ "$role" = navigation ]; then
+    dr_row
+    pid=$(master_pid)
+    [ -z "$pid" ] || unit=$(unit_of "$pid")
+  elif [ "$role" = perception ]; then
+    cameras=(--cameras --launch-args "$(launch_args perception)")
+  fi
+  python3 "$HERE/x30_check.py" --master "${ROS_MASTER_URI:-http://$NAV_IP:$MASTER_PORT}" \
+    --master-unit "$unit" --other "$other" "${cameras[@]}" || problems=1
+  return "$problems"
+}
+
+settle_dr() { # stop Deep Robotics' autonomy until a round, 30 s after the first, finds none
+  local round out
+  for round in 1 2 3 4 5 6; do
+    out=$(bash "$HERE/dr_services.sh" off 2>&1) || true
+    grep -E '^  (stop|left) ' <<< "$out" || true
+    if [ "$round" -ge 4 ] && ! grep -q '^  stop ' <<< "$out"; then
+      return 0
+    fi
+    [ "$round" -lt 6 ] && sleep "$SETTLE_SEC"
+  done
+}
+
+cmd_start() { # <role>
+  local role=$1 ws args=() setup sweep
+  role_ip "$role" > /dev/null
+  ws=${X30_WS:-$(workspace)}
+  # shellcheck disable=SC1090 # the ROS and workspace setup, sourced as on the robot
+  source "${X30_ROS_SETUP:-/opt/ros/noetic/setup.bash}"
+  setup=$ws/devel/setup.bash
+  [ -f "$setup" ] || setup=$ws/install/setup.bash
+  # shellcheck disable=SC1090
+  source "$setup"
+  eval "$(cmd_env "$role" | grep -v -e ROS_MASTER_URI -e ROS_IP -e X30_PYTHON)"
+  export ROS_MASTER_URI=${ROS_MASTER_URI:-http://$NAV_IP:$MASTER_PORT}
+  export ROS_IP=${ROS_IP:-$(role_ip "$role")}
+  if [ "$role" = navigation ] && [ -z "${X30_PYTHON:-}" ] && [ -x "$ws/neupan/bin/python" ]; then
+    export X30_PYTHON=$ws/neupan/bin/python
+  fi
+  if [ -n "${X30_PYTHON:-}" ] && [ ! -x "$X30_PYTHON" ]; then
+    # the follower's launch-prefix: a missing one would keep the follower from starting at all
+    say "no $X30_PYTHON: the path follower runs with the system's python (no NeuPAN)"
+    unset X30_PYTHON
+  fi
+  # shell words: lidar_pose:='0.3 0 0.1 0 0 0' is one argument
+  mapfile -t args < <(python3 -c 'import shlex, sys; print(*shlex.split(sys.argv[1]), sep="\n")' \
+    "${X30_LAUNCH_ARGS:-}")
+  say "x30_ros, $role host: master $ROS_MASTER_URI, ROS_IP $ROS_IP, ${args[*]:-no arguments}"
+  # 24/7: ROS's logs within a budget at every start; each node's JSON lines log, rotated
+  python3 "$HERE/x30_logs.py" --budget-mb "${X30_ROS_LOG_MB:-2048}" || true
+  export X30_LOG_DIR=${X30_LOG_DIR-$HOME/x30/logs}
+  # the master is Deep Robotics' roscore on the navigation host: wait for it, never start one
+  # with the launch (it would go with every restart, and Deep Robotics' LiDAR and IMU drivers,
+  # registered with it, with it); its restart restarts the stack on both hosts
+  if [ "$role" = navigation ]; then
+    settle_dr
+    # Deep Robotics' autonomy started again later (by a service of its own) goes again
+    printf -v sweep 'bash %q sweep' "$HERE/dr_services.sh"
+    exec python3 "$HERE/x30_watchdog.py" "${CRITICAL[@]/#/--critical=}" --sweep="$sweep" -- \
+      roslaunch --wait x30_bringup navigation_host.launch "${args[@]}"
+  fi
+  exec python3 "$HERE/x30_watchdog.py" -- \
+    roslaunch --wait x30_bringup perception_host.launch "${args[@]}"
+}
+
+env_file() { # <role> <user> <ws>
+  local role=$1 ws=$3
+  say "# x30_ros on the $role host, read by x30-$role.service (tools/x30_host.sh)."
+  say "X30_WS=$ws"
+  say "# arguments of x30_bringup ${role}_host.launch, in quotes, e.g."
+  if [ "$role" = navigation ]; then
+    say "# X30_LAUNCH_ARGS=\"site:=gardu odometry_only:=true controller:=neupan\""
+    say "#   lidar_frame:=livox_frame lidar_pose:='0.3 0 0.1 0 0 0'\""
+  else
+    say "# X30_LAUNCH_ARGS=\"hertzino:=false\""
+  fi
+  say "X30_LAUNCH_ARGS=\"\""
+  say "ROS_MASTER_URI=http://$NAV_IP:$MASTER_PORT"
+  say "ROS_IP=$(role_ip "$role")"
+  say "# logs: each node's JSON lines (default ~/x30/logs, rotated; empty: none), ROS's own"
+  say "# within a budget at every start (MB)"
+  say "# X30_LOG_DIR=/home/$2/x30/logs"
+  say "# X30_ROS_LOG_MB=2048"
+  if [ "$role" = navigation ]; then
+    say "# the NeuPAN venv (tools/install_neupan.sh), for controller:=neupan"
+    if [ -x "$ws/neupan/bin/python" ]; then
+      say "X30_PYTHON=$ws/neupan/bin/python"
+    else
+      say "# X30_PYTHON=$ws/neupan/bin/python"
+    fi
+  else
+    say "# the cameras' passwords: this file is readable by root and $2 only"
+    say "HIKMICRO_PASSWORD="
+    say "HERTZINO_PASSWORD="
+  fi
+}
+
+master_pid() { # the process listening on the master's port here, '' when none (or not seen)
+  command -v ss > /dev/null || return 0
+  ss -H -ltnp "sport = :$MASTER_PORT" 2>/dev/null | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n 1
+}
+
+unit_of() { # <pid>: the systemd service it runs in, '' when none
+  sed -n 's#.*/\([^/]*\.service\)$#\1#p' "$PROC/$1/cgroup" 2>/dev/null | head -n 1
+}
+
+dr_units() { # Deep Robotics' services here and the ROS master's, sorted, on one line
+  local pid
+  {
+    "$SYSTEMCTL" list-unit-files --no-legend 'jy_*.service' 2>/dev/null | awk '{print $1}'
+    pid=$(master_pid)
+    [ -z "$pid" ] || unit_of "$pid"
+  } | awk '/^[^ ]+[.]service$/' | sort -u | tr '\n' ' ' | sed 's/ $//'
+}
+
+unit_file() { # <role> <user> [<units to start after>]
+  local role=$1 after=${3:+ $3}
+  cat <<EOF
+[Unit]
+Description=x30_ros, $role host (x30_bringup ${role}_host.launch)
+Wants=network-online.target
+After=network-online.target$after
+# a robot's stack is never given up on: restarted however often it fails
+StartLimitIntervalSec=0
+
+[Service]
+User=$2
+EnvironmentFile=$ETC/$role.env
+ExecStart=/bin/bash $HERE/x30_host.sh start $role
+# x30_watchdog.py: READY once the master and the critical nodes answer, then a ping every 5 s
+Type=notify
+NotifyAccess=main
+WatchdogSec=60
+TimeoutStartSec=360
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGINT
+TimeoutStopSec=70
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+cmd_install() { # <role>
+  local role=$1 user ws env unit after=''
+  role_ip "$role" > /dev/null
+  if [ "$(id -u)" != 0 ] && [ -z "${X30_ETC:-}" ]; then
+    say "run it with sudo: sudo bash $HERE/x30_host.sh install $role"
+    return 1
+  fi
+  user=${SUDO_USER:-$(id -un)}
+  ws=$(workspace)
+  env=$ETC/$role.env
+  unit=$SYSTEMD_DIR/x30-$role.service
+  mkdir -p "$ETC"
+  if [ -f "$env" ]; then
+    say "kept $env (its settings stay)"
+  else
+    env_file "$role" "$user" "$ws" > "$env"
+    say "wrote $env"
+  fi
+  chmod 600 "$env"
+  chown "$user" "$env" 2>/dev/null || true
+  if [ "$role" = navigation ]; then
+    # after Deep Robotics' own services, the master's among them: what they start is settled
+    # (dr_services.sh off) once they are up
+    after=$(dr_units)
+    if [ -n "$after" ]; then
+      say "starts after $after"
+    else
+      after='jy_roscore.service jy_core.service jy_cog.service'
+      say "no Deep Robotics service found (the master not running?): after $after by name"
+    fi
+  fi
+  unit_file "$role" "$user" "$after" > "$unit"
+  say "wrote $unit"
+  "$SYSTEMCTL" daemon-reload
+  "$SYSTEMCTL" enable "x30-$role.service"
+  say "next: the settings in $env (X30_LAUNCH_ARGS$([ "$role" = perception ] && printf ', the passwords'))"
+  say "then: sudo systemctl start x30-$role; journalctl -u x30-$role -f"
+}
+
+main() {
+  [ $# -ge 1 ] || usage
+  case "$1" in
+    env) [ $# = 2 ] || usage; cmd_env "$2" ;;
+    check) [ $# = 1 ] || usage; cmd_check ;;
+    start) [ $# = 2 ] || usage; cmd_start "$2" ;;
+    install) [ $# = 2 ] || usage; cmd_install "$2" ;;
+    *) usage ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,232 @@
+From aa4f002ce0fe83448f95c9fbb39c4b4cbf9728ba Mon Sep 17 00:00:00 2001
+From: Agus Darmawan <99527506+agus-darmawan@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 00:56:25 +0700
+Subject: [PATCH 1/3] feat: holonomic kinematics, body velocity and yaw rate
+
+---
+ neupan/blocks/initial_path.py | 18 ++++++++++-
+ neupan/blocks/pan.py          |  4 +--
+ neupan/neupan.py              |  8 +++--
+ neupan/robot/robot.py         | 59 ++++++++++++++++++++++++++++++++---
+ 4 files changed, 78 insertions(+), 11 deletions(-)
+
+diff --git a/neupan/blocks/initial_path.py b/neupan/blocks/initial_path.py
+index af310e0..f523c42 100644
+--- a/neupan/blocks/initial_path.py
++++ b/neupan/blocks/initial_path.py
+@@ -68,7 +68,7 @@ class InitialPath:
+     def generate_nom_ref_state(self, state: np.ndarray, cur_vel_array: np.ndarray, ref_speed: float):
+         """
+         state: current state of the robot, shape (3, 1)
+-        cur_vel_array: current velocity array of the robot, shape (2, T)
++        cur_vel_array: current velocity array of the robot, shape (2, T); (3, T) for holonomic
+         """
+         state = state[:3]
+ 
+@@ -396,6 +396,9 @@ class InitialPath:
+         elif self.robot.kinematics == "omni":
+             next_state = self.omni_model(robot_state, vel, sample_time)
+ 
++        elif self.robot.kinematics == "holonomic":
++            next_state = self.holonomic_model(robot_state, vel, sample_time)
++
+         return next_state
+ 
+     def ackermann_model(self, car_state, vel, wheel_base, sample_time):
+@@ -443,6 +446,19 @@ class InitialPath:
+        
+         return next_state
+ 
++    def holonomic_model(self, robot_state, vel, sample_time):
++
++        assert robot_state.shape == (3, 1) and vel.shape == (3, 1)
++
++        phi = robot_state[2, 0]
++        vx, vy, w = vel[0, 0], vel[1, 0], vel[2, 0]
++
++        ds = np.array([[vx * cos(phi) - vy * sin(phi)], [vx * sin(phi) + vy * cos(phi)], [w]])
++
++        next_state = robot_state + ds * sample_time
++
++        return next_state
++
+     @property
+     def cur_waypoints(self):
+         return self.waypoints
+diff --git a/neupan/blocks/pan.py b/neupan/blocks/pan.py
+index ebe1b79..f7c6a88 100644
+--- a/neupan/blocks/pan.py
++++ b/neupan/blocks/pan.py
+@@ -112,14 +112,14 @@ class PAN(torch.nn.Module):
+         """
+         input:
+             - nom_s: nominal state; (3, receding+1) 
+-            - nom_u: nominal control; (2, receding)
++            - nom_u: nominal control; (2, receding), (3, receding) for holonomic
+             - ref_states: reference trajectory; (3, receding+1)
+             - ref_us: reference speed array;  (receding,)
+             - obs_points: (2, number of obs points), point cloud, global coordinate
+             - velocities: (2, number of obs points), velocity of each obs point
+ 
+         output:
+-            - opt_vel: optimal velocity tensor; (2, receding)
++            - opt_vel: optimal velocity tensor; (2, receding), (3, receding) for holonomic
+             - opt_state: optimal state array  (3, receding+1)
+ 
+         process:
+diff --git a/neupan/neupan.py b/neupan/neupan.py
+index 373ebae..8a2e3d9 100644
+--- a/neupan/neupan.py
++++ b/neupan/neupan.py
+@@ -70,8 +70,8 @@ class neupan(torch.nn.Module):
+         self.collision_threshold = kwargs.get("collision_threshold", 0.1)
+ 
+         # initialization
+-        self.cur_vel_array = np.zeros((2, self.T))
+         self.robot = robot(receding, step_time, **robot_kwargs)
++        self.cur_vel_array = np.zeros((self.robot.control_dim, self.T))
+ 
+         self.ipath = InitialPath(
+             receding, step_time, ref_speed, self.robot, **ipath_kwargs
+@@ -107,13 +107,15 @@ class neupan(torch.nn.Module):
+         state: current state of the robot, matrix (3, 1), x, y, theta
+         points: current input obstacle point positions, matrix (2, N), N is the number of obstacle points.
+         velocities: current velocity of each obstacle point, matrix (2, N), N is the number of obstacle points. vx, vy
++
++        return action: diff (v, w), acker (v, steer), omni (vx, vy) in the world frame, holonomic (vx, vy, w) in the robot frame
+         """
+ 
+         assert state.shape[0] >= 3
+ 
+         if self.ipath.check_arrive(state):
+             self.info["arrive"] = True
+-            return np.zeros((2, 1)), self.info
++            return np.zeros((self.robot.control_dim, 1)), self.info
+ 
+         nom_input_np = self.ipath.generate_nom_ref_state(
+             state, self.cur_vel_array, self.ref_speed
+@@ -149,7 +151,7 @@ class neupan(torch.nn.Module):
+ 
+         if self.check_stop():
+             self.info["stop"] = True
+-            return np.zeros((2, 1)), self.info
++            return np.zeros((self.robot.control_dim, 1)), self.info
+         else:
+             self.info["stop"] = False
+ 
+diff --git a/neupan/robot/robot.py b/neupan/robot/robot.py
+index ec826d6..47a7991 100644
+--- a/neupan/robot/robot.py
++++ b/neupan/robot/robot.py
+@@ -57,8 +57,12 @@ class robot:
+         self.L = wheelbase
+ 
+         self.kinematics = kinematics
+-        self.max_speed = np.c_[max_speed] if isinstance(max_speed, list) else max_speed
+-        self.max_acce = np.c_[max_acce] if isinstance(max_acce, list) else max_acce
++        # holonomic: body velocity vx, vy and yaw rate w; the others: two control values
++        self.control_dim = 3 if kinematics == 'holonomic' else 2
++        self.max_speed = self.control_bound(max_speed, 'max_speed')
++        self.max_acce = self.control_bound(max_acce, 'max_acce')
++        # holonomic: weight of the sideways speed, so the robot walks forward unless it pays off
++        self.lateral_weight = kwargs.get("lateral_weight", 1.0)
+ 
+         if kinematics == 'acker':
+             if self.max_speed[1] >= 1.57:
+@@ -70,6 +74,23 @@ class robot:
+ 
+         self.name = kwargs.get("name", self.kinematics + "_robot" + '_default') 
+ 
++    def control_bound(self, value, name):
++
++        '''
++        a bound per control value: (control_dim, 1); the default [inf, inf] fits any kinematics
++        '''
++
++        bound = np.c_[value] if isinstance(value, list) else np.asarray(value, dtype=float)
++        bound = bound.reshape(-1, 1).astype(float)
++
++        if bound.shape[0] != self.control_dim and np.all(np.isinf(bound)):
++            bound = np.full((self.control_dim, 1), inf)
++
++        if bound.shape[0] != self.control_dim:
++            raise ValueError(f"{name} of a {self.kinematics} robot needs {self.control_dim} values, got {bound.shape[0]}")
++
++        return bound
++
+     def define_variable(self, no_obs: bool = False, indep_dis: cp.Variable = None):
+ 
+         """
+@@ -77,7 +98,7 @@ class robot:
+         """
+ 
+         self.indep_s = cp.Variable((3, self.T + 1), name="state")  # t0 - T
+-        self.indep_u = cp.Variable((2, self.T), name="vel")  # t1 - T
++        self.indep_u = cp.Variable((self.control_dim, self.T), name="vel")  # t1 - T
+         
+         indep_list = (
+             [self.indep_s, self.indep_u]
+@@ -102,7 +123,7 @@ class robot:
+         self.para_gamma_b = cp.Parameter((self.T,), name='para_gamma_b')
+ 
+         self.para_A_list = [ cp.Parameter((3, 3), name='para_A_'+str(t)) for t in range(self.T)]
+-        self.para_B_list = [ cp.Parameter((3, 2), name='para_B_'+str(t)) for t in range(self.T)]
++        self.para_B_list = [ cp.Parameter((3, self.control_dim), name='para_B_'+str(t)) for t in range(self.T)]
+         self.para_C_list = [ cp.Parameter((3, 1), name='para_C_'+str(t)) for t in range(self.T)]
+ 
+         return [self.para_s, self.para_gamma_a, self.para_gamma_b] + self.para_A_list + self.para_B_list + self.para_C_list
+@@ -167,6 +188,9 @@ class robot:
+ 
+         C0_cost = diff_s_cost + cp.sum_squares(diff_u)
+ 
++        if self.kinematics == 'holonomic':
++            C0_cost += self.lateral_weight * cp.sum_squares(self.indep_u[1, :])
++
+         return C0_cost
+ 
+     def proximal_cost(self):
+@@ -254,8 +278,10 @@ class robot:
+                 A, B, C = self.linear_diff_model(nom_st, nom_ut, self.dt)
+             elif self.kinematics == 'omni':
+                 A, B, C = self.linear_omni_model(nom_ut, self.dt)
++            elif self.kinematics == 'holonomic':
++                A, B, C = self.linear_holonomic_model(nom_st, nom_ut, self.dt)
+             else:
+-                raise ValueError('kinematics currently only supports acker or diff')
++                raise ValueError('kinematics currently only supports acker, diff, omni or holonomic')
+ 
+             tensor_A_list.append(A)
+             tensor_B_list.append(B)
+@@ -315,6 +341,29 @@ class robot:
+         
+         return to_device(A), to_device(B), to_device(C) 
+ 
++    def linear_holonomic_model(self, nom_state, nom_u, dt):
++
++        '''
++        body velocity (vx, vy) and yaw rate w, linearized at the nominal heading and speeds:
++            x' = vx cos(phi) - vy sin(phi), y' = vx sin(phi) + vy cos(phi), phi' = w
++        '''
++
++        phi = nom_state[2, 0]
++        vx, vy = nom_u[0, 0], nom_u[1, 0]
++
++        dx_dphi = -vx * sin(phi) - vy * cos(phi)
++        dy_dphi = vx * cos(phi) - vy * sin(phi)
++
++        A = torch.Tensor([ [1, 0, dx_dphi * dt], [0, 1, dy_dphi * dt], [0, 0, 1] ])
++
++        B = torch.Tensor([ [cos(phi) * dt, -sin(phi) * dt, 0], [sin(phi) * dt, cos(phi) * dt, 0],
++                        [ 0, 0, dt ] ])
++
++        C = torch.Tensor([ [ -phi * dx_dphi * dt ], [ -phi * dy_dphi * dt ],
++                        [ 0 ]])
++
++        return to_device(A), to_device(B), to_device(C)
++
+     def cal_vertices_from_length_width(self, length, width, wheelbase=None):
+         """
+         Calculate initial vertices of a rectangle representing a robot.
+-- 
+2.43.0
+

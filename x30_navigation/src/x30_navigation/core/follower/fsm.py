@@ -197,7 +197,11 @@ class Follower(Phases, ReverseSteps, DetourSteps, BacktrackSteps):
                 f'{Problem.EMERGENCY.name}: {Problem.EMERGENCY.value}, forward held | {message}'
             )
         smooth = self.phase is S.FOLLOWING
-        command = self.shaper.shape(guarded.command, inputs.dt, smooth)
+        shaped = self.shaper.shape(guarded.command, inputs.dt, smooth)
+        scan = inputs.scan  # what is published is guarded too: the ramps are only comfort
+        command = self.guard.published(shaped, guarded.command, scan.guard_points, scan.blocked)
+        if command != shaped:
+            self.shaper.hold(command)
         if guarded.stalled:
             message = f'{message} | waiting for an obstacle {guarded.clearance:.2f} m ahead'
         counts = self.phase is not S.DWELLING

@@ -14,6 +14,7 @@ from x30_mapping.route_recorder_node import RouteRecorderNode
 from x30_msgs.msg import LocalizationStatus, SiteStatus
 from x30_msgs.srv import MarkStopPoint
 from x30_utils.io import read_route
+from x30_utils.log import Sink
 from x30_utils.math import planar_transform
 from x30_utils.ros import X30Node
 from x30_utils.testing.harness import Collector, connected, delete_params, wait_for
@@ -67,6 +68,17 @@ class Rig:
         delete_params(self.ns)
 
 
+class Warnings(Sink):
+    """The warnings a node logs."""
+
+    def __init__(self):
+        super().__init__('warning')
+        self.messages = []
+
+    def write(self, record):
+        self.messages.append(record.message)
+
+
 @pytest.fixture
 def rig(ros, tmp_path):
     r = Rig(tmp_path)
@@ -108,6 +120,18 @@ def test_records_into_the_site_with_stop_points(rig, tmp_path):
     assert points[-1].yaw == pytest.approx(0.5, abs=0.01)
     assert all(math.hypot(p.x - 5.0, p.y - 5.0) > 1.0 for p in points)
     assert not rig.trigger('route/stop').success
+
+
+def test_the_first_route_starts_without_a_tf_warning(rig):
+    """route/start starts the TF listener: no TF yet is no warning, the samples follow."""
+    warnings = Warnings()
+    rig.node.log.sinks.append(warnings)
+    rig.set(site='lobby', state=LocalizationStatus.LOCALIZED)
+    started = rig.trigger('route/start')
+    assert started.success, started.message
+    rig.pose = [0.5, 0.0, 0.0]
+    assert wait_for(lambda: len(rig.node.recorder.recording.points) >= 1, 3.0)
+    assert not warnings.messages
 
 
 def test_file_errors_are_answers_not_crashes(rig, tmp_path):

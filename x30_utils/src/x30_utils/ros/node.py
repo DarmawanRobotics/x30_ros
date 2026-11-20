@@ -58,7 +58,6 @@ class X30Node:
         self._destroyed = self._halted = self._polling = False
         self._tf_cache: TfCache | None = None
         self._tf_publisher: TfPublisher | None = None
-        self.after(UNKNOWN_CHECK_SEC, self._warn_unknown_params)
 
     @property
     def name(self) -> str:
@@ -274,6 +273,10 @@ class X30Node:
         for note in self._binder.poll():
             log = self.log.info if note.startswith('applied') else self.log.warning
             log(f'parameters {note}')
+
+    def check_parameters(self):
+        """Warn of unknown parameters soon: once the node is built, every section declared."""
+        self.after(UNKNOWN_CHECK_SEC, self._warn_unknown_params)
 
     def _warn_unknown_params(self):
         unknown = self._binder.unknown()

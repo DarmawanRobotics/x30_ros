@@ -72,7 +72,8 @@ and reads the X30's sensor topics.
  inspection   thermal and partial discharge at the stop points  ◄ x30_inspection
               (hikmicro_driver, hertzino_driver of x30.repos)
  watching     health/status, diagnostics, speed scale  ◄ x30_health
- navigation   planner · route loader · path follower · avoidance · docking  ◄ x30_navigation
+ navigation   planner · route loader · path follower (NeuPAN optional) · avoidance · docking
+              ◄ x30_navigation
  world        occupancy grid · sites (map, fiducials, routes)        ◄ x30_mapping
  estimation   localization (EKF) · FAST-LIO odometry · sector scans
               ◄ x30_localization · x30_odometry · x30_perception
@@ -98,6 +99,12 @@ From the API documentation (sections 1.2 to 1.5):
 | heartbeat | `0x31040001` at 5 Hz (at least 2 Hz), and `0x31020001` once to confirm the connection |
 | command source | the first byte of every code: `0x31` an autonomous module (default, `command_prefix`), `0x21` a remote control terminal (the handheld) |
 | velocity | axis commands `0x31010130` (+ forward), `0x31010131` (+ right), `0x31010135` (+ turn right) at 50 Hz, obeyed in the **stepping** state and **non-manual** mode (`0x21` codes: manual mode) |
+
+**Two hosts.** On the robot the stack runs on the navigation host (192.168.1.106: the driver,
+control, the LiDAR scans, odometry, localization, mapping, navigation, health, inspection), and
+the inspection cameras on the perception host (192.168.1.105), both on the navigation host's ROS
+master: `navigation_host.launch` and `perception_host.launch`, by hand or as services under a
+watchdog with `tools/x30_host.sh` ([x30_bringup](x30_bringup/README.md#two-hosts)).
 
 **This computer must be in the motion host's `network.toml`** (its IP and port 43897, as the
 Application Manual 4.3.2 describes; restart the motion program afterwards). Otherwise the robot
@@ -176,6 +183,17 @@ And walking on it (add `navigation:=true`): a taught route, or a goal on the map
 rosservice call /navigation/load_path "{path: gardu-a/routes/patrol.csv}"
 rosservice call /navigation/start
 rosservice call /planner/go_to "{x: 8.0, y: 4.0, yaw: 1.57}"
+```
+
+Or without a map, like HotDog and Pashupati: the odometry start (the dock) is the map origin,
+routes are taught and repeated in that frame, tags only correct the drift
+([Odometry only](x30_bringup/README.md#odometry-only)):
+
+```bash
+roslaunch x30_bringup bringup.launch control:=true perception:=true odometry:=true \
+    localization:=true mapping:=true navigation:=true odometry_only:=true site:=gardu-a
+rosservice call /route/start                        # walk the route, then
+rosservice call /route/stop
 ```
 
 ## Interface
@@ -335,6 +353,13 @@ On a new robot, in an open area, with someone at the handheld:
 | `livox_ros_driver` | the Livox `CustomMsg` FAST-LIO is built with (the same md5 as the X30's `livox_ros_driver2`); it needs the [Livox SDK](https://github.com/Livox-SDK/Livox-SDK) installed first: `git clone https://github.com/Livox-SDK/Livox-SDK.git && cd Livox-SDK/build && cmake .. && make && sudo make install` |
 | `hikmicro_driver` | the HIKMICRO thermal + visible PTZ camera (`hikmicro:=true`); its `hikmicro_msgs` for x30_inspection |
 | `hertzino_driver` | the Hertzino acoustic camera (`hertzino:=true`); its `hertzino_msgs` for x30_inspection |
+
+**NeuPAN**, for the path follower's `neupan` controller (an MPC that walks around the safety
+scan's points, heading included; [x30_navigation](x30_navigation/README.md#neupan)), is
+installed apart, in a venv beside ROS: `bash tools/install_neupan.sh` on the navigation host
+(PyTorch for the CPU, cvxpy, NeuPAN with the X30's patches; internet, or wheels fetched with
+`--download` elsewhere), then `export X30_PYTHON=~/x30_ws/neupan/bin/python`. NeuPAN is GPL-3.0
+and stays out of this repository: the controller imports it at run time.
 
 Everything else comes from rosdep. Without them the stack still builds and runs: odometry with
 `odometry_method:=external`, the cameras and the inspection off (x30_inspection needs the two

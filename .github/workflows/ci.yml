@@ -93,3 +93,63 @@ jobs:
           msg=$(grep -E 'WARN|ERROR|Traceback|Error|FAIL' run_tests.txt | tail -n 60 \
             | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
           echo "::error title=node output::$msg"
+
+  # the NeuPAN controller with NeuPAN installed as on the robot (tools/install_neupan.sh): its
+  # unit tests and the patrol loop on the simulated X30
+  neupan:
+    runs-on: ubuntu-24.04
+    container:
+      image: ros:noetic-ros-base
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUNBUFFERED: '1'
+      PIP_CACHE_DIR: /tmp/pip-cache  # the container's home is not root's
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src/x30_ros
+      - uses: actions/checkout@v4
+        with:
+          repository: DarmawanRobotics/hikmicro_driver
+          path: src/drivers/hikmicro_driver
+      - uses: actions/checkout@v4
+        with:
+          repository: DarmawanRobotics/hertzino_driver
+          path: src/drivers/hertzino_driver
+
+      - name: Dependencies
+        run: |
+          touch src/drivers/hikmicro_driver/hikmicro_driver/CATKIN_IGNORE \
+            src/drivers/hertzino_driver/hertzino_driver/CATKIN_IGNORE
+          source /opt/ros/noetic/setup.bash
+          apt-get update -qq
+          apt-get install -y -qq git python3-venv > /dev/null
+          rosdep update --rosdistro noetic --include-eol-distros
+          rosdep install --from-paths src --ignore-src -y --rosdistro noetic \
+            --skip-keys "rviz joint_state_publisher_gui"
+
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/pip-cache
+          key: pip-neupan-${{ hashFiles('src/x30_ros/tools/install_neupan.sh') }}
+
+      - name: NeuPAN
+        run: |
+          bash src/x30_ros/tools/install_neupan.sh --venv "$HOME/neupan"
+          echo "X30_PYTHON=$HOME/neupan/bin/python" >> "$GITHUB_ENV"
+
+      - name: Build and test
+        run: |
+          source /opt/ros/noetic/setup.bash
+          catkin_make > build.txt 2>&1 || { tail -n 80 build.txt; exit 1; }
+          source devel/setup.bash
+          cd src/x30_ros
+          "$X30_PYTHON" -m pytest -q -p no:cacheprovider x30_navigation/test/unit/test_neupan.py \
+            x30_navigation/test/unit/test_dune_model.py x30_navigation/test/unit/test_controllers.py \
+            x30_navigation/test/unit/test_solve_times.py x30_navigation/test/unit/test_bench_neupan.py \
+            x30_navigation/test/unit/test_guard_field.py
+          "$X30_PYTHON" x30_navigation/scripts/bench_neupan --solves 50
+          rostest --text x30_bringup stack_neupan.test
+

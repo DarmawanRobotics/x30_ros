@@ -1,0 +1,250 @@
+"""tools/x30_host.sh check and x30_check.py: the master, the nodes, the clocks, the cameras."""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+from pathlib import Path
+import re
+import socket
+import struct
+import subprocess
+import threading
+import time
+from xmlrpc.server import SimpleXMLRPCServer
+
+import pytest
+
+TOOLS = Path(__file__).resolve().parents[2] / 'tools'
+SPEC = importlib.util.spec_from_file_location('x30_check', TOOLS / 'x30_check.py')
+x30_check = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(x30_check)
+
+
+class Publisher:
+    """A TCPROS publisher of /x30/odom on 127.0.0.1 whose clock is skew seconds ahead."""
+
+    def __init__(self, skew: float, definition: str = 'Header header\nfloat64 x\n', latched=False):
+        self.skew, self.definition, self.latched = skew, definition, latched
+        self.listener = socket.create_server(('127.0.0.1', 0))
+        self.port = self.listener.getsockname()[1]
+        self.stopped = False
+        threading.Thread(target=self.serve, daemon=True).start()
+
+    def serve(self):
+        while not self.stopped:
+            try:
+                conn, _ = self.listener.accept()
+            except OSError:
+                return
+            threading.Thread(target=self.stream, args=(conn,), daemon=True).start()
+
+    def stream(self, conn: socket.socket):
+        reply = {'type': 'nav_msgs/Odometry', 'md5sum': 'x', 'latching': str(int(self.latched))}
+        with conn:
+            x30_check.read_header(conn)
+            conn.sendall(x30_check.tcpros_header({**reply, 'message_definition': self.definition}))
+            seq = 0
+            while not self.stopped:
+                now = time.time() + self.skew
+                payload = struct.pack('<3I', seq, int(now), int(now % 1 * 1e9)) + bytes(8)
+                try:
+                    conn.sendall(struct.pack('<I', len(payload)) + payload)
+                except OSError:
+                    return
+                seq += 1
+                time.sleep(0.02)
+
+    def close(self):
+        self.stopped = True
+        self.listener.close()
+
+
+class Ros:
+    """A master and the driver node publishing /x30/odom (from 127.0.0.1: the other host)."""
+
+    def __init__(self, port: int):
+        self.servers = []
+        node = self.serve(
+            requestTopic=lambda caller, topic, protocols: [1, '', ['TCPROS', '127.0.0.1', port]]
+        )
+        self.master = self.serve(
+            getSystemState=lambda caller: [1, '', [[['/x30/odom', ['/x30/x30_driver']]], [], []]],
+            getTopicTypes=lambda caller: [1, '', [['/x30/odom', 'nav_msgs/Odometry']]],
+            lookupNode=lambda caller, name: [1, '', node],
+        )
+
+    def serve(self, **functions) -> str:
+        server = SimpleXMLRPCServer(('127.0.0.1', 0), logRequests=False, allow_none=True)
+        for name, function in functions.items():
+            server.register_function(function, name)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.servers.append(server)
+        return f'http://127.0.0.1:{server.server_address[1]}/'
+
+    def close(self):
+        for server in self.servers:
+            server.shutdown()
+            server.server_close()
+
+
+@pytest.fixture
+def other_host():
+    """Start a publisher with a skewed clock and its master; yield the master's URI."""
+    started = []
+
+    def start(skew: float, **options) -> str:
+        publisher = Publisher(skew, **options)
+        ros = Ros(publisher.port)
+        started.extend((publisher, ros))
+        return ros.master
+
+    yield start
+    for thing in started:
+        thing.close()
+    socket.setdefaulttimeout(None)  # x30_check sets it for its run
+
+
+def clock_row(capsys, master: str) -> str:
+    assert x30_check.main(['--master', master, '--other', '127.0.0.1']) == 0
+    rows = capsys.readouterr().out.splitlines()
+    assert rows[0].startswith(f'master   ok    {master}'), rows
+    assert rows[1] == 'nodes    ok    1 of 1 reachable from here', rows
+    return rows[2]
+
+
+def test_clocks_in_step(other_host, capsys):
+    row = clock_row(capsys, other_host(0.0))
+    assert row.startswith('clock    ok    in step with 127.0.0.1 (its /x30/odom: +'), row
+
+
+def test_the_other_clock_ahead_or_behind(other_host, capsys):
+    ahead = clock_row(capsys, other_host(3.0))
+    assert re.match(r'clock    WARN  127\.0\.0\.1 is (2\.99|3\.00) s ahead of this host', ahead)
+    behind = clock_row(capsys, other_host(-2.0))
+    assert re.match(r'clock    WARN  127\.0\.0\.1 is (2\.00|2\.01) s behind this host', behind)
+
+
+def test_no_clock_from_a_latched_or_unstamped_topic(other_host, capsys):
+    latched = clock_row(capsys, other_host(5.0, latched=True))
+    assert latched.startswith('clock    -     nothing stamped from 127.0.0.1'), latched
+    plain = clock_row(capsys, other_host(5.0, definition='float64 x\n'))
+    assert plain.startswith('clock    -     nothing stamped'), plain
+
+
+def test_cameras_answer_or_say_where_to_look(monkeypatch, capsys):
+    listening = socket.create_server(('127.0.0.1', 0))
+    port = listening.getsockname()[1]
+    with socket.socket() as spare:
+        spare.bind(('127.0.0.1', 0))
+        closed = spare.getsockname()[1]  # nobody listens there once this closes
+    monkeypatch.setattr(
+        x30_check,
+        'CAMERAS',
+        {'hikmicro': (('ISAPI', port),), 'hertzino': (('HTTP', closed),)},
+    )
+    args = 'hikmicro_host:=127.0.0.1 "hertzino_host:=127.0.0.1"'
+    try:
+        code = x30_check.main(
+            ['--master', 'http://127.0.0.1:9', '--cameras', '--launch-args', args]
+        )
+    finally:
+        listening.close()
+        socket.setdefaulttimeout(None)
+    rows = capsys.readouterr().out.splitlines()
+    assert code == 1
+    assert rows[0].startswith('master   MISS  http://127.0.0.1:9')  # the cameras all the same
+    assert rows[1] == f'hikmicro ok    127.0.0.1: ISAPI {port} open'
+    assert rows[2].startswith(f'hertzino MISS  127.0.0.1: HTTP {closed}: '), rows[2]
+    assert rows[2].endswith('(its cable and address, this host on 127.0.0.x)')
+
+
+def test_a_camera_left_out_and_the_launch_files_addresses(capsys):
+    assert x30_check.cameras('hikmicro:=false hertzino_host:=127.0.0.1') >= 0
+    socket.setdefaulttimeout(None)
+    rows = capsys.readouterr().out.splitlines()
+    assert rows[0] == 'hikmicro -     not started here (launch arguments)'
+    assert rows[1].startswith('hertzino ')  # 127.0.0.1 from the argument, not 192.168.2.204
+    assert '127.0.0.1' in rows[1]
+
+
+def test_check_on_a_laptop_with_a_loopback_ros_ip_and_no_master():
+    env = {**os.environ, 'ROS_IP': '127.0.0.1', 'ROS_MASTER_URI': 'http://127.0.0.1:9'}
+    out = subprocess.run(
+        ['bash', str(TOOLS / 'x30_host.sh'), 'check'],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+        check=False,
+    )
+    assert out.returncode == 1, out.stdout + out.stderr
+    assert 'ros_ip   MISS  ROS_IP 127.0.0.1: loopback' in out.stdout
+    assert 'master   MISS  http://127.0.0.1:9' in out.stdout
+
+
+def test_check_on_the_perception_host_reads_its_service_settings(tmp_path):
+    words = subprocess.run(['hostname', '-I'], capture_output=True, text=True, check=False)
+    here = (words.stdout.split() or [''])[0]
+    if not here:
+        pytest.skip('no address of this computer to play the perception host')
+    (tmp_path / 'perception.env').write_text(
+        'X30_LAUNCH_ARGS="hertzino:=false hikmicro_host:=127.0.0.1"\n'
+    )
+    env = {
+        **os.environ,
+        'X30_PER_IP': here,
+        'ROS_IP': here,
+        'ROS_MASTER_URI': 'http://127.0.0.1:9',
+        'X30_ETC': str(tmp_path),
+    }
+    env.pop('X30_LAUNCH_ARGS', None)
+    out = subprocess.run(
+        ['bash', str(TOOLS / 'x30_host.sh'), 'check'],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+        check=False,
+    )
+    assert 'host     ok    the perception host' in out.stdout, out.stdout + out.stderr
+    assert 'hertzino -     not started here' in out.stdout  # systemd's quotes gone
+    assert 'hikmicro MISS  127.0.0.1: ISAPI 80' in out.stdout
+
+
+def test_check_on_the_navigation_host_shows_deep_robotics_and_the_masters_service(
+    tmp_path, other_host
+):
+    words = subprocess.run(['hostname', '-I'], capture_output=True, text=True, check=False)
+    here = (words.stdout.split() or [''])[0]
+    if not here:
+        pytest.skip('no address of this computer to play the navigation host')
+    master = other_host(0.0)
+    bin_dir, proc = tmp_path / 'bin', tmp_path / 'proc' / '4242'
+    bin_dir.mkdir()
+    proc.mkdir(parents=True)
+    (proc / 'cgroup').write_text('0::/system.slice/jy_roscore.service\n')
+    listen = 'LISTEN 0 128 0.0.0.0:11311 0.0.0.0:* users:(("rosmaster",pid=4242,fd=5))'
+    (bin_dir / 'ss').write_text(f"#!/bin/sh\necho '{listen}'\n")
+    (bin_dir / 'ss').chmod(0o755)
+    (tmp_path / 'jy_cog' / 'system' / 'conf').mkdir(parents=True)  # nothing of it running
+    env = {
+        **os.environ,
+        'PATH': f'{bin_dir}:{os.environ["PATH"]}',
+        'X30_NAV_IP': here,
+        'ROS_IP': here,
+        'ROS_MASTER_URI': master,
+        'X30_PROC': str(tmp_path / 'proc'),
+        'JY_COG': str(tmp_path / 'jy_cog'),
+    }
+    out = subprocess.run(
+        ['bash', str(TOOLS / 'x30_host.sh'), 'check'],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+        check=False,
+    )
+    assert 'host     ok    the navigation host' in out.stdout, out.stdout + out.stderr
+    assert 'deeprob  ok    its autonomy is off' in out.stdout
+    assert f'master   ok    {master} (jy_roscore.service)' in out.stdout

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import re
 import subprocess
 
 import yaml
@@ -121,6 +123,24 @@ def test_sim_with_fast_lio_is_refused():
     assert 'sim:=true stands in for FAST-LIO' in out
 
 
+def test_odometry_only_takes_the_odometry_start_as_the_map_origin(tmp_path):
+    args = ('sim:=true', 'odometry_only:=true', 'site:=yard', f'sites_dir:={tmp_path}', *LAYERS)
+    params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *args))
+    assert params['/localization_node/assume_start_origin'] is True
+    assert params['/localization_node/estimator/max_sigma_xy'] == 100.0  # LOCALIZED all along
+    assert params['/localization_node/estimator/max_sigma_yaw_deg'] == 180.0
+    assert params['/site_manager_node/create_site'] is True
+    assert params['/site_manager_node/site'] == 'yard'
+    assert params['/sim_robot_node/initial_pose_hz'] == 0.0  # not on the world's frame
+    assert not (tmp_path / 'yard').exists()  # nothing drawn from the world
+    normal = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), *LAYERS))
+    assert '/localization_node/assume_start_origin' not in normal  # the dataclass default
+    assert '/localization_node/estimator/max_sigma_xy' not in normal
+    assert normal['/site_manager_node/create_site'] is False
+    out = roslaunch('--nodes', str(LAUNCH), 'odometry_only:=true', 'mapping:=true')
+    assert 'odometry_only:=true is a mode of localization:=true' in out
+
+
 def test_sites_dir_reaches_every_layer(tmp_path):
     layers = ('localization:=true', 'mapping:=true', 'navigation:=true', 'inspection:=true')
     args = ('sim:=true', 'site:=lobby', f'sites_dir:={tmp_path}', *layers)
@@ -139,3 +159,105 @@ def test_sites_dir_reaches_every_layer(tmp_path):
         roslaunch('--dump-params', str(LAUNCH), 'inspection:=true', 'reports_dir:=/data/r')
     )
     assert chosen['/inspection_node/reports_dir'] == '/data/r'
+
+
+def test_the_controller_reaches_the_path_follower():
+    params = yaml.safe_load(roslaunch('--dump-params', str(LAUNCH), 'navigation:=true'))
+    assert params['/path_follower_node/controller'] == 'holonomic'
+    chosen = yaml.safe_load(
+        roslaunch('--dump-params', str(LAUNCH), 'navigation:=true', 'controller:=neupan')
+    )
+    assert chosen['/path_follower_node/controller'] == 'neupan'
+    assert chosen['/path_follower_node/neupan/dune_checkpoint'].endswith('models/dune_x30.pth')
+
+
+HOSTS = Path(__file__).resolve().parents[1] / 'launch'
+
+
+def test_the_navigation_host_runs_all_but_the_cameras_and_what_its_watchdog_watches():
+    nodes = roslaunch('--nodes', str(HOSTS / 'navigation_host.launch')).split()
+    for node in (
+        '/x30/x30_driver',
+        '/control_mux_node',
+        '/lidar_sector_node',
+        '/fast_lio/fast_lio',
+        '/localization_node',
+        '/site_manager_node',
+        '/path_follower_node',
+        '/health_monitor_node',
+        '/inspection_node',
+    ):
+        assert node in nodes, node
+    assert not [n for n in nodes if n.startswith(('/hikmicro', '/hertzino'))]
+    script = (Path(__file__).resolve().parents[2] / 'tools' / 'x30_host.sh').read_text()
+    critical = re.search(r'^CRITICAL=\((.*)\)$', script, re.MULTILINE).group(1).split()
+    assert critical and set(critical) <= set(nodes)
+
+
+def test_the_navigation_host_keeps_a_black_box_unless_told_not_to():
+    launch = str(HOSTS / 'navigation_host.launch')
+    command = roslaunch('--args', '/blackbox', launch, 'blackbox_dir:=/data/bb').split()
+    assert command[0].endswith('x30_bringup/scripts/blackbox')
+    assert command[1:4] == ['/data/bb', '10', '18']  # 10 min splits, 3 h kept
+    assert '/blackbox' not in roslaunch('--nodes', launch, 'blackbox:=false').split()
+
+
+def test_the_black_box_records_the_robot_in_rolling_splits(tmp_path):
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    (bin_dir / 'rosbag').write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    (bin_dir / 'rosbag').chmod(0o755)
+    script = Path(__file__).resolve().parents[1] / 'scripts' / 'blackbox'
+    env = {**os.environ, 'PATH': f'{bin_dir}:{os.environ["PATH"]}'}
+    out = subprocess.run(
+        [str(script), str(tmp_path / 'bb'), '10', '18', '__name:=blackbox'],
+        capture_output=True, text=True, env=env, timeout=30, check=True,
+    ).stdout.split()  # fmt: skip
+    assert (tmp_path / 'bb').is_dir()
+    assert out[:5] == ['record', '--lz4', '--split', '--duration=10m', '--max-splits=18']
+    assert out[5:8] == ['-o', str(tmp_path / 'bb' / 'x30'), '__name:=blackbox']
+    for topic in ('/navigation/status', '/cmd_vel', '/x30/odom', '/localization/pose'):
+        assert topic in out
+
+
+def test_the_navigation_host_passes_its_arguments(tmp_path):
+    args = ('odometry_only:=true', 'site:=gardu', 'controller:=neupan', 'inspection:=false')
+    out = roslaunch('--dump-params', str(HOSTS / 'navigation_host.launch'), *args)
+    params = yaml.safe_load(out)
+    assert params['/path_follower_node/controller'] == 'neupan'
+    assert params['/site_manager_node/site'] == 'gardu'
+    assert params['/site_manager_node/create_site'] is True
+    assert params['/localization_node/assume_start_origin'] is True
+    assert '/inspection_node/sites_dir' not in params
+
+
+def fake_driver(root: Path, name: str, node: str):
+    """A package with a launch file like the driver's: one node, its host as a parameter."""
+    package = root / name
+    (package / 'launch').mkdir(parents=True)
+    (package / 'package.xml').write_text(
+        f'<package format="3"><name>{name}</name><version>0.0.0</version>'
+        '<description>fake</description><maintainer email="a@b.c">a</maintainer>'
+        '<license>Apache-2.0</license></package>'
+    )
+    namespace = name.split('_', maxsplit=1)[0]
+    (package / 'launch' / f'{namespace}.launch').write_text(
+        f'<launch><arg name="host" default=""/><arg name="password" default=""/>'
+        f'<node pkg="{name}" type="{node}" name="{node}" ns="{namespace}">'
+        '<param name="host" value="$(arg host)"/></node></launch>'
+    )
+
+
+def test_the_perception_host_runs_the_cameras_at_their_addresses(tmp_path, monkeypatch):
+    fake_driver(tmp_path, 'hikmicro_driver', 'hikmicro_ptz_node')
+    fake_driver(tmp_path, 'hertzino_driver', 'hertzino_node')
+    monkeypatch.setenv('ROS_PACKAGE_PATH', f'{tmp_path}:{os.environ["ROS_PACKAGE_PATH"]}')
+    launch = str(HOSTS / 'perception_host.launch')
+    nodes = roslaunch('--nodes', launch).split()
+    assert nodes == ['/hikmicro/hikmicro_ptz_node', '/hertzino/hertzino_node']
+    params = yaml.safe_load(roslaunch('--dump-params', launch, 'hikmicro_host:=10.0.0.9'))
+    assert params['/hikmicro/hikmicro_ptz_node/host'] == '10.0.0.9'
+    assert params['/hertzino/hertzino_node/host'] == '192.168.2.204'
+    assert roslaunch('--nodes', launch, 'hertzino:=false').split() == [
+        '/hikmicro/hikmicro_ptz_node'
+    ]

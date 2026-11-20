@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# The black box of the navigation host (navigation_host.launch blackbox:=true): the last hours of
+# what the robot was told and did, in a rolling rosbag: status of every layer, the commands
+# before and after the control mux, the pose, the battery, the safety scan, the inspection
+# results and the nodes' log (/rosout_agg). Splits of <minutes>, the oldest removed past
+# <splits>. After an incident: rqt_bag or rosbag info on <dir>/x30_*.bag.
+#   blackbox <dir> <minutes> <splits> [roslaunch's __name:= and __log:=]
+set -eu
+dir=$1 minutes=$2 splits=$3
+shift 3
+mkdir -p "$dir"
+exec rosbag record --lz4 --split --duration="${minutes}m" --max-splits="$splits" \
+  -o "$dir/x30" "$@" \
+  /navigation/status /navigation/stop_point /control/status /control/nav_cmd_vel /cmd_vel \
+  /x30/state /x30/odom /x30/battery /localization/status /localization/pose /health/status \
+  /perception/safety_scan /inspection/status /inspection/report /rosout_agg

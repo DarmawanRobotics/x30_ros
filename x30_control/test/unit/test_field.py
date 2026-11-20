@@ -5,13 +5,12 @@ import math
 import numpy as np
 import pytest
 
-from x30_control.core.arc import ArcCheck, arc_poses
 from x30_control.core.command import ZERO, Command
 from x30_control.core.config import FieldConfig
 from x30_control.core.field import FieldState, ProtectiveField
 from x30_control.core.scan import ScanState, ScanView
 from x30_utils.robot import RobotProfile
-from x30_utils.safety import rotation_room, stopping_distance
+from x30_utils.safety import ArcCheck, arc_poses, rotation_room, stopping_distance
 
 ROBOT = RobotProfile()
 CFG = FieldConfig(human_speed=0.0)  # the braking model alone; the person term: test_separation
