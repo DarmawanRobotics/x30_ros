@@ -130,6 +130,16 @@ class InspectionConfig:
         '~/x30/map', live=False, doc='<site>/inspection.yaml holds the points and targets'
     )
     reports_dir: str = param('~/x30/reports', live=False, doc='one folder per inspected point')
+    reports_keep_days: int = param(
+        0, min=0, max=36500, unit='d', doc='days of reports kept; 0: until the disk needs room'
+    )
+    reports_min_free_gb: float = param(
+        6.0,
+        min=0.0,
+        max=1e6,
+        unit='GB',
+        doc='the oldest days of reports go while less is free (x30_health warns at 5); 0: never',
+    )
     match_radius_m: float = param(
         1.5, min=0.1, max=10.0, unit='m', doc='a stop this close to a point inspects it'
     )

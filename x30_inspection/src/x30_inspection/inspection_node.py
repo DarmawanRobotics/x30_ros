@@ -8,14 +8,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 import threading
 import time
 
 from std_srvs.srv import Trigger
 
 from x30_inspection.core import plan as plans
-from x30_inspection.core import report
+from x30_inspection.core import report, retention
 from x30_inspection.core.config import InspectionConfig
 from x30_inspection.core.discharge import AcousticCheck
 from x30_inspection.core.runner import Runner
@@ -65,6 +65,7 @@ class InspectionNode(X30Node):
         self.add_shutdown_hook(self.on_shutdown)
         self.log.info('inspection', enabled=cfg.enabled, camera=cfg.camera.namespace,
                       acoustic=cfg.acoustic.namespace, sites_dir=cfg.sites_dir)  # fmt: skip
+        self.prune_reports()
         self.publish_status()
 
     # ---------------------------------------------------------------- inputs
@@ -139,6 +140,7 @@ class InspectionNode(X30Node):
         result = runner.inspect(point, lambda t: report.evidence_prefix(directory, t.name),
                                 self.is_closing)  # fmt: skip
         report.write(directory, report.to_dict(result, self.site, here[0], here[1], when))
+        self.prune_reports()
         msg = report_msg(result, self.site, here[0], here[1], directory, self.stamp())
         self.report_pub.publish(msg)
         self.last = (point.name, msg.severity)
@@ -146,6 +148,19 @@ class InspectionNode(X30Node):
             self.log.warning('finding', point=point.name, detail=result.message,
                              severity=report.severity_name(msg.severity))  # fmt: skip
         return result.state != 'failed', result.message
+
+    def prune_reports(self):
+        """Keep the reports within the disk: old days go, the oldest first (never today's)."""
+        cfg = self.config.value
+        removed, error = retention.prune(
+            cfg.reports_dir, date.today(), cfg.reports_keep_days, cfg.reports_min_free_gb
+        )
+        if removed:
+            self.log.warning('old reports removed', days=','.join(removed),
+                             keep_days=cfg.reports_keep_days,
+                             min_free_gb=cfg.reports_min_free_gb)  # fmt: skip
+        if error:
+            self.log.error('reports not pruned', error=error)
 
     # ---------------------------------------------------------------- teach
     def srv_add_target(self, request, response):

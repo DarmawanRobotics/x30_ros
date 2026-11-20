@@ -116,6 +116,13 @@ leaves the point `partial`, not `failed`.
 `no_targets`), the highest severity and every finding with its value, reference and delta.
 `inspection/report` carries the same, with the image paths.
 
+**Retention.** A robot on patrol fills its disk with reports, and a full disk writes nothing more:
+reports, maps or routes. At start and after every report whole days go, never today's: those
+older than `reports_keep_days` (0: kept), then the oldest while less than `reports_min_free_gb`
+(6 GB, above x30_health's warning at 5 GB) is free, each removal a warning in the log. Copy the
+reports off the robot (the command center) before they are this old; `reports_min_free_gb: 0`
+keeps every one.
+
 ## Cameras
 
 The drivers come from [x30.repos](../x30.repos); `x30_bringup hikmicro:=true hertzino:=true`
