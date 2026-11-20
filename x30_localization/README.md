@@ -62,6 +62,7 @@ Frames and `base_height` come from the robot profile (`robot/`). Defaults in
 | `estimator/sigma_xy_per_sqrt_m` | `0.03` | drift per metre travelled (not per second) |
 | `estimator/sigma_yaw_deg_per_sqrt_m`, `..._per_sqrt_rad` | `0.1`, `0.5` | heading drift per metre and per radian turned |
 | `estimator/gate_confidence` | `0.99` | chi-square gate of automatic corrections (3 dof) |
+| `estimator/origin_sigma_xy`, `origin_sigma_yaw_deg` | `0.05`, `2` | how well the robot is put on its start spot: the origin's uncertainty, which a tag seen soon corrects |
 | `estimator/max_sigma_xy`, `max_sigma_yaw_deg` | `100`, `180` | above: `UNCERTAIN`; only tags correct the drift, so it stays `LOCALIZED` and sigma reports it |
 | `tag/camera_frame`, `tag/frames` | `camera_color_optical_frame`, `[base_map, charging_dock]` | |
 | `tag/auto_localize`, `tag/auto_correct` | `true`, `true` | tags in view localize / correct through the gate |

@@ -53,6 +53,26 @@ def test_tag_in_view_localizes_then_corrects_through_the_gate():
     assert loc.estimator.map_odom == before and 'rejected' in loc.message
 
 
+def test_the_origin_is_known_as_well_as_the_start_spot():
+    """Put on its start spot by the dock or by hand: the tags in view correct the spot."""
+    near = Pose2D(0.04, -0.03, math.radians(1.5))  # the spot a little off
+    off = []
+    for xy, yaw_deg in ((0.05, 2.0), (0.01, 0.25)):  # the defaults; as sure as after a fix
+        config = EstimatorConfig(origin_sigma_xy=xy, origin_sigma_yaw_deg=yaw_deg)
+        loc = Localizer(MapOdomEstimator(config), TagConfig(min_interval_sec=0.0))
+        loc.tags = {'base_map': MAP_TAG}
+        loc.track(Pose2D(), 0.0)
+        loc.assume_origin(0.0)
+        status = loc.status(0.0)
+        assert status.sigma_xy == pytest.approx(xy)
+        assert math.degrees(status.sigma_yaw) == pytest.approx(yaw_deg)
+        for i in range(10):
+            m = loc.measure_tag('base_map', BASE_CAM, cam_tag_seen_from(near), 1.0 + i)
+            assert loc.on_tag(m, Pose2D(), 1.0 + i)  # within the gate
+        off.append(loc.estimator.base_pose().distance(near))
+    assert off[0] < 0.6 * off[1]  # the start spot's own uncertainty: the tags win sooner
+
+
 def test_explicit_localize_takes_a_far_consistent_tag():
     """auto_correct gates; localization/start (explicit) relocalizes regardless."""
     loc = localizer()

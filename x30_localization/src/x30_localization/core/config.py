@@ -32,6 +32,13 @@ class EstimatorConfig:
     max_sigma_yaw_deg: float = param(
         180.0, min=0.1, max=180.0, unit='deg', doc='above: state UNCERTAIN (heading)'
     )
+    # the origin is the start spot: the robot is put on it by the dock or by hand, as well as that
+    origin_sigma_xy: float = param(
+        0.05, min=0.0, max=1.0, unit='m', doc='position of the start spot (assume_origin)'
+    )
+    origin_sigma_yaw_deg: float = param(
+        2.0, min=0.0, max=45.0, unit='deg', doc='heading on the start spot (assume_origin)'
+    )
     min_sigma_xy: float = param(
         0.01, min=0.0, max=1.0, unit='m', doc='floor after a correction (no overconfidence)'
     )
