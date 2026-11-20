@@ -216,6 +216,9 @@ env_file() { # <role> <user> <ws>
     say "# the handheld's shared secret (x30_bridge, the same in the app): this file is readable"
     say "# by root and $2 only; empty: anyone on the robot's Wi-Fi can drive"
     say "X30_TELEOP_TOKEN="
+    say "# NETRA's robot token (x30_fleet; netra_url:=... netra_robot_id:=... in X30_LAUNCH_ARGS"
+    say "# turn the uplink on): this file is readable by root and $2 only"
+    say "X30_NETRA_TOKEN="
   else
     say "# the cameras' passwords: this file is readable by root and $2 only"
     say "HIKMICRO_PASSWORD="
@@ -306,7 +309,7 @@ cmd_install() { # <role>
   "$SYSTEMCTL" daemon-reload
   "$SYSTEMCTL" enable "x30-$role.service"
   [ "$role" = perception ] && what='X30_LAUNCH_ARGS, the passwords' ||
-    what="X30_LAUNCH_ARGS, the handheld's X30_TELEOP_TOKEN"
+    what="X30_LAUNCH_ARGS, the handheld's X30_TELEOP_TOKEN, NETRA's X30_NETRA_TOKEN"
   say "next: the settings in $env ($what)"
   say "then: sudo systemctl start x30-$role; journalctl -u x30-$role -f"
 }

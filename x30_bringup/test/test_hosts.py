@@ -70,6 +70,7 @@ def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp
     nav_settings = tmp_path / 'etc' / 'navigation.env'
     assert '# X30_PYTHON=' in nav_settings.read_text()
     assert '\nX30_TELEOP_TOKEN=\n' in nav_settings.read_text()  # the handheld's secret
+    assert '\nX30_NETRA_TOKEN=\n' in nav_settings.read_text()  # NETRA's robot token
     assert stat.S_IMODE(nav_settings.stat().st_mode) == 0o600
 
 
