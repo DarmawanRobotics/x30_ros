@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import itertools
 import math
+from types import SimpleNamespace
 
 from geometry_msgs.msg import Twist
 import pytest
@@ -13,8 +14,12 @@ from sensor_msgs.msg import BatteryState
 from std_srvs.srv import Trigger
 
 from x30_msgs.msg import ControlStatus, DockingStatus
+from x30_navigation.core.config.docking import DockingConfig
+from x30_navigation.core.config.follower import SafetyConfig
 from x30_navigation.docking_node import DockingNode
+from x30_navigation.utils.control_check import FIELD_PARAMETERS
 from x30_utils.math import Pose2D, make_transform, quat_from_rpy
+from x30_utils.robot import RobotProfile
 from x30_utils.ros import X30Node
 from x30_utils.testing.harness import Collector, delete_params, wait_for
 
@@ -133,3 +138,12 @@ def test_estop_fails_docking_and_zero_is_published(rig):
     finally:
         cmds.close()
         control.unregister()
+
+
+def test_both_field_checks_take_every_value_of_the_field():
+    """ControlFieldCheck hands a check the mux's FIELD_PARAMETERS: the docking node's too."""
+    values = (0.10, 0.5, 0.15, 0.10)  # the mux field's defaults, in FIELD_PARAMETERS' order
+    assert len(values) == len(FIELD_PARAMETERS)
+    assert SafetyConfig().check_control(*values) == []
+    docking = SimpleNamespace(config=DockingConfig(), robot=SimpleNamespace(value=RobotProfile()))
+    assert DockingNode.check_field(docking, *values) == []

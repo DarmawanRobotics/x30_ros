@@ -75,8 +75,12 @@ class DockingNode(X30Node):
         limits, strafe = self.robot.limits, self.robot.can_strafe
         return DockLimits(limits.max_vx, limits.max_vy if strafe else 0.0, limits.max_wz)
 
-    def check_field(self, lateral_margin: float, human_speed: float, margin: float) -> list:
+    def check_field(
+        self, lateral_margin: float, human_speed: float, margin: float, yaw_margin: float = 0.0
+    ) -> list:
         """Return why the mux field (its values) would hold the robot short of the dock."""
+        # every field value ControlFieldCheck reads: the dock is walked to head on, so neither
+        # the lateral margin nor the turning room holds the robot short of it
         cfg = self.config
         speed = cfg.approach.min_speed
         return field_problems(cfg.goal, self.robot.value, speed, margin, human_speed)
