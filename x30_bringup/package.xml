@@ -22,6 +22,7 @@
   <exec_depend>x30_navigation</exec_depend>
   <exec_depend>x30_odometry</exec_depend>
   <exec_depend>x30_perception</exec_depend>
+  <exec_depend>x30_recorder</exec_depend>
   <exec_depend>x30_sim</exec_depend>
 
   <test_depend>python3-pytest</test_depend>

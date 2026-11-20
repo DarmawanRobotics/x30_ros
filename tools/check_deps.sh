@@ -2,14 +2,15 @@
 # What x30_ros needs on a robot without internet, checked offline: the Ubuntu 20.04 / ROS Noetic
 # packages (dpkg), the source packages of x30.repos in the workspace and the Livox SDK, and
 # whether NeuPAN's venv is there (optional); with --perception only what the perception host
-# builds, its camera drivers. Prints what is missing and one apt line for it; installs nothing
+# builds, its camera drivers and the recorder. Prints what is missing and one apt line for it;
+# installs nothing
 # (README.md, "Robot without internet").
 set -u
 
 usage() {
   cat <<'EOF'
 usage: check_deps.sh [--perception] [--tests] [--gui] [--src DIR]
-  --perception  the perception host (192.168.1.105): its camera drivers only
+  --perception  the perception host (192.168.1.105): its camera drivers and the recorder
   --tests       also what catkin_make run_tests needs
   --gui         also RViz and the joint state publisher GUI (display.launch)
   --src         the workspace's src (default: the folder holding x30_ros)
@@ -32,7 +33,7 @@ BUILD=(
   python3-numpy python3-scipy python3-yaml python3-rospkg python3-setuptools python3-opencv
   libeigen3-dev libpcl-dev libapr1-dev libaprutil1-dev
   libcurl4-openssl-dev libssl-dev libopencv-dev libtinyxml2-dev nlohmann-json3-dev
-  gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
+  gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad ffmpeg
 )
 TESTS=(python3-dev python3-pytest python3-nose ros-noetic-rostest ros-noetic-rosunit)
 GUI=(ros-noetic-rviz ros-noetic-joint-state-publisher-gui)
@@ -45,8 +46,8 @@ SOURCES=(
   "hertzino_msgs drivers/hertzino_driver"
   "hertzino_driver drivers/hertzino_driver"
 )
-# the perception host builds the camera drivers and what launches them (x30_bringup README,
-# "Two hosts"): their rosdep keys on focal, the build line's whitelist
+# the perception host builds the camera drivers, x30_recorder and what launches them
+# (x30_bringup README, "Two hosts"): their rosdep keys on focal, the build line's whitelist
 PERCEPTION_BUILD=(
   build-essential cmake git pkg-config python3-setuptools
   ros-noetic-catkin ros-noetic-roscpp ros-noetic-roslaunch ros-noetic-message-generation
@@ -55,6 +56,8 @@ PERCEPTION_BUILD=(
   ros-noetic-image-transport ros-noetic-image-transport-plugins
   libcurl4-openssl-dev libssl-dev libopencv-dev libtinyxml2-dev nlohmann-json3-dev
   gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
+  ros-noetic-rospy ros-noetic-rosgraph ros-noetic-tf2-ros ros-noetic-diagnostic-msgs
+  ros-noetic-visualization-msgs python3-numpy python3-scipy python3-yaml ffmpeg
 )
 PERCEPTION_SOURCES=(
   "hikmicro_msgs drivers/hikmicro_driver"
@@ -62,7 +65,8 @@ PERCEPTION_SOURCES=(
   "hertzino_msgs drivers/hertzino_driver"
   "hertzino_driver drivers/hertzino_driver"
 )
-PERCEPTION_PACKAGES='x30_utils;x30_bringup;hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
+PERCEPTION_PACKAGES='x30_utils;x30_msgs;x30_recorder;x30_bringup'
+PERCEPTION_PACKAGES+=';hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
 ROLE=navigation
 LIVOX_SDK_LIB=${LIVOX_SDK_LIB:-/usr/local/lib/liblivox_sdk_static.a}
 ROS_DIR=${ROS_DIR:-/opt/ros/noetic}

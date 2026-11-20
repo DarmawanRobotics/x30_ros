@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / 'tools'
 SOURCES = ('fast_lio', 'livox_ros_driver', 'hikmicro_msgs', 'hikmicro_driver', 'hertzino_msgs',
            'hertzino_driver')  # fmt: skip
+SYSTEM_KEYS = ('ffmpeg',)  # rosdep keys of system packages: the apt package of that name
 
 
 def run(script: str, *args: str, env: dict | None = None, cwd=None, timeout: float = 60.0):
@@ -311,7 +312,7 @@ def test_check_deps_builds_past_a_user_site_that_breaks_setuptools(system, tmp_p
     assert 'everything there: PYTHONNOUSERSITE=1 catkin_make' in out.stdout
 
 
-def test_check_deps_for_the_perception_host_checks_its_camera_drivers_only(system):
+def test_check_deps_for_the_perception_host_checks_its_cameras_and_recorder_only(system):
     src, env, installed, sdk = system
     sdk.unlink()  # no FAST-LIO there: neither the SDK nor its sources
     shutil.rmtree(src / 'fast_lio')
@@ -320,7 +321,10 @@ def test_check_deps_for_the_perception_host_checks_its_camera_drivers_only(syste
     assert out.returncode == 0, out.stdout
     assert 'of the perception host' in out.stdout and 'livox' not in out.stdout
     assert 'neupan' not in out.stdout
-    whitelist = 'x30_utils;x30_bringup;hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
+    whitelist = (
+        'x30_utils;x30_msgs;x30_recorder;x30_bringup;'
+        'hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
+    )
     assert f"-DCATKIN_WHITELIST_PACKAGES='{whitelist}'" in out.stdout
     script = TOOLS / 'check_deps.sh'
     assert set(array(script, 'PERCEPTION_BUILD')) <= set(array(script, 'BUILD'))
@@ -355,6 +359,8 @@ def test_the_apt_lists_cover_every_dependency_of_the_stack():
     for key in keys - ours - set(SOURCES):
         if key.startswith('python3'):
             needed.add('python3-dev' if key == 'python3' else key)
+        elif key in SYSTEM_KEYS:
+            needed.add(key)
         else:
             needed.add('ros-noetic-' + key.replace('_', '-'))
     assert needed - listed_packages == set()

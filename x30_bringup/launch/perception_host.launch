@@ -5,21 +5,30 @@
     ROS_IP=192.168.1.105: tools/x30_host.sh env perception). Their video is decoded here, off
     the host that drives; x30_inspection on the navigation host calls their services. Deep
     Robotics' own software here (elevation map, charging, its drivers on its own master) stays
-    as it is. Builds with the camera drivers and this package only (x30_bringup README, "Two
-    hosts").
+    as it is. Builds with the camera drivers, x30_recorder and this package only (x30_bringup
+    README, "Two hosts").
       hikmicro, hertzino: start the camera driver (passwords: HIKMICRO_PASSWORD,
                     HERTZINO_PASSWORD in the environment, never parameters)
       hikmicro_host, hertzino_host: their addresses
+      recorder:     record the cameras on this host's disk while a route runs or on request
+                    (x30_recorder: raw thermal frames, the camera's video, the acoustic data)
+      recordings_dir: where its sessions go (empty: ~/x30/recordings)
   -->
   <arg name="hikmicro" default="true"/>
   <arg name="hikmicro_host" default="192.168.1.64"/>
   <arg name="hertzino" default="true"/>
   <arg name="hertzino_host" default="192.168.2.204"/>
+  <arg name="recorder" default="true"/>
+  <arg name="recordings_dir" default=""/>
 
   <include if="$(arg hikmicro)" file="$(find hikmicro_driver)/launch/hikmicro.launch">
     <arg name="host" value="$(arg hikmicro_host)"/>
   </include>
   <include if="$(arg hertzino)" file="$(find hertzino_driver)/launch/hertzino.launch">
     <arg name="host" value="$(arg hertzino_host)"/>
+  </include>
+  <include if="$(arg recorder)" file="$(find x30_recorder)/launch/recorder.launch">
+    <arg name="recordings_dir" value="$(arg recordings_dir)"/>
+    <arg name="host" value="$(arg hikmicro_host)"/>
   </include>
 </launch>
