@@ -364,7 +364,8 @@ and `HERTZINO_PASSWORD` in the environment, never from a launch argument.
 **Robot without internet** ([tools/README.md](tools/README.md)): `tools/pack_sources.sh` packs
 x30_ros, x30.repos and the Livox SDK on a computer with internet (about 5 MB);
 `tools/check_deps.sh` on the robot lists, offline, every apt package, source package and the
-SDK still missing; the laptop's internet through `ssh -R` brings in the packages.
+SDK still missing; the laptop's internet through `ssh -R` brings in the packages;
+`tools/x30_host.sh build` builds each host's part, the host told by its address.
 
 ## Develop
 

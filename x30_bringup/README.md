@@ -55,25 +55,43 @@ elevation map and charging. The stack is split by what each part needs to be nex
 | why | the motion host reports to its UDP 43897; the protective field stays on the same computer as the LiDAR driver and the mux, so the network between the hosts never blinds it; FAST-LIO and NeuPAN want its x86 cores | decoding the cameras' video off the computer that drives; the inspection calls the cameras' services, small messages; the recordings written where the cameras' data arrives, never over the network |
 | ROS | the robot's master (Deep Robotics' roscore, kept by `dr_services.sh`), `ROS_IP=192.168.1.106` | the navigation host's master, `ROS_IP=192.168.1.105`; Deep Robotics' own master here stays for its own nodes |
 | Deep Robotics | `tools/dr_services.sh off`: its autonomy, URDF and bridge off | untouched: the elevation map, charging and its drivers |
-| build | the whole workspace | `tools/check_deps.sh --perception` prints the build line: x30_utils, x30_msgs, x30_recorder, x30_bringup and the drivers only |
+| build (`x30_host.sh build`) | the whole workspace | x30_utils, x30_msgs, x30_recorder, x30_bringup and the camera drivers only |
 
-`tools/x30_host.sh` sets each host's ROS network (`env`), checks that the two see each other
-(`check`: the master, the other host, every registered node's address, how far the two clocks
-are apart; Deep Robotics' autonomy on the navigation host, the cameras' ports on the perception
-host), and runs each host's launch file by hand or as a systemd service under a watchdog
-(`start`, `install`):
+`tools/x30_host.sh` builds each host's workspace (`build`), sets its ROS network (`env`),
+checks that the two see each other (`check`: the master, the other host, every registered
+node's address, how far the two clocks are apart; Deep Robotics' autonomy on the navigation
+host, the cameras' ports on the perception host), and runs each host's launch file by hand or as
+a systemd service under a watchdog (`start`, `install`). **The role is the host's own, by its
+address**: Deep Robotics names the navigation host `ysc-perception`, so the names mislead; on the
+robot the other host's role is refused, and `install` removes the other host's service where an
+older x30_host.sh let it in. On each host, `~/x30_ws` holding x30_ros and x30.repos in `src`:
 
 ```bash
-# both hosts: ~/x30_ws with x30_ros and x30.repos in src
-eval "$(bash ~/x30_ws/src/x30_ros/tools/x30_host.sh env navigation)"   # .105: perception
-bash ~/x30_ws/src/x30_ros/tools/x30_host.sh check
-roslaunch x30_bringup navigation_host.launch site:=gardu controller:=neupan
-roslaunch --wait x30_bringup perception_host.launch                    # on .105, after the env
-
-# or as a service, started at boot: settings in /etc/x30/<role>.env
-sudo bash ~/x30_ws/src/x30_ros/tools/x30_host.sh install navigation    # .105: perception
-sudo systemctl start x30-navigation && journalctl -u x30-navigation -f
+cd ~/x30_ws/src/x30_ros/tools
+bash x30_host.sh build
+eval "$(bash x30_host.sh env)"
+bash x30_host.sh check
 ```
+
+By hand, the navigation host's (.106) first, then the perception host's (.105) after its `env`:
+
+```bash
+roslaunch x30_bringup navigation_host.launch site:=gardu controller:=neupan
+roslaunch --wait x30_bringup perception_host.launch
+```
+
+Or as a service, started at boot, its settings in `/etc/x30/<role>.env`; `install` prints the
+next lines (the settings to edit, then `sudo systemctl restart x30-<role>` and its journal):
+
+```bash
+sudo bash x30_host.sh install
+```
+
+`build` is catkin_make as the robot needs it: ROS sourced, `PYTHONNOUSERSITE=1` (a setuptools
+that `pip install --user` put in `~/.local` stops catkin), Release, no tests, at most one job per
+2 GB of memory, on the perception host its packages only, and a workspace `CMakeLists.txt` that
+is not catkin's (left by an older workspace) replaced, kept as `CMakeLists.txt.orig`; its
+arguments go to catkin_make (`--pkg x30_navigation`).
 
 **The watchdog** (`tools/x30_watchdog.py`, the service's main process): it starts the launch
 file, tells systemd ready once the master answers and the critical nodes do (on the navigation
