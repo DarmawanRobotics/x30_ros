@@ -68,8 +68,9 @@ main() {
   STAGE=$(mktemp -d)
   trap cleanup EXIT
   mkdir -p "$STAGE/src/x30_ros"
-  # the working tree as it is, uncommitted changes included
-  tar -C "$ROOT" --exclude=.git --exclude=__pycache__ -cf - . | tar -C "$STAGE/src/x30_ros" -xf -
+  # the working tree as it is, uncommitted changes included; not the docs site's npm packages
+  tar -C "$ROOT" --exclude=.git --exclude=__pycache__ --exclude=node_modules -cf - . |
+    tar -C "$STAGE/src/x30_ros" -xf -
   {
     echo "# packed by x30_ros/tools/pack_sources.sh, $(date -u '+%Y-%m-%d %H:%M UTC')"
     echo "x30_ros $(git -C "$ROOT" describe --always --dirty 2> /dev/null || echo 'not a git checkout')"

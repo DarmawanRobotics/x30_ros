@@ -411,6 +411,7 @@ def test_pack_sources_brings_the_repositories_and_the_sdk_without_history(tmp_pa
     assert not any(n.startswith('src/drivers') for n in names)
     assert not any('.git' in Path(n).parts for n in names)
     assert re.search(rf'third_party/FAST_LIO {re.escape(lio)} main [0-9a-f]{{40}}', manifest)
+    assert not any('node_modules' in Path(n).parts for n in names)  # the docs site's npm
 
 
 def test_x30_repos_keeps_the_layout_the_packer_reads():
