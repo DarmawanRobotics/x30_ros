@@ -90,8 +90,10 @@ sudo bash x30_host.sh install
 `build` is catkin_make as the robot needs it: ROS sourced, `PYTHONNOUSERSITE=1` (a setuptools
 that `pip install --user` put in `~/.local` stops catkin), Release, no tests, at most one job per
 2 GB of memory, on the perception host its packages only, and a workspace `CMakeLists.txt` that
-is not catkin's (left by an older workspace) replaced, kept as `CMakeLists.txt.orig`; its
-arguments go to catkin_make (`--pkg x30_navigation`).
+is not catkin's (left by an older workspace) replaced, kept as `CMakeLists.txt.orig`, and an
+empty `src/config.cmake` where the host's catkin includes one (Deep Robotics' on the perception
+host: `include could not find load file: config.cmake`); its arguments go to catkin_make
+(`--pkg x30_navigation`).
 
 **The watchdog** (`tools/x30_watchdog.py`, the service's main process): it starts the launch
 file, tells systemd ready once the master answers and the critical nodes do (on the navigation
