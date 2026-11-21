@@ -61,7 +61,14 @@ cmd_env() { # <role>
   fi
 }
 
-local_ips() { hostname -I 2>/dev/null || ip -o -4 addr show 2>/dev/null | awk '{print $4}'; }
+local_ips() { # this computer's addresses (X30_LOCAL_IPS: a test's), without prefix lengths
+  if [ -n "${X30_LOCAL_IPS+set}" ]; then
+    say "$X30_LOCAL_IPS"
+    return 0
+  fi
+  hostname -I 2>/dev/null || ip -o -4 addr show 2>/dev/null | awk '{sub("/.*", "", $4); print $4}' ||
+    true
+}
 
 row() { printf '%-8s %-5s %s\n' "$1" "$2" "$3"; }
 
