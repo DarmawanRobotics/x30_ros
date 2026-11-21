@@ -68,6 +68,23 @@ fetch() {  # <url> <version> <dir>: as given, else a GitHub repository over SSH 
   esac
 }
 
+fast_lio_waits() {  # <dir> <path>: FAST-LIO's node built after the messages it includes
+  # upstream fastlio_mapping declares no dependency on fast_lio/Pose6D.h and livox_ros_driver's
+  # CustomMsg.h: a parallel first build compiles it before they are generated and fails (a
+  # second build passes); one line at the end of its CMakeLists.txt, said in SOURCES.txt
+  local cmake=$1/CMakeLists.txt
+  grep -q 'add_executable(fastlio_mapping' "$cmake" 2> /dev/null || return 0
+  grep -q 'add_dependencies(fastlio_mapping' "$cmake" && return 0
+  cat >> "$cmake" <<'EOF'
+
+# x30_ros, tools/pack_sources.sh: built after the messages it includes (a parallel build raced)
+add_dependencies(fastlio_mapping ${PROJECT_NAME}_generate_messages_cpp ${catkin_EXPORTED_TARGETS})
+EOF
+  echo "  patched: fastlio_mapping waits for its messages"
+  echo "# $2 patched: fastlio_mapping waits for its messages (add_dependencies)" \
+    >> "$STAGE/src/SOURCES.txt"
+}
+
 main() {
   local path url version
   while [ $# -gt 0 ]; do
@@ -102,6 +119,7 @@ main() {
     echo "$path: $url ${version:-(default branch)}"
     fetch "$url" "$version" "$STAGE/src/$path" || { echo "cannot clone $url"; exit 1; }
     echo "$path $url ${version:--} $(git -C "$STAGE/src/$path" rev-parse HEAD)" >> "$STAGE/src/SOURCES.txt"
+    fast_lio_waits "$STAGE/src/$path" "$path"
   done < <(repos "$REPOS")
   echo "Livox-SDK: $LIVOX_SDK_URL"
   fetch "$LIVOX_SDK_URL" '' "$STAGE/Livox-SDK" || { echo "cannot clone $LIVOX_SDK_URL"; exit 1; }

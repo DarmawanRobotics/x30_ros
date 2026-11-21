@@ -14,6 +14,9 @@
     \file{network.toml}, or another process holds UDP 43897: \cmd{dr_services.sh status} \\
   \cmd{catkin_make}: \code{importlib_metadata has no attribute 'EntryPoints'} & build with
     \cmd{x30_host.sh build}: it leaves \file{~/.local} out (\code{PYTHONNOUSERSITE=1}) \\
+  The first build fails: \code{fast_lio/Pose6D.h: No such file or directory} & FAST-LIO
+    compiled before its messages: build again (they are there the second time); an archive of
+    \file{pack_sources.sh} from 0.19 on makes it wait \\
   \cmd{catkin_make}: \code{include could not find load file: config.cmake} & the workspace's
     \file{src/CMakeLists.txt} is not catkin's: \cmd{x30_host.sh build} replaces it, keeping
     \file{CMakeLists.txt.orig} \\
