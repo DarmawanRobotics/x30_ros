@@ -164,7 +164,9 @@ the robot standing still): `$X30_PYTHON $(rospack find x30_navigation)/scripts/b
    scp x30_sources.tar.gz ysc@192.168.1.105:~/
    ```
 
-   `--skip drivers/hikmicro_driver` leaves out a repository the robot has already.
+   `--skip drivers/hikmicro_driver` leaves out a repository the robot has already. A GitHub
+   repository HTTPS refuses (a private one, no credentials for it there) comes over SSH with
+   your GitHub key.
 
    The archive holds `src/` (x30_ros as checked out, FAST_LIO with its ikd-Tree,
    livox_ros_driver, the camera drivers; `src/SOURCES.txt` lists their commits) and
