@@ -1,0 +1,121 @@
+\chapter{Localization}
+\label{ch:t-localization}
+
+\section{No map: the start spot and the tags}
+
+The X30 patrols without a map. The robot starts on its dock; FAST-LIO's start is the origin of
+the \code{map} frame, and every route is taught and repeated in that frame. Odometry drifts with
+every metre; \textbf{tags} (printed ArUco markers on walls and posts, recorded once in the site)
+correct the drift wherever the robot sees one.
+
+\code{localization_node} estimates $\T{map}{odom}$, the correction between the map and the
+odometry frame, with an extended Kalman filter on $SE(2)$:
+
+\begin{center}
+\includegraphics[width=\linewidth]{ekf}
+\end{center}
+
+\section{The filter}
+
+\subsection{State and prediction}
+
+The state is $\vect{x} = (x, y, \psi)$ of $\T{map}{odom}$ with its covariance $\mat{P}$. Between
+corrections, odometry carries the robot and $\vect{x}$ stays; only the uncertainty grows, and
+only with motion. Motion is counted in steps (\param{motion_step_m} \SI{5}{cm},
+\param{motion_step_deg} \ang{2}) so that the sway of a standing robot adds nothing. For a step of
+$\Delta s$ metres and $\Delta\theta$ radians, the process noise in the robot frame is
+\begin{equation}
+  \mat{Q}_{\text{base}} = \operatorname{diag}\!\left(\sigma_{xy}^2\,\Delta s,\ \sigma_{xy}^2\,\Delta s,\
+    \sigma_{\psi,m}^2\,\Delta s + \sigma_{\psi,\text{rad}}^2\,|\Delta\theta|\right)
+\end{equation}
+mapped into the state through the inverse of the measurement Jacobian, $\mat{P} \leftarrow
+\mat{P} + \mat{H}^{-1}\mat{Q}_{\text{base}}\mat{H}^{-\top}$. With the defaults
+($\sigma_{xy} = 0.03\,\mathrm{m}/\sqrt{\mathrm{m}}$, $\sigma_{\psi,m} = 0.1^\circ/\sqrt{\mathrm{m}}$) a
+\SI{50}{m} walk without a tag leaves $\sigma_{xy} = 0.03\sqrt{50} = \SI{0.21}{m}$ and
+$\sigma_\psi = \ang{0.71}$.
+
+\subsection{Correction}
+
+A tag seen from the robot gives a measurement $\vect{z}$ of $\T{map}{base}$ with covariance
+$\mat{R}$. The innovation against the prediction $h(\vect{x}) = \T{map}{odom}\,\T{odom}{base}$,
+its covariance and the squared Mahalanobis distance are
+\begin{equation}
+  \vect{\nu} = \vect{z} \ominus h(\vect{x}),\qquad
+  \mat{S} = \mat{H}\mat{P}\mat{H}^\top + \mat{R},\qquad
+  d^2 = \vect{\nu}^\top \mat{S}^{-1} \vect{\nu}
+\end{equation}
+A measurement with $d^2$ above the $\chi^2_3$ gate is rejected as an outlier (a tag recorded
+wrong, a tag moved, a false detection). Otherwise
+\begin{equation}
+  \mat{K} = \mat{P}\mat{H}^\top\mat{S}^{-1},\qquad
+  \vect{x} \leftarrow \vect{x} + \mat{K}\vect{\nu},\qquad
+  \mat{P} \leftarrow (\mat{I}-\mat{K}\mat{H})\,\mat{P}\,(\mat{I}-\mat{K}\mat{H})^\top +
+    \mat{K}\mat{R}\mat{K}^\top
+\end{equation}
+The Joseph form keeps $\mat{P}$ symmetric and positive definite. After the update the
+uncertainty is floored at \param{min_sigma_xy} (\SI{1}{cm}) and \param{min_sigma_yaw_deg}
+(\ang{0.25}): the filter never becomes so sure of itself that it rejects the next tag.
+
+\begin{center}
+\begin{small}
+\begin{tabular}{@{}lrrr@{}}
+  \toprule
+  \param{gate_confidence} & 0.95 & \textbf{0.99} & 0.999 \\
+  $\chi^2_3$ gate & 7.81 & \textbf{11.34} & 16.27 \\
+  \bottomrule
+\end{tabular}
+\end{small}
+\end{center}
+
+\subsection{How much a tag is trusted}
+
+A tag's pose is less certain the farther and the more obliquely it is seen. For a tag at distance
+$d$ seen at angle $\theta$ off its normal:
+\begin{equation}
+  \sigma_p = \sigma_{p,1}\,\frac{d^2}{\cos\theta},\qquad
+  \sigma_\psi = \sigma_{\psi,1}\,\frac{d}{\cos\theta}
+\end{equation}
+with $\sigma_{p,1}$ \SI{2}{cm} and $\sigma_{\psi,1}$ \ang{1} at one metre
+(\param{sigma_xy_at_1m}, \param{sigma_yaw_deg_at_1m}). A heading error also moves the robot about
+the tag, so $\mat{R}$ couples position and heading through the lever arm to the tag. Tags farther
+than \param{max_distance_m} (\SI{4}{m}) or seen beyond \param{max_view_angle_deg} (\ang{60}) are
+ignored: at \SI{4}{m} a tag's position is already worth \SI{32}{cm}.
+
+\section{The states}
+
+\begin{description}
+  \item[NONE] no $\T{map}{odom}$ yet: navigation does not start.
+  \item[LOCALIZED] the robot knows where it is: on the start spot (\param{origin_sigma_xy}
+    \SI{5}{cm}, \param{origin_sigma_yaw_deg} \ang{2}), or from a tag.
+  \item[UNCERTAIN] $\sigma_{xy}$ above \param{max_sigma_xy} or $\sigma_\psi$ above
+    \param{max_sigma_yaw_deg}.
+\end{description}
+
+The follower pauses only at NONE. UNCERTAIN is reported on \topic{localization/status} and by
+the health monitor, and the patrol goes on: without a map the robot has nothing better than its
+odometry between tags. The defaults (\SI{100}{m}, \ang{180}) never leave LOCALIZED; lower them to
+make a long walk without tags visible in NETRA and the health report.
+
+\section{Tags}
+
+\begin{description}
+  \item[Recording] \srv{localization/record_tags} averages each visible tag over
+    \param{record_duration_sec} (\SI{2}{s}) and keeps it only with \param{record_min_samples}
+    detections within \param{record_max_std_m} and \param{record_max_std_deg}. Record from where
+    the robot will see the tag on its routes, \SIrange{1}{2.5}{m} away, as square-on as possible.
+  \item[Automatic] \param{auto_localize}: while not localized, any visible recorded tag
+    localizes the robot. \param{auto_correct}: while localized, visible tags are fused through the
+    gate.
+  \item[Placement] one tag every \SIrange{20}{40}{m} of route, at the camera's height, where the
+    robot looks at it while walking (the start of a straight, a stop point), never on something
+    that moves (a gate, a door).
+\end{description}
+
+\begin{warnbox}[A restarted odometry]
+FAST-LIO restarting (Chapter~\ref{ch:t-odometry}) resets the odom frame: the old
+$\T{map}{odom}$ means nothing. The localization drops to NONE and the patrol pauses. Show the
+robot a recorded tag (\srv{localization/start}, the app's \ui{Localize}), or bring it back to its
+start spot and restart the navigation host's service: the start spot becomes the origin again.
+(\srv{localization/assume_origin} takes the current odom frame as the map: right only when
+FAST-LIO restarted on the start spot.)
+\end{warnbox}

@@ -1,0 +1,76 @@
+\chapter{Health, the handheld and NETRA}
+\label{ch:t-system}
+
+\section{The health monitor}
+
+\code{health_monitor_node} publishes \topic{health/status} every second (and
+\topic{/diagnostics}): every finding with its level, and a speed scale.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.3\linewidth}X@{}}
+  \toprule
+  \textbf{Check} & \textbf{Issue when} \\
+  \midrule
+  \param{nodes.expected} & a node of the host is missing (filled by bringup from what it starts) \\
+  \param{sensors.topics} & a topic below \param{rate_tolerance} of its rate (\topic{/livox/lidar}
+    \SI{5}{Hz}, \topic{/Odometry} \SI{8}{Hz}) or its stamps too old \\
+  \param{state.*} & odometry LOST (error) or DEGRADED, localization NONE, the e-stop engaged or
+    the protective field stale or blind (errors) \\
+  \param{tf.*} & a dynamic transform older than \param{max_age_sec}, or from the future (clocks) \\
+  \param{system.*} & the hottest thermal zone above \SI{85}{\celsius}, memory above \SI{92}{\percent},
+    less than \SI{5}{GB} free, a load above 2 per CPU \\
+  \param{clock.*} & (off) \cmd{chronyc tracking} offset above \SI{50}{ms} \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+For \param{startup_grace_sec} (\SI{30}{s}) after the start, missing nodes and inputs only warn.
+
+\subsection{The speed scale}
+
+An error makes the scale 0; a warning takes the lowest scale of the
+\param{degradation.rules} it matches (\code{sensor:/livox/lidar=0.5}, \code{sensor:/Odometry=0.5},
+\code{tf:*=0.5}), otherwise \param{warn_scale} (1). The control mux applies it to every command only
+with \cmd{use_health_limit: true} in \file{x30_control/config/control.yaml}; the X30 ships with it off,
+and the follower pauses by itself on the conditions that matter (stale poses and scans, NONE). Turn
+it on to make a slow LiDAR or odometry halve the speed instead of merely reporting it.
+
+\section{The handheld gateway}
+
+\code{teleop_udp_node} serves the H12 on UDP \param{port} 9870, with the shared secret of
+\code{X30_TELEOP_TOKEN}.
+
+\begin{description}
+  \item[\param{max_vx}, \param{max_vy}, \param{max_wz}] the stick's full deflection, never above the
+    profile's limits (each axis is capped separately): a full stick sideways asks for \param{max_vy}.
+  \item[\param{client_timeout_sec}] a handheld silent this long is dropped and its stick zeroed; the
+    mux's \param{remote_timeout_sec} stops the robot earlier.
+  \item[\param{camera_fps}, \param{camera_jpeg_quality}, \param{camera_max_width}] the video to the
+    handheld: lower them on a weak link before anything else.
+  \item[\param{lidar_hz}, \param{lidar_voxel}, \param{lidar_max_points}] the cloud on the handheld's
+    map.
+  \item[\param{patrol_speed_min}, \param{patrol_speed_max}] the range of the patrol speed the app
+    sets (the follower's \param{cruise}).
+\end{description}
+
+\section{The NETRA uplink}
+
+\code{fleet_uplink_node} (navigation host) connects the robot to NETRA at \param{server_url} with
+its \param{robot_id} and the token of \code{X30_NETRA_TOKEN}.
+
+\begin{description}
+  \item[\param{telemetry_hz}] snapshots to NETRA (\SI{1}{Hz}).
+  \item[\param{spool_dir}, \param{upload_period_sec}] routes and inspections wait on disk until
+    NETRA confirms them, tried every \SI{5}{s}: a patrol without network loses nothing.
+  \item[\param{clock_sync_period_sec}, \param{clock_warn_ms}] the offset to NETRA's clock, measured
+    every \SI{10}{s} and reported with the telemetry; above \SI{200}{ms} the robot warns: set the
+    robot's clock right (chrony).
+\end{description}
+
+\section{The simulator}
+
+\code{x30_sim} replaces the driver, the LiDARs, the IMU and FAST-LIO with a planar simulation that
+publishes the same topics: routes, the follower, avoidance, the field and the inspection run
+unchanged. Its parameters (Appendix~\ref{ch:t-reference}) set the world, the noise and the
+robot's response; tune the stack's logic there, never its safety distances, which belong to the
+real robot's measurements.

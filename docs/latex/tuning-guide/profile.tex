@@ -1,0 +1,105 @@
+\chapter{The robot profile and its braking model}
+\label{ch:t-profile}
+
+\section{The profile}
+
+\file{x30_bringup/config/robot.yaml} describes the X30 once for the whole stack. Its values come
+from Deep Robotics' manuals and from measurements on the robot:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.3\linewidth}p{0.14\linewidth}X@{}}
+  \toprule
+  \textbf{Parameter} & \textbf{X30} & \textbf{Where it comes from} \\
+  \midrule
+  \param{kinematics} & \code{omni} & legged: forward, sideways and turning at once \\
+  \param{footprint.front}, \param{rear} & \SI{0.50}{m} & standing length \SI{1000}{mm}, base\_link in
+    the middle of the body \\
+  \param{footprint.half_width} & \SI{0.235}{m} & standing width \SI{470}{mm} \\
+  \param{base_height} & \SI{0.48}{m} & base\_link above the floor when standing: \textbf{measure} \\
+  \param{limits.max_vx} & \SI{0.75}{m/s} & Walk gait: \SI{1.2}{m/s} forward, \SI{0.75}{m/s} backward \\
+  \param{limits.max_vy} & \SI{0.15}{m/s} & Walk gait sideways (L-Walk \SI{0.5}{m/s}) \\
+  \param{limits.max_wz} & \SI{0.45}{rad/s} & Walk gait (L-Walk \SI{1.2}{rad/s}) \\
+  \param{limits.max_accel} & \SI{0.5}{m/s^2} & comfortable start \\
+  \param{limits.max_decel} & \SI{0.6}{m/s^2} & braking: \textbf{measure} (Section~\ref{sec:t-measure}) \\
+  \param{limits.max_yaw_accel} & \SI{1.5}{rad/s^2} & yaw braking: \textbf{measure} \\
+  \param{limits.reaction_time} & \SI{0.3}{s} & a \SI{10}{Hz} LiDAR, the scan, the mux, the
+    \SI{50}{Hz} axis stream \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+The limits are what the stack may command, so every gait the robot walks in must reach them:
+the Walk gait's \SI{0.15}{m/s} sideways is why \param{max_vy} is low. The profile is read-only
+at runtime; a change needs a restart of every host.
+
+\section{One braking model}
+\label{sec:t-braking}
+
+Every speed limit of the stack (the protective field, the follower's guard, the speed profile
+before a stop point, path shift) uses one model of how far the robot travels from the moment a
+command at speed $v$ is sent until it stands:
+
+\begin{equation}
+  d(v) = v\,t_r + \frac{v^2}{2a}
+  \label{eq:t-braking}
+\end{equation}
+
+with $t_r$ the reaction time (\param{reaction_time}: sensing, transport, the robot's own
+latency) and $a$ the braking deceleration (\param{max_decel}). Read backwards, it gives the
+highest speed that still stops within a free distance $D$:
+
+\begin{equation}
+  v_{\max}(D) = a\left(-t_r + \sqrt{t_r^2 + \frac{2D}{a}}\right)
+  \label{eq:t-stopping-speed}
+\end{equation}
+
+The same two equations hold for turning, with the yaw rate $\omega$, the yaw braking
+$\alpha$ (\param{max_yaw_accel}) and the free angle $\theta$ instead:
+$\theta(\omega) = \omega t_r + \omega^2/2\alpha$. At \SI{0.45}{rad/s} the X30 turns another
+\SI{0.20}{rad} (\SI{11.6}{\degree}) before it stands.
+
+\begin{notebox}[Why the reaction time matters most at low speed]
+At \SI{0.25}{m/s} the reaction term $v\,t_r$ is \SI{7.5}{cm} of the \SI{12.7}{cm} the robot needs
+to stop; at \SI{0.75}{m/s} it is \SI{22.5}{cm} of \SI{69}{cm}. An underestimated $t_r$ shortens
+every distance by $v\,\Delta t_r$, an underestimated $a$ by a share that grows with $v^2$.
+\end{notebox}
+
+\section{Measuring the braking}
+\label{sec:t-measure}
+
+Measure on the substation's own ground, with the payload mounted and a charged battery: a heavier
+robot or a slippery surface brakes later.
+
+\begin{enumerate}
+  \item Mark a straight, free \SI{10}{m} lane. Record the command and the odometry:
+\begin{lstlisting}[language=bash]
+rosbag record -O brake.bag /x30/cmd_vel /Odometry
+\end{lstlisting}
+  \item In REMOTE, walk the robot along the lane at a steady speed $v$ for at least \SI{3}{m},
+    then let go of the stick at once (the command drops to zero).
+  \item Repeat three times each at \num{0.25}, \num{0.5} and \SI{0.75}{m/s}.
+  \item From the bag, for each stop: $t_0$ the time the command dropped, $t_1$ the time the
+    odometry speed starts to fall, $t_2$ the time it reaches zero, and the distance $d$ travelled
+    from $t_0$ to $t_2$.
+\end{enumerate}
+
+Then $t_r = t_1 - t_0$, and from the model
+\begin{equation}
+  a = \frac{v^2}{2\,(d - v\,t_r)}
+  \label{eq:t-decel}
+\end{equation}
+For example, $v = \SI{0.5}{m/s}$ stopping in $d = \SI{0.42}{m}$ with $t_r = \SI{0.3}{s}$ gives
+$a = \SI{0.46}{m/s^2}$. Put in the profile the \textbf{largest} $t_r$ and the \textbf{smallest} $a$
+of all runs: the model must not stop shorter than the robot.
+
+\begin{dangerbox}[Never round the measurements toward the robot's favour]
+A higher \param{max_decel} or a lower \param{reaction_time} than measured makes every safety
+distance of the stack too short. When in doubt, keep the larger distance.
+\end{dangerbox}
+
+\section{The base height}
+
+\param{base_height} levels the LiDAR's points (the height band of Chapter~\ref{ch:t-perception}
+counts from the floor) and places the near-field blind zone. Measure the height of base\_link
+(the middle of the body, application manual 6.1) above the floor with the robot standing on
+level ground, to the centimetre.

@@ -1,0 +1,147 @@
+\chapter{The control mux and the protective field}
+\label{ch:t-control}
+
+\code{control_mux_node} is the only publisher of the robot's \topic{cmd_vel}. Every command, from
+navigation or from an operator, passes through it in this order:
+
+\begin{center}
+\includegraphics[width=\linewidth]{safety}
+\end{center}
+
+\section{Sources, silence and the e-stop}
+
+\begin{description}
+  \item[AUTO] navigation drives (\topic{control/nav_cmd_vel}); a silence longer than
+    \param{nav_timeout_sec} (\SI{0.5}{s}) sends one zero.
+  \item[REMOTE] one operator source drives: \code{handheld} (the H12 gateway) or
+    \code{dashboard} (NETRA), each on \topic{control/remote/<source>/cmd_vel}; a silence longer than
+    \param{remote_timeout_sec} (\SI{0.3}{s}) sends one zero.
+  \item[E-stop] while engaged, zeros at \param{estop_hold_hz}. After the release, after a mode
+    change or a source's silence, the source must first send \param{rearm_neutral_count} neutral
+    commands in a row (every axis below \param{neutral_eps}): a stick held during the release
+    never moves the robot.
+\end{description}
+
+\section{The envelope}
+
+The command is brought inside the profile's limits, keeping its direction:
+\begin{equation}
+  s = \min\!\left(1,\ \frac{v_{x,\max}}{|v_x|},\ \frac{v_{y,\max}}{|v_y|}\right),\qquad
+  (v_x, v_y) \leftarrow s\,(v_x, v_y),\qquad
+  \omega \leftarrow \operatorname{clip}(\omega, -\omega_{\max}, \omega_{\max})
+\end{equation}
+A non-finite value turns the whole command into zero. With \param{use_health_limit}, the health
+monitor's \code{speed_scale} (0 to 1) multiplies every command.
+
+\section{The protective field}
+\label{sec:t-field}
+
+The field limits each command to what the robot can still stop within, on the 360\textdegree\
+safety scan (\topic{perception/safety_scan}, Chapter~\ref{ch:t-perception}). It applies in AUTO
+with \param{field.margin}, and in REMOTE with \param{field.remote_margin} unless
+\param{field.in_remote} is false.
+
+\subsection{Translation}
+
+The footprint, grown sideways by \param{lateral_margin}, is swept along the commanded direction
+of travel; $D$ is the free distance to the first obstacle point inside the swept band. The field
+keeps the speed and separation monitoring distance of ISO/TS~15066 inside $D$ less the margin
+$m$: the robot's braking (Eq.~\ref{eq:t-braking}) plus the distance a person walking toward the
+robot at $v_h$ (\param{human_speed}) covers until the robot stands:
+\begin{equation}
+  S(v) = v\,t_r + \frac{v^2}{2a} + v_h\left(t_r + \frac{v}{a}\right) \le D - m
+\end{equation}
+Solved for the highest allowed speed:
+\begin{equation}
+  v_{\text{allowed}} = a\left(-b + \sqrt{b^2 + \frac{2\,(D - m - v_h t_r)}{a}}\right),
+  \qquad b = t_r + \frac{v_h}{a}
+\end{equation}
+A faster command is scaled down to $v_{\text{allowed}}$ in the same direction; an allowed speed
+below \param{min_speed} stops the translation instead (a crawl into an obstacle helps no one).
+
+\begin{center}
+\includegraphics[width=0.9\linewidth]{braking}
+\end{center}
+
+With the X30's profile ($t_r$ \SI{0.3}{s}, $a$ \SI{0.6}{m/s^2}, $v_h$ \SI{0.5}{m/s}):
+
+\begin{center}
+\begin{small}
+\begin{tabular}{@{}rrrrr@{}}
+  \toprule
+  \textbf{Speed} & \textbf{Braking} & \textbf{Person} & \textbf{Field, AUTO} & \textbf{Field, REMOTE} \\
+  m/s & m & m & m ($m$ \num{0.15}) & m ($m$ \num{0.10}) \\
+  \midrule
+  0.10 & 0.04 & 0.23 & 0.42 & 0.37 \\
+  0.25 & 0.13 & 0.36 & 0.64 & 0.59 \\
+  0.50 & 0.36 & 0.57 & 1.08 & 1.03 \\
+  0.75 & 0.69 & 0.78 & 1.62 & 1.57 \\
+  \bottomrule
+\end{tabular}
+\qquad
+\begin{tabular}{@{}rr@{}}
+  \toprule
+  \textbf{Free ahead $D$} & \textbf{Allowed, AUTO} \\
+  m & m/s \\
+  \midrule
+  0.50 & 0.16 \\
+  0.75 & 0.32 \\
+  1.00 & 0.46 \\
+  1.25 & 0.59 \\
+  1.50 & 0.70 \\
+  2.00 & 0.90 \\
+  \bottomrule
+\end{tabular}
+\end{small}
+\end{center}
+
+\subsection{Rotation}
+
+For a turn, the field finds the angle $\theta$ the footprint can rotate before it touches a
+point, less \param{yaw_margin}, and allows the yaw rate that stops within it:
+\begin{equation}
+  \omega_{\text{allowed}} = \alpha\left(-t_r + \sqrt{t_r^2 + \frac{2\,\theta}{\alpha}}\right)
+\end{equation}
+Below \param{min_yaw_rate} the turn stops. A command that translates and turns at once is checked
+along its stopping arc: the footprint at every step of the arc until both axes stand, with the
+margin grown by the person's approach during the braking time
+$v_h\,(t_r + \max(v/a, |\omega|/\alpha))$, and the whole command scaled down until the arc stays
+clear.
+
+\subsection{When the scan cannot be trusted}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.16\linewidth}X@{}}
+  \toprule
+  State & Behaviour \\
+  \midrule
+  STALE & no scan newer than \param{scan_timeout_sec}, or its stamp older than
+    \param{scan_max_age_sec}: AUTO stops; REMOTE creeps, the fastest point of the body at
+    \param{remote_degraded_speed} \\
+  BLIND & the LiDAR sees too little (Chapter~\ref{ch:t-perception}): AUTO stops; REMOTE creeps and
+    still keeps clear of what is seen, never toward a blind sector \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Tuning the field}
+
+\begin{description}
+  \item[\param{margin}] what the model does not know: the scan's motion smear and its sector
+    discretization (Chapter~\ref{ch:t-perception}), the robot's sway while walking. \SI{0.15}{m}
+    covers the X30 at \SI{0.75}{m/s} on a \SI{10}{Hz} scan; raise it on rough ground.
+  \item[\param{human_speed}] the trade-off of the whole field. \SI{0.5}{m/s} presumes trained staff
+    who see the robot. ISO~13855 assumes \SI{1.6}{m/s} for a walking person: the field at
+    \SI{0.75}{m/s} then needs \SI{3.3}{m} free ahead, and the robot slows wherever people may
+    walk. Choose it with the site's risk assessment, never lower than the people near the robot
+    actually walk.
+  \item[\param{lateral_margin}] the sideways allowance of the swept band; the follower's guard must
+    use at least the same (\code{path_follower_node/safety/lateral_margin}).
+  \item[\param{min_speed}, \param{min_yaw_rate}] below the X30's slowest steps
+    (Chapter~\ref{ch:t-driver}) a command does not move the robot anyway.
+\end{description}
+
+\begin{dangerbox}[The field is software]
+The protective field is not a certified safety function. It reduces risk; the hard emergency stop
+and a responsible operator stay the protection.
+\end{dangerbox}

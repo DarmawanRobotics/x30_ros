@@ -1,0 +1,99 @@
+\chapter{Odometry}
+\label{ch:t-odometry}
+
+FAST-LIO, a LiDAR-inertial odometry, gives the robot's motion (\topic{/Odometry}); the X30's leg
+odometry from the motion host is the second opinion. \code{x30_odometry} holds FAST-LIO back
+until the robot stands still, and watches it while it runs.
+
+\section{The start gate}
+
+FAST-LIO takes gravity and the IMU's biases from its first second of data. Started while the
+robot walks, sways or stands on a slope, its frame is tilted and every height of the stack is
+wrong with it. \code{wait_still} starts FAST-LIO only once the IMU has been still for
+\param{still_sec} (\SI{2}{s}):
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.3\linewidth}p{0.14\linewidth}X@{}}
+  \toprule
+  \textbf{Condition} & \textbf{Default} & \textbf{Meaning} \\
+  \midrule
+  \param{max_gyro_rad_s} & \SI{0.03}{rad/s} & no turning \\
+  \param{max_acc_rel_std} & \num{0.01} & $\sigma(|\vect{a}|)/\overline{|\vect{a}|}$: no shaking (unit-free) \\
+  \param{max_tilt_deg} & \ang{3} & gravity within \ang{3} of the IMU's $z$ axis: standing level \\
+  \param{min_samples} & 20 & IMU samples in the window \\
+  \param{timeout_sec} & \SI{60}{s} & then start anyway, with an error in the log \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{tipbox}[Start on the dock]
+The robot standing on its dock, sitting or standing still, passes the gate in two seconds. On a
+slope above \ang{3} the gate waits for its timeout: start the robot on level ground.
+\end{tipbox}
+
+\section{The monitor}
+
+\code{odometry_monitor_node} publishes \topic{odometry/status}: OK, DEGRADED or LOST, with the
+reason. The health monitor makes LOST an error and DEGRADED a warning.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.14\linewidth}X@{}}
+  \toprule
+  State & When \\
+  \midrule
+  LOST & no pose for \param{stale_sec} (\SI{0.5}{s}); a jump or a restart, for \param{hold_sec}
+    (\SI{5}{s}) after it \\
+  DEGRADED & the speed residual alarms; the odom frame tilted against gravity by more than
+    \param{tilt.max_deg} (measured while still); $|z|$ above \param{max_z_drift_m} on flat ground \\
+  OK & none of these \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Jumps and restarts}
+
+A step between two poses is a \textbf{jump} when it is longer than \param{jump.min_step_m}
+(\SI{0.3}{m}) and faster than \param{jump.speed_factor} times the robot's speed limit: no gait
+covers it. A \textbf{restart} is a message gap of \param{restart.gap_sec} followed by a pose at the
+origin (within \param{origin_radius_m} and \param{origin_yaw_deg}): FAST-LIO began again, and
+every pose in odom before it is meaningless (Chapter~\ref{ch:t-localization}).
+
+\subsection{The speed residual}
+
+FAST-LIO's speed, from its poses over \param{window_sec}, is compared with the leg odometry's
+planar speed. The residual, normalized by both uncertainties, is a $\chi^2$ sample with one
+degree of freedom:
+\begin{equation}
+  r = v_{\text{LIO}} - v_{\text{leg}},\qquad
+  \chi^2 = \frac{r^2}{\sigma_{\text{LIO}}^2 + \sigma_{\text{leg}}^2}
+\end{equation}
+One sample means little (the legs slip, the gait sways), a persistent disagreement means a lot.
+A one-sided CUSUM accumulates the excess over $\kappa$ and alarms above $h$:
+\begin{equation}
+  s_k = \min\!\bigl(2h,\ \max(0,\ s_{k-1} + \chi^2_k - \kappa)\bigr),\qquad
+  \text{alarm while } s_k > h
+\end{equation}
+With $\kappa = 3.84$ (the 95\,\% point of $\chi^2_1$), $h = 20$, $\sigma_{\text{LIO}} =
+\SI{0.05}{m/s}$ and $\sigma_{\text{leg}} = \SI{0.15}{m/s}$:
+
+\begin{itemize}
+  \item a residual below $\sqrt{\kappa\,(\sigma_{\text{LIO}}^2 + \sigma_{\text{leg}}^2)} =
+    \SI{0.31}{m/s}$ never alarms, however long it lasts;
+  \item a residual of \SI{0.5}{m/s} adds $10.0 - 3.84 = 6.2$ per pose and alarms at the fourth;
+  \item the cap $2h$ bounds the recovery: after the disagreement ends, the alarm clears within
+    a few poses.
+\end{itemize}
+
+\begin{description}
+  \item[Raise $\sigma_{\text{leg}}$] on gravel, mud or wet grass, where the legs slip: false
+    alarms vanish, real ones come later.
+  \item[Lower $h$] to catch a degenerate FAST-LIO (a featureless yard, a long uniform wall)
+    sooner, at the cost of more alarms on rough ground.
+\end{description}
+
+\section{The trip meter}
+
+\topic{odometry/trip} counts the distance, the moving time and the speeds from FAST-LIO's poses
+since the last reset (\srv{odometry/trip_reset}, the app's long press). Motion is counted in steps
+of \param{step_m}, so the sway of a standing robot adds nothing; a speed above \param{max_mps} is
+a jump, not a trip.

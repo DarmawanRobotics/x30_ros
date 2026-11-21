@@ -1,0 +1,57 @@
+\chapter{Parameter reference}
+\label{ch:t-reference}
+
+Every parameter of every node, generated from the configuration declarations of the sources
+(\file{docs/tools/params.py}): name, default, unit, accepted range and meaning. The default is
+the value in the code; the X30's YAML files set some of them for the robot (the profile in
+\file{x30_bringup/config/robot.yaml}, every node in its package's \file{config/}), and those
+files win. \readonlynote
+
+\section{Robot profile}
+\input{generated/params_robot}
+
+\section{Driver}
+The driver's parameters come from the comments of \file{x30_driver/config/driver_params.yaml}.
+\input{generated/params_driver}
+
+\section{Control mux and protective field}
+\input{generated/params_control}
+
+\section{Perception}
+\input{generated/params_perception}
+
+\section{Odometry}
+\input{generated/params_odometry}
+
+\section{Localization}
+\input{generated/params_localization}
+
+\section{Navigation}
+\input{generated/params_navigation}
+
+\section{Path controllers}
+\input{generated/params_controllers}
+
+\section{Reactive avoidance}
+\input{generated/params_avoidance}
+
+\section{Docking}
+\input{generated/params_docking}
+
+\section{Health}
+\input{generated/params_health}
+
+\section{Inspection}
+\input{generated/params_inspection}
+
+\section{Recorder}
+\input{generated/params_recorder}
+
+\section{Handheld gateway}
+\input{generated/params_bridge}
+
+\section{NETRA uplink}
+\input{generated/params_fleet}
+
+\section{Simulator}
+\input{generated/params_sim}

@@ -1,0 +1,86 @@
+\chapter{The driver: speeds to the robot}
+\label{ch:t-driver}
+
+\section{From a velocity to an axis command}
+
+\code{x30_driver} turns the mux's \topic{cmd_vel} (base\_link, REP-103: $x$ forward, $y$ left,
+counter-clockwise positive) into the robot's axis commands, streamed at \SI{50}{Hz} to the motion
+host, only while the robot is in its stepping state and its motion report is fresh. Each axis is
+scaled to the maximum speed of the gait the robot walks in:
+
+\begin{equation}
+  u = \operatorname{round}\!\left(\frac{v}{v_{\max}(\text{gait})}\cdot 32767\right),
+  \qquad |u| < 655 \;\Rightarrow\; u = \pm 656
+\end{equation}
+
+The lateral and yaw axes go out negated (the robot counts right as positive). A value inside the
+robot's dead zone ($|u| < 655$) would be ignored by the robot, so a small non-zero command goes
+out as the smallest value the robot moves on: the X30 creeps rather than stands.
+
+\begin{center}
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}lrrrrX@{}}
+  \toprule
+  \textbf{Gait} & \textbf{Forward} & \textbf{Backward} & \textbf{Sideways} & \textbf{Yaw} &
+    \textbf{Slowest step forward} \\
+   & m/s & m/s & m/s & rad/s & m/s \\
+  \midrule
+  Walk & 1.2 & 0.75 & 0.15 & 0.45 & 0.024 \\
+  Slope & 0.7 & 0.75 & 0.25 & 0.5 & 0.014 \\
+  Off-road & 0.3 & 0.4 & 0.1 & 0.5 & 0.006 \\
+  Stair & 0.3 & 0.3 & 0.2 & 0.8 & 0.006 \\
+  Stair (multi-frame) & 0.6 & 0.3 & 0.2 & 0.8 & 0.012 \\
+  Stair \ang{45} & 0.3 & 0.2 & 0.2 & 0.8 & 0.006 \\
+  L-Walk & 1.0 & 1.0 & 0.5 & 1.2 & 0.020 \\
+  Mountain & 1.0 & 1.0 & 0.8 & 1.2 & 0.020 \\
+  \bottomrule
+\end{tabularx}
+\end{small}
+\end{center}
+
+\noindent Speeds at normal body height (application manual, Appendix B); at crawl height Walk and
+Slope go forward at half. Run and Silent have no published speeds: the driver does not move the
+robot in them unless \param{gait_limits} gives them, for example
+\cmd{gait_limits: {silent: [0.5, 0.5, 0.2, 0.5]}}.
+
+\begin{warnbox}[The gait limits the stack]
+The robot profile's limits must hold in every gait the robot walks in during a patrol. In
+Off-road the X30 walks at most \SI{0.3}{m/s} forward whatever the follower asks: the patrol is
+slower, still safe (the braking model assumed more), but the follower's progress checks wait
+longer. Keep Walk for patrols, or lower \param{cruise}.
+\end{warnbox}
+
+\section{The signs of the axes}
+
+A wrong sign makes the robot step right when the stack means left: every avoidance and the
+protective field's sideways check go wrong with it. Check once per robot, in REMOTE, with the
+robot standing in a free area and the handheld app closed (one source drives at a time):
+
+\begin{lstlisting}[language=bash]
+rosservice call /control/set_mode "{mode: remote, source: handheld}"
+rostopic pub -r 10 /control/remote/handheld/cmd_vel geometry_msgs/Twist '{linear: {y: 0.1}}'
+\end{lstlisting}
+\begin{enumerate}
+  \item With the second line running, the robot must step to its \textbf{left}. If it steps right:
+    \cmd{invert_vy: true} in \file{driver_params.yaml}.
+  \item The same with \cmd{'{angular: {z: 0.2}}'}: the robot must turn \textbf{counter-clockwise}
+    (left). If not: \cmd{invert_wz: true}.
+  \item Ctrl-C, then back to AUTO: \cmd{rosservice call /control/set_mode "{mode: auto}"}.
+\end{enumerate}
+
+\section{Silence and stopping}
+
+\begin{description}
+  \item[\param{cmd_timeout_sec} (\SI{0.5}{s})] a command older than this is replaced by zeros;
+  \item[\param{stop_burst_sec} (\SI{0.5}{s})] zeros streamed after motion ends, then silence (the
+    robot itself drops an axis that falls silent for \SI{1}{s});
+  \item[Episodes] the first command after a quiet period starts an episode: the driver puts the
+    robot into the control mode and the stepping state it needs (\param{auto_control_mode},
+    \param{auto_stepping}), three tries in two seconds. Nothing moves the robot after
+    \cmd{sit_down}, an emergency stop, a fall or a takeover by Deep Robotics' handheld until the
+    command has been zero or quiet once.
+\end{description}
+
+The driver's own clamps (\param{max_vx} \SI{1.0}{m/s}, \param{max_vy} \SI{0.5}{m/s},
+\param{max_wz} \SI{1.0}{rad/s}) are a last bound above the profile; the profile's limits are the
+ones the stack plans with.

@@ -1,0 +1,77 @@
+\chapter{How the settings are organized}
+\label{ch:t-layers}
+
+\section{Five places}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.24\linewidth}p{0.3\linewidth}X@{}}
+  \toprule
+  Place & File & What goes there \\
+  \midrule
+  Robot profile & \file{x30_bringup/config/robot.yaml} & the body and its motion limits, read by every
+    node under \code{robot/}; read-only at runtime \\
+  Node settings & \file{x30_<package>/config/*.yaml} & each node's own parameters
+    (Appendix~\ref{ch:t-reference}) \\
+  Launch arguments & \file{/etc/x30/<role>.env}, \code{X30_LAUNCH_ARGS} & which parts run on a host
+    and with what: the site, the controller, NETRA, the camera hosts \\
+  Secrets & \file{/etc/x30/<role>.env} & tokens and camera passwords, as environment variables only
+    (never parameters: \cmd{roslaunch} prints parameters) \\
+  Sites & \file{~/x30/map/<site>/} & routes, stop points, tags and inspection points of a
+    substation: taught, not tuned \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+The profile is the one place for numbers several nodes must agree on: the footprint, the
+speeds, the braking. A node never keeps its own copy of them; where a node needs a stricter value
+(the follower's cruise speed below \code{max_vx}), its own parameter can only lower it.
+
+\section{Live and start-only parameters}
+
+Every parameter is declared in a configuration dataclass with its unit, range and description,
+and validated when the node starts: a value outside its range or a contradiction (an approach
+speed above the cruise speed) stops the node with the reason. The tables of
+Appendix~\ref{ch:t-reference} come from the same declarations.
+
+\begin{itemize}
+  \item A \textbf{live} parameter is read again every second. Changing it on the parameter server
+    takes effect within that second; an invalid value is rejected with a log line and the old
+    value stays.
+  \item A parameter marked $^\dagger$ is read at start only: change it in the YAML file and
+    restart the host's service.
+\end{itemize}
+
+\begin{lstlisting}[language=bash]
+rosparam set /control_mux_node/field/margin 0.2      # live: in effect within 1 s
+rosparam get /control_mux_node/field                 # what the node runs with
+\end{lstlisting}
+
+\begin{warnbox}[A live change does not survive a restart]
+The parameter server is filled from the YAML files at every start. Try a value live, then write
+it into the YAML file of the workspace (or the package's) so the next start keeps it.
+\end{warnbox}
+
+\section{Where to start}
+
+Tune from the bottom up: each layer relies on the one below being right.
+
+\begin{enumerate}
+  \item \textbf{The profile}: measure the base height, the braking and the reaction time
+    (Chapter~\ref{ch:t-profile}). Every safety distance follows from them.
+  \item \textbf{The driver}: the signs of the axes and the gait's speed limits
+    (Chapter~\ref{ch:t-driver}).
+  \item \textbf{The scans}: the LiDAR's mount and the height band; a scan that misses an obstacle
+    or sees the floor makes every layer above wrong (Chapter~\ref{ch:t-perception}).
+  \item \textbf{The protective field}: its margins on the measured braking
+    (Chapter~\ref{ch:t-control}).
+  \item \textbf{Odometry and localization}: the drift and the tags (Chapters~\ref{ch:t-odometry}
+    and~\ref{ch:t-localization}).
+  \item \textbf{Route following} and \textbf{avoidance} last (Chapters~\ref{ch:t-following}
+    and~\ref{ch:t-obstacles}).
+\end{enumerate}
+
+\begin{tipbox}[Record before and after]
+A change is judged on data, not on a feeling: \cmd{rosbag record} the topics of the layer before
+and after the change, on the same route, and compare. The trip meter
+(\topic{odometry/trip}) and \topic{navigation/status} give the time per lap and the stops.
+\end{tipbox}
