@@ -35,7 +35,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends texlive-xetex texlive-latex-recommended \
             texlive-latex-extra texlive-pictures texlive-science texlive-fonts-recommended latexmk \
-            fonts-dejavu-core fonts-dejavu-extra fonts-lmodern pandoc poppler-utils python3-numpy > /dev/null
+            fonts-dejavu-core fonts-dejavu-extra fonts-lmodern pandoc poppler-utils librsvg2-bin python3-numpy > /dev/null
       - name: The parameter tables match the code
         run: |
           python3 docs/tools/params.py
