@@ -442,6 +442,30 @@ def test_pack_sources_brings_the_repositories_and_the_sdk_without_history(tmp_pa
     assert all(len(line) <= 52 and '#' not in line for line in commands), commands
 
 
+@pytest.mark.skipif(shutil.which('git') is None, reason='git is needed to pack')
+def test_pack_sources_takes_a_private_github_repository_over_ssh(tmp_path):
+    """HTTPS refused (no credentials): the same repository over SSH, the user's GitHub key."""
+    repository(tmp_path / 'r' / 'cam.git', {'package.xml': '<name>cam</name>'})
+    sdk = repository(tmp_path / 'r' / 'sdk', {'sdk_core/include/livox_sdk.h': ''})
+    repos = tmp_path / 'test.repos'
+    url = 'https://github.com/Org/cam.git'
+    repos.write_text(
+        f'repositories:\n  drivers/cam:\n    type: git\n    url: {url}\n    version: main\n'
+    )
+    # GitHub, offline: HTTPS answers nothing, SSH is the local copy
+    (tmp_path / '.gitconfig').write_text(
+        f'[url "file://{tmp_path}/nowhere/"]\n\tinsteadOf = https://github.com/Org/\n'
+        f'[url "file://{tmp_path}/r/"]\n\tinsteadOf = git@github.com:Org/\n'
+    )
+    env = {'X30_REPOS': str(repos), 'LIVOX_SDK_URL': sdk, 'HOME': str(tmp_path),
+           'GIT_CONFIG_NOSYSTEM': '1', 'XDG_CONFIG_HOME': str(tmp_path / 'xdg')}  # fmt: skip
+    out = run('pack_sources.sh', 'out.tar.gz', cwd=tmp_path, timeout=120, env=env)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert 'over SSH: git@github.com:Org/cam.git' in out.stdout
+    with tarfile.open(tmp_path / 'out.tar.gz') as archive:
+        assert 'src/drivers/cam/package.xml' in archive.getnames()
+
+
 def test_x30_repos_keeps_the_layout_the_packer_reads():
     entries = re.findall(r'^  (\S+):\n    type: git\n    url: (\S+)\n    version: (\S+)$',
                          (ROOT / 'x30.repos').read_text(), re.M)  # fmt: skip
