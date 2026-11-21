@@ -93,6 +93,8 @@
 \RequirePackage[most]{tcolorbox}
 \RequirePackage{siunitx}
 \RequirePackage{qrcode}
+% a code word keeps its spaces (url drops them: "Could not get lock" would print run together)
+\PassOptionsToPackage{obeyspaces,spaces}{url}
 \RequirePackage{xurl}
 \RequirePackage{pdfpages}
 \RequirePackage{hyperref}
