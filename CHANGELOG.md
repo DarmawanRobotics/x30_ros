@@ -6,6 +6,12 @@ versions follow [SemVer](https://semver.org).
 ## [Unreleased] (0.19.0)
 
 ### Added
+- docs: five documents in LaTeX with EZRA's look (`docs/latex`, `x30doc.cls`), committed as
+  PDFs in `docs/pdf`: the Installation Guide, the User Manual (A5), the Tuning Guide with the
+  models, their measurement on the robot and the parameter reference generated from the code,
+  the Architecture & Technical Reference, and the Site Acceptance Test; and the website built
+  from them (`docs/site`, one page per chapter through pandoc, `docs.yml` publishes it to GitHub
+  Pages).
 - x30_fleet: `fleet_uplink_node`, the X30 in the NETRA command center (robot API v1 of
   Pashupati, with NETRA's substation module like HotDog), on the navigation host when
   `netra_url` is set (`navigation_host.launch netra_url:=... netra_robot_id:=...`,
