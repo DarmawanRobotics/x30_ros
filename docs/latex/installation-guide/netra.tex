@@ -8,12 +8,14 @@ to it directly.
 
 \begin{lstlisting}[language=bash]
 cd ~/x30/Netra
-scripts/local.sh start     # the images built before: no internet needed
-scripts/local.sh awake     # keep the Mac awake for schedules and the robot
-scripts/local.sh lan       # the Mac's address on each network, e.g. http://192.168.1.50
+scripts/local.sh start
+scripts/local.sh awake
+scripts/local.sh lan
 \end{lstlisting}
 
-Reserve that address for the Mac in the robot's router, or check it after each join: the robot
+\cmd{start} runs the images built before (no internet needed), \cmd{awake} keeps the Mac awake
+for schedules and the robot, \cmd{lan} prints the Mac's address on each network, e.g.\
+\code{http://192.168.1.50}. Reserve that address for the Mac in the robot's router, or check it after each join: the robot
 uses it.
 
 \section{Connect the robot}
@@ -22,9 +24,11 @@ On the navigation host, check that NETRA answers, then give the robot its addres
 its token:
 
 \begin{lstlisting}[language=bash]
-curl http://192.168.1.50/healthz                     # {"status":"ok"}
+curl http://192.168.1.50/healthz
 sudo nano /etc/x30/navigation.env
 \end{lstlisting}
+
+NETRA answers \code{"status":"ok"}. In the settings:
 
 \begin{lstlisting}[language=bash]
 X30_LAUNCH_ARGS="site:=gardu netra_url:=http://192.168.1.50 netra_robot_id:=x30-01"
@@ -33,8 +37,10 @@ X30_NETRA_TOKEN=<CC_TOKEN>
 
 \begin{lstlisting}[language=bash]
 sudo systemctl restart x30-navigation
-journalctl -u x30-navigation -f | grep -i netra      # "command center": connected
+journalctl -u x30-navigation -f | grep -i netra
 \end{lstlisting}
+
+\code{command center} in the log: connected.
 
 Within seconds the robot is online on the dashboard: battery, mode, the navigation state, the
 recorder and the inspection in \menupath{Live control}. \code{site:=} must be there: NETRA's

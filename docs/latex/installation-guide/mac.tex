@@ -7,9 +7,12 @@ app's APK and a NETRA that runs offline.
 
 \section{Tools}
 
+Docker Desktop, adb and GitHub's \cmd{gh} (skip what you have already):
+
 \begin{lstlisting}[language=bash]
-brew install --cask docker android-platform-tools   # Docker Desktop, adb
-brew install gh && gh auth login                    # skip what you have already
+brew install --cask docker android-platform-tools
+brew install gh
+gh auth login
 \end{lstlisting}
 
 Start Docker Desktop once and give it at least 4 GB of memory (Settings › Resources).
@@ -23,13 +26,15 @@ the Livox SDK, and packs them into one archive of about 5 MB, without Git histor
 
 \begin{lstlisting}[language=bash]
 mkdir -p ~/x30 && cd ~/x30
-git clone git@github.com:DarmawanRobotics/x30_ros.git && cd x30_ros
-GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
-  GIT_CONFIG_VALUE_0=https://github.com/ \
-  bash tools/pack_sources.sh ~/x30/x30_sources.tar.gz
+git clone git@github.com:DarmawanRobotics/x30_ros.git
+cd x30_ros
+GIT_CONFIG_COUNT=1 \
+GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
+GIT_CONFIG_VALUE_0=https://github.com/ \
+bash tools/pack_sources.sh ~/x30/x30_sources.tar.gz
 \end{lstlisting}
 
-The three \code{GIT_CONFIG_*} variables make every clone of this one command go over SSH with
+The last four lines are one command. Its three \code{GIT_CONFIG_*} variables make every clone of this one command go over SSH with
 your GitHub key, so private driver repositories come along too; nothing in your Git
 configuration changes. \file{src/SOURCES.txt} in the archive lists the commit of every
 repository.
@@ -37,7 +42,9 @@ repository.
 \section{The app}
 
 \begin{lstlisting}[language=bash]
-cd ~/x30 && gh release download -R DarmawanRobotics/X30Controller -p 'x30-controller-*.apk'
+cd ~/x30
+gh release download -R DarmawanRobotics/X30Controller \
+  -p 'x30-controller-*.apk'
 \end{lstlisting}
 
 Every release carries Skydroid's SDK, so it reads the H12's own sticks; on any other Android
@@ -49,12 +56,15 @@ device the app drives with touch sticks.
 NETRA builds its images and downloads its AI model once; afterwards it starts without internet.
 
 \begin{lstlisting}[language=bash]
-cd ~/x30 && git clone --recursive git@github.com:DarmawanWeb/Netra.git && cd Netra
-scripts/local.sh setup     # checks, .env with generated passwords, Ollama and the model
-scripts/local.sh up        # builds and starts everything (a few minutes the first time)
+cd ~/x30
+git clone --recursive git@github.com:DarmawanWeb/Netra.git
+cd Netra
+scripts/local.sh setup
+scripts/local.sh up
 \end{lstlisting}
 
-Open \url{http://localhost} and log in as \code{admin} with the password \cmd{setup} printed
+\cmd{setup} checks the Mac, writes \file{.env} with generated passwords and fetches Ollama and
+its model; \cmd{up} builds and starts everything (a few minutes the first time). Open \url{http://localhost} and log in as \code{admin} with the password \cmd{setup} printed
 (\code{NETRA_ADMIN_PASSWORD} in \file{.env}).
 
 \subsection{License}
@@ -65,12 +75,27 @@ built into it: \file{be/internal/license/keys/*.pub}. The image carries the lice
 is needed:
 
 \begin{lstlisting}[language=bash]
-alias netra-license='docker run --rm --entrypoint /netra-license -u "$(id -u)" \
-  -v ~/netra-keys:/keys -v "$PWD/license":/out ghcr.io/darmawanweb/netra:main'
-# once, where licenses are issued (skip when ~/netra-keys/ezra.key exists)
-mkdir -p ~/netra-keys && netra-license keygen -out /keys/ezra
-# NETRA trusts it (commit ezra.pub to netra-fleet-be so that every build does)
-cp ~/netra-keys/ezra.pub be/internal/license/keys/ && scripts/local.sh up
+netra-license() {
+  docker run --rm --entrypoint /netra-license -u "$(id -u)" \
+    -v ~/netra-keys:/keys -v "$PWD/license":/out \
+    ghcr.io/darmawanweb/netra:main "$@"
+}
+\end{lstlisting}
+
+Once, where licenses are issued (skip it when \file{~/netra-keys/ezra.key} exists), the key
+pair:
+
+\begin{lstlisting}[language=bash]
+mkdir -p ~/netra-keys
+netra-license keygen -out /keys/ezra
+\end{lstlisting}
+
+NETRA trusts the public half once it is built in (commit \file{ezra.pub} to netra-fleet-be, so
+that every build does):
+
+\begin{lstlisting}[language=bash]
+cp ~/netra-keys/ezra.pub be/internal/license/keys/
+scripts/local.sh up
 \end{lstlisting}
 
 \begin{enumerate}
@@ -80,10 +105,15 @@ cp ~/netra-keys/ezra.pub be/internal/license/keys/ && scripts/local.sh up
 \end{enumerate}
 
 \begin{lstlisting}[language=bash]
-netra-license issue -key /keys/ezra.key -client "Gardu X30" -edition substation -tier pro \
-  -robots 1 -days 365 -installation NETRA-7KQ3-M9XD-2WPA -out /out/netra.lic
-docker compose up -d api       # reads license/netra.lic
+netra-license issue -key /keys/ezra.key \
+  -client "Gardu X30" -edition substation -tier pro \
+  -robots 1 -days 365 \
+  -installation NETRA-7KQ3-M9XD-2WPA \
+  -out /out/netra.lic
+docker compose restart api
 \end{lstlisting}
+
+The API reads \file{license/netra.lic} at its start.
 
 \begin{dangerbox}[The private key]
 \file{ezra.key} signs any license. Keep it offline with a backup, never in a repository, an image

@@ -7,9 +7,11 @@
 seven times, then \menupath{Developer options › USB debugging}):
 
 \begin{lstlisting}[language=bash]
-adb devices                                  # the H12 is listed
+adb devices
 adb install -r ~/x30/x30-controller-*.apk
 \end{lstlisting}
+
+\cmd{adb devices} lists the H12 before the install.
 
 \textbf{Without a cable}: on a network with internet, open
 \url{https://github.com/DarmawanRobotics/X30Controller/releases/latest} in the H12's browser,
