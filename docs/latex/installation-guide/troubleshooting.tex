@@ -12,8 +12,20 @@
   \endfoot
   \code{no reports from 192.168.1.103 yet} & the navigation host is not in the motion host's
     \file{network.toml}, or another process holds UDP 43897: \cmd{dr_services.sh status} \\
-  \cmd{catkin_make}: \code{importlib_metadata has no attribute 'EntryPoints'} & start the build
-    line with \code{PYTHONNOUSERSITE=1} (\file{check_deps.sh} prints it) \\
+  \cmd{catkin_make}: \code{importlib_metadata has no attribute 'EntryPoints'} & build with
+    \cmd{x30_host.sh build}: it leaves \file{~/.local} out (\code{PYTHONNOUSERSITE=1}) \\
+  \cmd{catkin_make}: \code{include could not find load file: config.cmake} & the workspace's
+    \file{src/CMakeLists.txt} is not catkin's: \cmd{x30_host.sh build} replaces it, keeping
+    \file{CMakeLists.txt.orig} \\
+  The service fails at once: \code{ROS_DISTRO: unbound variable} & an x30\_ros before 0.19 on
+    the robot: pack the current one, unpack it clean and build (Section~\ref{sec:i-build}) \\
+  \code{this is the perception host (192.168.1.105)}, \code{this is the navigation host} & a
+    command for the other host: \cmd{hostname -I} tells which one this shell is on (Deep
+    Robotics names .106 \code{ysc-perception}); left without a role, \cmd{x30_host.sh} takes this
+    host's \\
+  \cmd{apt}: \code{Could not get lock}, \code{unattended-upgr} & Ubuntu upgrades itself while
+    the robot has internet: let it finish or take the internet away, never \cmd{apt upgrade}, and
+    turn the timers off (Section~\ref{sec:i-apt}) \\
   \cmd{apt}: \code{Unable to locate package} & the robot has no package lists: use the SSH
     proxy, not the file list \\
   The service restarts again and again & \cmd{journalctl -u x30-navigation}: the watchdog names

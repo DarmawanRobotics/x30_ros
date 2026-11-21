@@ -7,6 +7,8 @@
 #   make site         the website in site/.vitepress/dist: tools/tex2md.py turns every chapter into a
 #                     page (pandoc), VitePress builds them with the figures and the PDFs
 #                     (DOCS_BASE=/x30_ros/ for GitHub Pages)
+#   make check        every command in the documents copies whole: no listing line past its
+#                     page, no comment after a command (tools/check_listings.py); before docs
 #   make clean        remove build/
 #
 # Needs XeLaTeX with fontspec, unicode-math, tcolorbox, pgfplots, siunitx and qrcode (TeX Live
@@ -29,7 +31,7 @@ FIGURE_PDFS := $(addprefix build/figures/,$(addsuffix .pdf,$(FIGURES)))
 FIGURE_SVGS := $(addprefix site/public/figures/,$(addsuffix .svg,$(FIGURES)))
 COMMON := latex/x30doc.cls latex/assets/logo.pdf $(wildcard latex/generated/*.tex)
 
-.PHONY: all figures docs pdf reference site clean
+.PHONY: all figures check docs pdf reference site clean
 
 all: figures docs
 
@@ -45,7 +47,10 @@ site/public/figures/%.svg: build/figures/%.pdf
 latex/assets/logo.pdf: latex/assets/logo.svg
 	rsvg-convert -f pdf -o $@ $<
 
-docs: $(addprefix build/,$(addsuffix .pdf,$(DOCS)))
+check:
+	$(PYTHON) tools/check_listings.py
+
+docs: check $(addprefix build/,$(addsuffix .pdf,$(DOCS)))
 
 .SECONDEXPANSION:
 build/%.pdf: latex/%.tex $$(wildcard latex/%/*.tex) $(COMMON) $(FIGURE_PDFS)

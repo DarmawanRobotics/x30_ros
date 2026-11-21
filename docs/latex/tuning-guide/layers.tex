@@ -42,9 +42,11 @@ Appendix~\ref{ch:t-reference} come from the same declarations.
 \end{itemize}
 
 \begin{lstlisting}[language=bash]
-rosparam set /control_mux_node/field/margin 0.2      # live: in effect within 1 s
-rosparam get /control_mux_node/field                 # what the node runs with
+rosparam set /control_mux_node/field/margin 0.2
+rosparam get /control_mux_node/field
 \end{lstlisting}
+
+The first is live, in effect within 1~s; the second shows what the node runs with.
 
 \begin{warnbox}[A live change does not survive a restart]
 The parameter server is filled from the YAML files at every start. Try a value live, then write

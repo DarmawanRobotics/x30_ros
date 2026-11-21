@@ -58,10 +58,11 @@ robot standing in a free area and the handheld app closed (one source drives at 
 
 \begin{lstlisting}[language=bash]
 rosservice call /control/set_mode "{mode: remote, source: handheld}"
-rostopic pub -r 10 /control/remote/handheld/cmd_vel geometry_msgs/Twist '{linear: {y: 0.1}}'
+rostopic pub -r 10 /control/remote/handheld/cmd_vel \
+  geometry_msgs/Twist '{linear: {y: 0.1}}'
 \end{lstlisting}
 \begin{enumerate}
-  \item With the second line running, the robot must step to its \textbf{left}. If it steps right:
+  \item With the \cmd{rostopic pub} running, the robot must step to its \textbf{left}. If it steps right:
     \cmd{invert_vy: true} in \file{driver_params.yaml}.
   \item The same with \cmd{'{angular: {z: 0.2}}'}: the robot must turn \textbf{counter-clockwise}
     (left). If not: \cmd{invert_wz: true}.
