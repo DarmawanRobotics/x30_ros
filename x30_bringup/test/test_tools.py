@@ -412,7 +412,10 @@ def repository(path: Path, files: dict) -> str:
 
 @pytest.mark.skipif(shutil.which('git') is None, reason='git is needed to pack')
 def test_pack_sources_brings_the_repositories_and_the_sdk_without_history(tmp_path):
-    lio = repository(tmp_path / 'r' / 'lio', {'package.xml': '<name>fast_lio</name>'})
+    lio = repository(tmp_path / 'r' / 'lio', {
+        'package.xml': '<name>fast_lio</name>',
+        'CMakeLists.txt': 'add_executable(fastlio_mapping src/laserMapping.cpp)\n',
+    })  # fmt: skip
     cam = repository(tmp_path / 'r' / 'cam', {'package.xml': '<name>cam</name>'})
     sdk = repository(tmp_path / 'r' / 'sdk', {'sdk_core/include/livox_sdk.h': ''})
     repos = tmp_path / 'test.repos'
@@ -429,6 +432,7 @@ def test_pack_sources_brings_the_repositories_and_the_sdk_without_history(tmp_pa
     with tarfile.open(tmp_path / 'packs' / 'out.tar.gz') as archive:
         names = archive.getnames()
         manifest = archive.extractfile('src/SOURCES.txt').read().decode()
+        cmake = archive.extractfile('src/third_party/FAST_LIO/CMakeLists.txt').read().decode()
     assert 'src/x30_ros/tools/pack_sources.sh' in names
     assert 'src/third_party/FAST_LIO/package.xml' in names
     assert 'Livox-SDK/sdk_core/include/livox_sdk.h' in names
@@ -436,6 +440,12 @@ def test_pack_sources_brings_the_repositories_and_the_sdk_without_history(tmp_pa
     assert not any('.git' in Path(n).parts for n in names)
     assert re.search(rf'third_party/FAST_LIO {re.escape(lio)} main [0-9a-f]{{40}}', manifest)
     assert not any('node_modules' in Path(n).parts for n in names)  # the docs site's npm
+    # FAST-LIO's node after the messages it includes: a parallel first build raced them
+    assert cmake.endswith(
+        'add_dependencies(fastlio_mapping ${PROJECT_NAME}_generate_messages_cpp'
+        ' ${catkin_EXPORTED_TARGETS})\n'
+    )
+    assert '# third_party/FAST_LIO patched: fastlio_mapping waits' in manifest
     # what to run on the robot: one command a line, in the workspace the docs name
     hint = out.stdout.split('To both hosts of the robot:')[1].splitlines()
     assert '  tar -xzf ~/out.tar.gz' in hint and '  mkdir -p ~/x30_ws && cd ~/x30_ws' in hint
