@@ -1,0 +1,42 @@
+\chapter{Ports, files and folders}
+\label{ch:i-reference}
+
+\section{Ports}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.28\linewidth}p{0.2\linewidth}X@{}}
+  \toprule
+  \textbf{Where} & \textbf{Port} & \textbf{What} \\
+  \midrule
+  Motion host .103 & UDP 43893 & commands from the driver \\
+  Navigation host .106 & UDP 43897 & the motion host's reports \\
+  Navigation host .106 & TCP 11311 & the ROS master (both hosts) \\
+  Navigation host .106 & UDP 9870 & the H12 gateway \\
+  Perception host .105 & UDP 43899, 3333, 60000 & elevation map, charging, its odometry \\
+  HIKMICRO .1.64 & TCP 80, 554 & ISAPI, RTSP \\
+  Hertzino .2.204 & TCP 80, 443 & its API \\
+  Mac & TCP 80 & NETRA: dashboard and the robot API \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{On the robot}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.38\linewidth}X@{}}
+  \toprule
+  \textbf{Path} & \textbf{Holds} \\
+  \midrule
+  \file{~/x30_ws/} & the workspace: \file{src/}, \file{Livox-SDK/}, the build \\
+  \file{/etc/x30/navigation.env}, \file{perception.env} & the services' settings and secrets \\
+  \file{~/x30/map/<site>/} & \file{tags.json}, \file{inspection.yaml}, \file{routes/*.csv},
+    \file{netra/} (NETRA's routes and plan) \\
+  \file{~/x30/reports/<date>/} & one folder per inspected point, \file{findings.csv} per day \\
+  \file{~/x30/recordings/<date>/} (.105) & one folder per recorder session \\
+  \file{~/x30/spool/} & uploads waiting for NETRA \\
+  \file{~/x30/blackbox/} & the last 3~h as rosbag splits \\
+  \file{~/x30/logs/<node>.jsonl} & each node's log, rotated \\
+  \file{~/.x30/trip.json} & the trip meter \\
+  \bottomrule
+\end{tabularx}
+\end{center}

@@ -1,0 +1,36 @@
+\chapter{When something does not work}
+\label{ch:i-trouble}
+
+\begin{center}
+\begin{small}
+\begin{longtable}{@{}>{\raggedright}p{0.32\linewidth}>{\raggedright\arraybackslash}p{0.62\linewidth}@{}}
+  \toprule
+  \textbf{What you see} & \textbf{What to do} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  \code{no reports from 192.168.1.103 yet} & the navigation host is not in the motion host's
+    \file{network.toml}, or another process holds UDP 43897: \cmd{dr_services.sh status} \\
+  \cmd{catkin_make}: \code{importlib_metadata has no attribute 'EntryPoints'} & start the build
+    line with \code{PYTHONNOUSERSITE=1} (\file{check_deps.sh} prints it) \\
+  \cmd{apt}: \code{Unable to locate package} & the robot has no package lists: use the SSH
+    proxy, not the file list \\
+  The service restarts again and again & \cmd{journalctl -u x30-navigation}: the watchdog names
+    the node that stayed away; \cmd{x30_host.sh check} \\
+  Nodes of the other host unreachable & \cmd{x30_host.sh check} lists them; a name that does not
+    resolve goes into \file{/etc/hosts} \\
+  The H12 does not connect & H12 on the robot's Wi-Fi; host \code{192.168.1.106:9870}; the token
+    as in \code{X30_TELEOP_TOKEN}; the service running \\
+  The H12's sticks do nothing & an APK from a release (it carries Skydroid's SDK); \menupath{Settings
+    › Skydroid H12 sticks} shows the link; mode REMOTE (key A) \\
+  The robot offline in NETRA & from .106: \cmd{curl http://<Mac>/healthz}; another network or
+    the macOS firewall (allow Docker); \code{no NETRA token} in the journal: the token is empty;
+    \code{401} in \cmd{scripts/local.sh logs api}: the token is wrong \\
+  Inspections never reach NETRA & the license's substation module; NETRA's inspection points on
+    the stops of the route patrolled; \file{~/x30/spool} holds what is still waiting \\
+  Recorder ``No status'' in NETRA & the perception host's service: \cmd{systemctl status
+    x30-perception} on .105 \\
+\end{longtable}
+\end{small}
+\end{center}

@@ -1,0 +1,57 @@
+\chapter{Updates and backups}
+\label{ch:i-updates}
+
+\section{A new version of the stack}
+
+\begin{lstlisting}[language=bash]
+# on the Mac, online
+cd ~/x30/x30_ros && git pull
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
+  GIT_CONFIG_VALUE_0=https://github.com/ \
+  bash tools/pack_sources.sh ~/x30/x30_sources.tar.gz
+# at the robot
+scp ~/x30/x30_sources.tar.gz ysc@192.168.1.106:~/   # and .105
+ssh ysc@192.168.1.106
+rm -rf ~/x30_ws/src && tar -xzf ~/x30_sources.tar.gz -C ~/x30_ws
+cd ~/x30_ws && catkin_make -DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+sudo systemctl restart x30-navigation
+\end{lstlisting}
+
+Run \file{check_deps.sh} again after an update: a new version may need a new package. The
+\code{CHANGELOG.md} of x30\_ros says what changed and whether a settings file needs a new line.
+
+\section{A new app}
+
+\begin{lstlisting}[language=bash]
+gh release download -R DarmawanRobotics/X30Controller -p 'x30-controller-*.apk' --clobber
+adb install -r x30-controller-*.apk
+\end{lstlisting}
+
+\section{A new NETRA}
+
+\begin{lstlisting}[language=bash]
+cd ~/x30/Netra && git pull && git submodule update --init --recursive
+scripts/local.sh up        # online: rebuilds what changed
+\end{lstlisting}
+
+\section{What to keep}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.36\linewidth}X@{}}
+  \toprule
+  \textbf{Where} & \textbf{What} \\
+  \midrule
+  \file{~/x30/map/<site>/} (.106) & the site: routes, tags, inspection points. Small, precious:
+    copy it after every change \\
+  \file{~/x30/reports/} (.106) & the inspection reports; days go when the disk is short \\
+  \file{~/x30/recordings/} (.105) & the camera recordings; the oldest go first \\
+  \file{/etc/x30/*.env} & the settings and secrets of each host \\
+  NETRA & \cmd{scripts/local.sh export}: database, photos and plans in one file \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{lstlisting}[language=bash]
+rsync -a ysc@192.168.1.106:x30/map/ ~/x30/backup/map/
+rsync -a ysc@192.168.1.106:x30/reports/ ~/x30/backup/reports/
+\end{lstlisting}

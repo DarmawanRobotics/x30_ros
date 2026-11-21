@@ -1,0 +1,59 @@
+\chapter{Before you start}
+\label{ch:i-before}
+
+\section{What you need}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.27\linewidth}X@{}}
+  \toprule
+  Item & Notes \\
+  \midrule
+  Jueying X30 Pro & charged, with its hard emergency stop working; the HIKMICRO PTZ camera and the
+    Hertzino HZ-FA-371 mounted and powered \\
+  Skydroid H12 & charged; or any Android phone or tablet (touch sticks) \\
+  Mac (or Linux laptop) & macOS on Apple Silicon recommended, 16 GB RAM, 30 GB free disk;
+    Homebrew, Git with your GitHub SSH key, the \cmd{gh} CLI logged in \\
+  Network cable & optional: the robot's Debug Ethernet port, to keep the Mac online over Wi-Fi
+    while it talks to the robot (Section~\ref{sec:i-apt}) \\
+  USB-C cable & to install the app on the H12 with \cmd{adb} \\
+  Access & the GitHub repositories (x30\_ros, X30Controller; NETRA is private); a NETRA license
+    with the substation module (Chapter~\ref{ch:i-netra}) \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Addresses and passwords}
+\label{sec:i-addresses}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.3\linewidth}p{0.25\linewidth}X@{}}
+  \toprule
+  What & Value & Notes \\
+  \midrule
+  Robot Wi-Fi & \code{X30*****} & the serial number of the robot; password \code{12345678}
+    (Deep Robotics' default) \\
+  SSH to every host & user \code{ysc} & password \code{'} (one single quote, Deep Robotics'
+    default) \\
+  Navigation host & \code{192.168.1.106} & the stack, its ROS master \\
+  Perception host & \code{192.168.1.105} & the cameras, the recorder \\
+  Motion host & \code{192.168.1.103} & commands to UDP 43893, reports from it to UDP 43897 \\
+  HIKMICRO PTZ camera & \code{192.168.1.64} & its admin password: \code{HIKMICRO_PASSWORD} \\
+  Hertzino acoustic camera & \code{192.168.2.204} & its password: \code{HERTZINO_PASSWORD} \\
+  H12 gateway & UDP \code{9870} on .106 & the app's token: \code{X30_TELEOP_TOKEN} \\
+  NETRA & port \code{80} on the Mac & the robot's token: \code{X30_NETRA_TOKEN} \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warnbox}[Secrets]
+The camera passwords and the two tokens live only in the private settings files of the hosts
+(\file{/etc/x30/*.env}, readable by root and \code{ysc}). They are never launch arguments or
+ROS parameters: \cmd{roslaunch} prints every parameter, and anyone on the robot's network can
+read them from the master.
+\end{warnbox}
+
+\section{Time needed}
+
+About an hour on the Mac (most of it downloads: NETRA's images and its AI model), half an hour on
+the robot for the build, half an hour for the services, the app and NETRA, and an hour for the
+checks of a new robot.

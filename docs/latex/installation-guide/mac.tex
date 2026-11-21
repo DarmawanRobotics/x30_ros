@@ -1,0 +1,108 @@
+\chapter{On the Mac, while it is online}
+\label{ch:i-mac}
+
+Everything that needs the internet happens here, before the Mac joins the robot's Wi-Fi (it has
+no internet). At the end of this chapter the Mac holds the robot's sources in one archive, the
+app's APK and a NETRA that runs offline.
+
+\section{Tools}
+
+\begin{lstlisting}[language=bash]
+brew install --cask docker android-platform-tools   # Docker Desktop, adb
+brew install gh && gh auth login                    # skip what you have already
+\end{lstlisting}
+
+Start Docker Desktop once and give it at least 4 GB of memory (Settings › Resources).
+
+\section{The robot's sources in one archive}
+\label{sec:i-pack}
+
+\file{tools/pack_sources.sh} clones x30\_ros, every repository of \file{x30.repos} with their
+submodules (FAST-LIO with its ikd-Tree, the Livox driver, the HIKMICRO and Hertzino drivers) and
+the Livox SDK, and packs them into one archive of about 5 MB, without Git history:
+
+\begin{lstlisting}[language=bash]
+mkdir -p ~/x30 && cd ~/x30
+git clone git@github.com:DarmawanRobotics/x30_ros.git && cd x30_ros
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
+  GIT_CONFIG_VALUE_0=https://github.com/ \
+  bash tools/pack_sources.sh ~/x30/x30_sources.tar.gz
+\end{lstlisting}
+
+The three \code{GIT_CONFIG_*} variables make every clone of this one command go over SSH with
+your GitHub key, so private driver repositories come along too; nothing in your Git
+configuration changes. \file{src/SOURCES.txt} in the archive lists the commit of every
+repository.
+
+\section{The app}
+
+\begin{lstlisting}[language=bash]
+cd ~/x30 && gh release download -R DarmawanRobotics/X30Controller -p 'x30-controller-*.apk'
+\end{lstlisting}
+
+Every release carries Skydroid's SDK, so it reads the H12's own sticks; on any other Android
+device the app drives with touch sticks.
+
+\section{NETRA}
+\label{sec:i-netra-build}
+
+NETRA builds its images and downloads its AI model once; afterwards it starts without internet.
+
+\begin{lstlisting}[language=bash]
+cd ~/x30 && git clone --recursive git@github.com:DarmawanWeb/Netra.git && cd Netra
+scripts/local.sh setup     # checks, .env with generated passwords, Ollama and the model
+scripts/local.sh up        # builds and starts everything (a few minutes the first time)
+\end{lstlisting}
+
+Open \url{http://localhost} and log in as \code{admin} with the password \cmd{setup} printed
+(\code{NETRA_ADMIN_PASSWORD} in \file{.env}).
+
+\subsection{License}
+
+Without a license NETRA runs its core with one robot and drops the inspection uploads of the
+robot. The X30 needs the \textbf{substation} module:
+
+\begin{enumerate}
+  \item Read the installation ID in \menupath{Settings › License} (e.g.\
+    \code{NETRA-7KQ3-M9XD-2WPA}).
+  \item Issue the license in the License Manager, or from a checkout of \code{netra-fleet-be}:
+\end{enumerate}
+
+\begin{lstlisting}[language=bash]
+go run ./cmd/netra-license issue -key ~/netra-keys/ezra.key \
+  -client "Gardu X30" -edition substation -tier pro -robots 1 -days 365 \
+  -installation NETRA-7KQ3-M9XD-2WPA -out x30.lic
+\end{lstlisting}
+
+\begin{enumerate}[resume]
+  \item Paste it in \menupath{Settings › License}, or copy it to \file{license/netra.lic} and run
+    \cmd{scripts/local.sh up}.
+\end{enumerate}
+
+The substation edition draws robots on a GPS basemap. The X30 has no GPS: it appears there
+through the site's reference points (\menupath{Site map}). For a drawing of the substation
+instead, issue the license with \cmd{-map floorplan}.
+
+\subsection{The robot}
+
+\begin{lstlisting}[language=bash]
+scripts/local.sh robot x30-01 "X30 01"
+\end{lstlisting}
+
+It prints \code{ROBOT_ID}, \code{CC_URL} and \code{CC_TOKEN}: keep the token, it becomes
+\code{X30_NETRA_TOKEN} on the robot (Chapter~\ref{ch:i-netra}). A robot ID is 2 to 32 lower-case
+letters, digits, \code{-} and \code{_}.
+
+\section{The handheld's token}
+
+The H12 gateway accepts only a handheld that knows its shared secret. Make one and keep it with
+NETRA's:
+
+\begin{lstlisting}[language=bash]
+openssl rand -hex 16
+\end{lstlisting}
+
+\begin{tipbox}
+Before you leave: open \url{http://localhost} once with Wi-Fi off. Everything NETRA needs is
+then on the Mac.
+\end{tipbox}

@@ -1,0 +1,74 @@
+\chapter{What gets installed where}
+\label{ch:i-overview}
+
+An X30 patrol system is four computers and a handheld. The robot carries three: the
+\textbf{motion host} walks the robot and is never changed; the \textbf{navigation host} on the
+robot's back runs the stack that drives it; the \textbf{perception host} inside the body runs
+the inspection cameras and records them. The operator's \textbf{Mac or laptop} runs NETRA, the
+command center, and the \textbf{Skydroid H12} runs the X30Controller app. Everything meets on the
+robot's own network: its Wi-Fi, or a cable to the Debug Ethernet port at the tail.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{network}
+  \caption{The computers of an X30 deployment and what talks to what.}
+  \label{fig:i-network}
+\end{figure}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.24\linewidth}p{0.22\linewidth}X@{}}
+  \toprule
+  Computer & Address & What you install \\
+  \midrule
+  Navigation host & \code{192.168.1.106} & x30\_ros (the whole workspace), the service
+    \code{x30-navigation}; Deep Robotics' own autonomy turned off \\
+  Perception host & \code{192.168.1.105} & x30\_ros (the camera drivers and the recorder only),
+    the service \code{x30-perception} \\
+  Motion host & \code{192.168.1.103} & nothing: one line in its \file{network.toml} \\
+  Mac or laptop & the robot's network & NETRA (Docker), the tools to pack the sources and to
+    install the app \\
+  Skydroid H12 & the robot's Wi-Fi & the X30Controller app (APK) \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The versions this guide installs}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.24\linewidth}p{0.14\linewidth}X@{}}
+  \toprule
+  Part & Version & Where it comes from \\
+  \midrule
+  x30\_ros & 0.19 & \url{https://github.com/DarmawanRobotics/x30_ros} \\
+  X30Controller & 1.0 & \url{https://github.com/DarmawanRobotics/X30Controller/releases} \\
+  NETRA & with the substation module & \url{https://github.com/DarmawanWeb/Netra} (private) \\
+  Robot & Jueying X30 Pro & Deep Robotics; Ubuntu 20.04 and ROS Noetic on both hosts \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The way through this guide}
+
+The robot has no internet. Everything that downloads is done first, on the Mac, while it is
+online; then the Mac joins the robot's Wi-Fi and carries it over.
+
+\begin{enumerate}
+  \item \textbf{Before you start} (Chapter~\ref{ch:i-before}): the parts, the addresses and the
+    passwords.
+  \item \textbf{On the Mac, online} (Chapter~\ref{ch:i-mac}): pack the robot's sources, download
+    the app, build NETRA and register the robot.
+  \item \textbf{On the robot} (Chapter~\ref{ch:i-robot}): copy, build, turn Deep Robotics'
+    autonomy off, introduce the hosts to each other.
+  \item \textbf{The services} (Chapter~\ref{ch:i-services}): the stack starts at boot under a
+    watchdog; its settings.
+  \item \textbf{The handheld} (Chapter~\ref{ch:i-handheld}) and \textbf{NETRA}
+    (Chapter~\ref{ch:i-netra}).
+  \item \textbf{A new robot} (Chapter~\ref{ch:i-bringup}): the checks before it walks on its own,
+    the first site and route.
+\end{enumerate}
+
+\begin{dangerbox}[Safety]
+The robot walks among energized equipment. Do the first bring-up in an open area, away from
+live parts, with one person at the handheld whose only job is to stop the robot. Keep the
+robot's hard emergency stop (at the tail) and the handheld's STOP within reach at every step.
+\end{dangerbox}

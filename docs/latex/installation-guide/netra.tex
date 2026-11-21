@@ -1,0 +1,59 @@
+\chapter{NETRA on site}
+\label{ch:i-netra}
+
+At the site the Mac joins the robot's Wi-Fi and runs NETRA without internet; the robot connects
+to it directly.
+
+\section{Start NETRA}
+
+\begin{lstlisting}[language=bash]
+cd ~/x30/Netra
+scripts/local.sh start     # the images built before: no internet needed
+scripts/local.sh awake     # keep the Mac awake for schedules and the robot
+scripts/local.sh lan       # the Mac's address on each network, e.g. http://192.168.1.50
+\end{lstlisting}
+
+Reserve that address for the Mac in the robot's router, or check it after each join: the robot
+uses it.
+
+\section{Connect the robot}
+
+On the navigation host, check that NETRA answers, then give the robot its address, its ID and
+its token:
+
+\begin{lstlisting}[language=bash]
+curl http://192.168.1.50/healthz                     # {"status":"ok"}
+sudo nano /etc/x30/navigation.env
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash]
+X30_LAUNCH_ARGS="site:=gardu netra_url:=http://192.168.1.50 netra_robot_id:=x30-01"
+X30_NETRA_TOKEN=<CC_TOKEN>
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash]
+sudo systemctl restart x30-navigation
+journalctl -u x30-navigation -f | grep -i netra      # "command center": connected
+\end{lstlisting}
+
+Within seconds the robot is online on the dashboard: battery, mode, the navigation state, the
+recorder and the inspection in \menupath{Live control}. \code{site:=} must be there: NETRA's
+routes and their inspection plans go into the active site (\file{~/x30/map/<site>/netra/}).
+
+\section{What the robot sends and keeps}
+
+\begin{itemize}
+  \item \textbf{Telemetry} every second; patrol and stop events, alerts and the answers to
+    commands, all over one WebSocket that comes back by itself.
+  \item \textbf{Uploads}: every taught route and every inspection of NETRA's points wait in a
+    spool on the robot (\file{~/x30/spool}) until NETRA has them, across restarts and while NETRA
+    is away.
+  \item \textbf{Clock}: the robot has no internet clock; NETRA measures the offset and puts every
+    measurement on its own clock.
+\end{itemize}
+
+\begin{warnbox}[Install the license first]
+Without the substation module NETRA accepts an inspection upload but drops it, and the robot
+does not send it again. The reports stay on the robot (\file{~/x30/reports}), but NETRA will
+not have them.
+\end{warnbox}

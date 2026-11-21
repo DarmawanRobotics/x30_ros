@@ -1,0 +1,87 @@
+\chapter{A new robot}
+\label{ch:i-bringup}
+
+Before the stack walks a robot on its own, check that the robot does what the stack tells it,
+and measure what the stack assumes about it. In an open area, one person at the handheld whose
+only job is to stop the robot.
+
+\section{Does the robot obey?}
+
+Stop the service (\cmd{sudo systemctl stop x30-navigation}) and start only the driver:
+
+\begin{lstlisting}[language=bash]
+eval "$(bash ~/x30_ws/src/x30_ros/tools/x30_host.sh env navigation)"
+roslaunch x30_bringup bringup.launch
+\end{lstlisting}
+
+\begin{center}
+\begin{small}
+\begin{longtable}{@{}p{0.04\linewidth}>{\raggedright}p{0.38\linewidth}>{\raggedright\arraybackslash}p{0.5\linewidth}@{}}
+  \toprule
+  & \textbf{Do} & \textbf{Expect} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  1 & \cmd{rostopic hz /x30/odom} & about 50~Hz; \topic{/x30/state} says \code{connected: True}.
+    If not: \file{network.toml} (Section~\ref{sec:i-networktoml}) \\
+  2 & \cmd{rostopic echo -n 1 /x30/state} & \code{rcs_layout} and \code{motion_layout} read
+    \code{natural} \\
+  3 & \cmd{rosservice call /x30/stand_up} & ends in \code{torque_standing};
+    \cmd{/x30/start_stepping} in \code{stepping} \\
+  4 & \cmd{rostopic pub -r 20 /x30/cmd_vel geometry_msgs/Twist '{linear: {x: 0.2}}'} & the
+    robot walks forward, \code{control_mode} turns \code{non_manual}; stop the publisher: it
+    stops within 0.5~s \\
+  5 & the same with \code{{angular: {z: 0.3}}} & it turns \textbf{left}
+    (counter-clockwise seen from above); else \code{invert_wz: true} \\
+  6 & the same with \code{{linear: {y: 0.1}}} & it steps \textbf{left}; else
+    \code{invert_vy: true} \\
+  7 & walking, switch to manual on Deep Robotics' handheld & the robot follows that handheld;
+    \code{velocity} reads \code{takeover (manual mode)} until it is handed back \\
+  8 & \cmd{rostopic echo -n 1 /x30/battery} & voltage and current as Deep Robotics' app shows
+    them \\
+  9 & \cmd{roslaunch x30_bringup bringup.launch rviz:=true} & the legs in RViz follow the real ones \\
+\end{longtable}
+\end{small}
+\end{center}
+
+A robot that disagrees with step 5 or 6 gets its own copy of
+\file{x30_driver/config/driver_params.yaml} with the inversion, passed as
+\code{params_file:=}. The Tuning Guide explains every driver setting.
+
+\section{The robot profile}
+\label{sec:i-profile}
+
+\file{x30_bringup/config/robot.yaml} is the X30 for every node: its footprint, its height, its
+limits and its frames. Three things are particular to each robot and are measured, not taken
+from the drawing:
+
+\begin{enumerate}
+  \item \textbf{\code{base_height}}: \code{base_link} (the body centre) above the floor while it
+    stands. The scans measure their height band from the floor \code{base_height} below it;
+    0.48~m is the model's.
+  \item \textbf{The LiDAR mount}: \cmd{rostopic echo -n 1 --noarr /livox/lidar/header} gives the
+    frame the robot's driver publishes in. Set \code{lidar_frame} and \code{lidar_pose} so that a
+    wall 1~m ahead shows at 1~m in \cmd{rostopic echo -n 1 /perception/safety_scan}.
+  \item \textbf{Braking}: \code{limits/max_decel}, \code{max_yaw_accel} and
+    \code{reaction_time}, worst case (floor, payload, low battery). The protective field is sized
+    from them; the Tuning Guide shows how to measure them.
+\end{enumerate}
+
+\section{The first site and route}
+
+With the services running again (\cmd{sudo systemctl start x30-navigation}):
+
+\begin{enumerate}
+  \item Put the robot on its start spot (the dock), facing the same way every time: the start of
+    the odometry is the site's origin, and one degree off there is 1.7~cm per metre on every route.
+  \item \cmd{rostopic echo -n 1 /localization/status}: \code{LOCALIZED}, source \code{origin}.
+  \item Teach a short route with the H12 (User Manual): REMOTE, \ui{Record}, walk, \ui{Point} at
+    a stop, \ui{Finish}.
+  \item Walk back to the start, pick the route in \ui{Routes}, AUTO, \ui{Start}. The robot repeats
+    it and stops at the stop point.
+  \item In NETRA the route appears under \menupath{Routes}, and the robot's patrol state on the
+    dashboard.
+\end{enumerate}
+
+Then the acceptance tests (X30 Site Acceptance Test) before the robot patrols for real.
