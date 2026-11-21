@@ -41,6 +41,34 @@ def test_each_host_joins_the_navigation_hosts_master():
     assert host('env', 'motion').returncode == 2
 
 
+NAV_IP, PER_IP = '192.168.1.106', '192.168.1.105'
+
+
+def test_the_role_is_this_computers_and_never_the_other_hosts(tmp_path):
+    # Deep Robotics calls the navigation host ysc-perception: its name misleads, its address not
+    perception = {'X30_LOCAL_IPS': f'192.168.2.105 {PER_IP}'}
+    assert f'export ROS_IP={PER_IP}' in host('env', env=perception).stdout
+    out = host('env', 'navigation', env=perception)
+    assert out.returncode == 78 and f'this is the perception host ({PER_IP})' in out.stderr
+    # a service of the other host's role ends at once and for good (RestartPreventExitStatus)
+    assert host('start', 'navigation', env=perception).returncode == 78
+    settings = {
+        'X30_ETC': str(tmp_path / 'etc'),
+        'X30_SYSTEMD_DIR': str(tmp_path),
+        'X30_SYSTEMCTL': 'true',
+        'X30_PROC': str(tmp_path / 'no-proc'),
+    }
+    assert host('install', 'navigation', env={**perception, **settings}).returncode == 78
+    assert not (tmp_path / 'x30-navigation.service').exists()
+    out = host('install', env={**perception, **settings})
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert 'start perception' in (tmp_path / 'x30-perception.service').read_text()
+    laptop = {'X30_LOCAL_IPS': '10.0.0.2'}  # neither host: the role named, any
+    out = host('env', env=laptop)
+    assert out.returncode == 2 and 'say which, navigation or perception' in out.stderr
+    assert f'export ROS_IP={NAV_IP}' in host('env', 'navigation', env=laptop).stdout
+
+
 def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp_path):
     env = {
         'X30_ETC': str(tmp_path / 'etc'),
@@ -57,6 +85,7 @@ def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp
     unit = (tmp_path / 'x30-perception.service').read_text()
     for line in ('Type=notify', 'NotifyAccess=main', 'WatchdogSec=60', 'Restart=on-failure'):
         assert line in unit
+    assert 'RestartPreventExitStatus=78\n' in unit  # the wrong host: never restarted
     assert 'StartLimitIntervalSec=0' in unit.split('[Service]')[0]  # never given up on
     assert f'ExecStart=/bin/bash {TOOLS}/x30_host.sh start perception' in unit
     assert f'EnvironmentFile={settings}' in unit

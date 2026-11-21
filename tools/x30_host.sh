@@ -8,16 +8,18 @@
 set -euo pipefail
 
 usage() {
-  cat <<'EOF'
-usage: x30_host.sh env navigation|perception      the ROS network of this shell:
-                                                 eval "$(bash tools/x30_host.sh env perception)"
+  cat >&2 <<'EOF'
+usage: x30_host.sh env [ROLE]                     the ROS network of this shell:
+                                                 eval "$(bash tools/x30_host.sh env)"
        x30_host.sh check                          the network, the master, every node, the clocks;
                                                  Deep Robotics' autonomy (navigation host), the
                                                  cameras (perception host)
-       x30_host.sh start navigation|perception    the host's launch file (what the service runs)
-       sudo bash x30_host.sh install navigation|perception
-                                                 the service x30-<role>, its settings in
+       x30_host.sh start [ROLE]                   the host's launch file (what the service runs)
+       sudo bash x30_host.sh install [ROLE]       the service x30-<role>, its settings in
                                                  /etc/x30/<role>.env
+ROLE: navigation (192.168.1.106) or perception (192.168.1.105); left out, this computer's by
+its address. On the robot the other host's is refused: the hosts' names say otherwise
+(Deep Robotics calls the navigation host ysc-perception).
 EOF
   exit 2
 }
@@ -31,6 +33,8 @@ SYSTEMD_DIR=${X30_SYSTEMD_DIR:-/etc/systemd/system}
 SYSTEMCTL=${X30_SYSTEMCTL:-systemctl}
 PROC=${X30_PROC:-/proc}
 SETTLE_SEC=${X30_SETTLE_SEC:-10}
+# the exit for the other host's role (sysexits' EX_CONFIG): its service is not restarted
+WRONG_HOST=78
 # the navigation host's nodes that drive and guard the robot: the watchdog restarts the stack
 # when one stays away (a respawn takes seconds)
 CRITICAL=(/x30/x30_driver /control_mux_node /lidar_sector_node /path_follower_node)
@@ -49,14 +53,43 @@ workspace() { # the catkin workspace holding this checkout: <ws>/src/x30_ros/too
   (cd "$HERE/../../.." && pwd)
 }
 
-cmd_env() { # <role>
-  local ip
-  ip=$(role_ip "$1")
+this_role() { # navigation or perception by this computer's addresses, nothing when neither
+  local ips
+  ips=" $(local_ips | tr '\n' ' ') "
+  case "$ips" in
+    *" $NAV_IP "*) say navigation ;;
+    *" $PER_IP "*) say perception ;;
+  esac
+}
+
+host_role() { # [<role>]: the one asked for, else this computer's; never the other host's
+  local here
+  here=$(this_role)
+  if [ -z "$1" ]; then
+    if [ -z "$here" ]; then
+      say "neither $NAV_IP nor $PER_IP is this computer's: say which, navigation or perception" >&2
+      exit 2
+    fi
+    say "$here"
+    return 0
+  fi
+  role_ip "$1" > /dev/null
+  if [ -n "$here" ] && [ "$1" != "$here" ]; then
+    say "this is the $here host ($(role_ip "$here")), the $1 host is $(role_ip "$1"):" \
+      "leave the role out, it is this computer's" >&2
+    exit "$WRONG_HOST"
+  fi
+  say "$1"
+}
+
+cmd_env() { # [<role>]
+  local role
+  role=$(host_role "$1")
   say "export ROS_MASTER_URI=http://$NAV_IP:$MASTER_PORT"
-  say "export ROS_IP=$ip"
+  say "export ROS_IP=$(role_ip "$role")"
   say "unset ROS_HOSTNAME"
   say "export PYTHONNOUSERSITE=1"
-  if [ "$1" = navigation ] && [ -x "$(workspace)/neupan/bin/python" ]; then
+  if [ "$role" = navigation ] && [ -x "$(workspace)/neupan/bin/python" ]; then
     say "export X30_PYTHON=$(workspace)/neupan/bin/python"
   fi
 }
@@ -93,13 +126,12 @@ launch_args() { # <role>: X30_LAUNCH_ARGS here, else the service's
 }
 
 cmd_check() {
-  local ips role='' other problems=0 pid unit='' cameras=()
+  local ips role other problems=0 pid unit='' cameras=()
   ips=" $(local_ips | tr '\n' ' ') "
-  case "$ips" in
-    *" $NAV_IP "*) role=navigation other=$PER_IP ;;
-    *" $PER_IP "*) role=perception other=$NAV_IP ;;
-  esac
+  role=$(this_role)
   if [ -n "$role" ]; then
+    other=$PER_IP
+    [ "$role" = perception ] && other=$NAV_IP
     row host ok "the $role host"
   else
     row host WARN "neither $NAV_IP nor $PER_IP here: a laptop? (ROS_IP: one of this computer's)"
@@ -162,9 +194,9 @@ ros_setup() { # <setup.bash>: ROS's and the workspace's, sourced as on the robot
   set -eu
 }
 
-cmd_start() { # <role>
-  local role=$1 ws args=() setup sweep
-  role_ip "$role" > /dev/null
+cmd_start() { # [<role>]
+  local role ws args=() setup sweep
+  role=$(host_role "$1")
   ws=${X30_WS:-$(workspace)}
   ros_setup "${X30_ROS_SETUP:-/opt/ros/noetic/setup.bash}"
   setup=$ws/devel/setup.bash
@@ -282,6 +314,8 @@ NotifyAccess=main
 WatchdogSec=60
 TimeoutStartSec=360
 Restart=on-failure
+# the other host's role (x30_host.sh exits $WRONG_HOST): no restart helps that
+RestartPreventExitStatus=$WRONG_HOST
 RestartSec=10
 KillSignal=SIGINT
 TimeoutStopSec=70
@@ -291,11 +325,11 @@ WantedBy=multi-user.target
 EOF
 }
 
-cmd_install() { # <role>
-  local role=$1 user ws env unit after='' what
-  role_ip "$role" > /dev/null
+cmd_install() { # [<role>]
+  local role user ws env unit after='' what
+  role=$(host_role "$1")
   if [ "$(id -u)" != 0 ] && [ -z "${X30_ETC:-}" ]; then
-    say "run it with sudo: sudo bash $HERE/x30_host.sh install $role"
+    say "run it with sudo: sudo bash $HERE/x30_host.sh install${1:+ $1}"
     return 1
   fi
   user=${SUDO_USER:-$(id -un)}
@@ -335,10 +369,10 @@ cmd_install() { # <role>
 main() {
   [ $# -ge 1 ] || usage
   case "$1" in
-    env) [ $# = 2 ] || usage; cmd_env "$2" ;;
+    env) [ $# -le 2 ] || usage; cmd_env "${2:-}" ;;
     check) [ $# = 1 ] || usage; cmd_check ;;
-    start) [ $# = 2 ] || usage; cmd_start "$2" ;;
-    install) [ $# = 2 ] || usage; cmd_install "$2" ;;
+    start) [ $# -le 2 ] || usage; cmd_start "${2:-}" ;;
+    install) [ $# -le 2 ] || usage; cmd_install "${2:-}" ;;
     *) usage ;;
   esac
 }
