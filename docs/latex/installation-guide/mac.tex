@@ -60,24 +60,35 @@ Open \url{http://localhost} and log in as \code{admin} with the password \cmd{se
 \subsection{License}
 
 Without a license NETRA runs its core with one robot and drops the inspection uploads of the
-robot. The X30 needs the \textbf{substation} module:
+robot. The X30 needs the \textbf{substation} module. NETRA accepts only a license signed by a key
+built into it: \file{be/internal/license/keys/*.pub}. The image carries the license tool, so no Go
+is needed:
+
+\begin{lstlisting}[language=bash]
+alias netra-license='docker run --rm --entrypoint /netra-license -u "$(id -u)" \
+  -v ~/netra-keys:/keys -v "$PWD/license":/out ghcr.io/darmawanweb/netra:main'
+# once, where licenses are issued (skip when ~/netra-keys/ezra.key exists)
+mkdir -p ~/netra-keys && netra-license keygen -out /keys/ezra
+# NETRA trusts it (commit ezra.pub to netra-fleet-be so that every build does)
+cp ~/netra-keys/ezra.pub be/internal/license/keys/ && scripts/local.sh up
+\end{lstlisting}
 
 \begin{enumerate}
   \item Read the installation ID in \menupath{Settings › License} (e.g.\
     \code{NETRA-7KQ3-M9XD-2WPA}).
-  \item Issue the license in the License Manager, or from a checkout of \code{netra-fleet-be}:
+  \item Issue the license (or in the License Manager):
 \end{enumerate}
 
 \begin{lstlisting}[language=bash]
-go run ./cmd/netra-license issue -key ~/netra-keys/ezra.key \
-  -client "Gardu X30" -edition substation -tier pro -robots 1 -days 365 \
-  -installation NETRA-7KQ3-M9XD-2WPA -out x30.lic
+netra-license issue -key /keys/ezra.key -client "Gardu X30" -edition substation -tier pro \
+  -robots 1 -days 365 -installation NETRA-7KQ3-M9XD-2WPA -out /out/netra.lic
+docker compose up -d api       # reads license/netra.lic
 \end{lstlisting}
 
-\begin{enumerate}[resume]
-  \item Paste it in \menupath{Settings › License}, or copy it to \file{license/netra.lic} and run
-    \cmd{scripts/local.sh up}.
-\end{enumerate}
+\begin{dangerbox}[The private key]
+\file{ezra.key} signs any license. Keep it offline with a backup, never in a repository, an image
+or a server.
+\end{dangerbox}
 
 The substation edition draws robots on a GPS basemap. The X30 has no GPS: it appears there
 through the site's reference points (\menupath{Site map}). For a drawing of the substation

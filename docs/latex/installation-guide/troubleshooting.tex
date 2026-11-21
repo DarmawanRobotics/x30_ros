@@ -24,6 +24,13 @@
     as in \code{X30_TELEOP_TOKEN}; the service running \\
   The H12's sticks do nothing & an APK from a release (it carries Skydroid's SDK); \menupath{Settings
     › Skydroid H12 sticks} shows the link; mode REMOTE (key A) \\
+  \cmd{local.sh up}: \code{"/fe/package-lock.json": not found} & \file{be/} and \file{fe/} of
+    NETRA are empty (cloned without \cmd{--recursive}): \cmd{git submodule update --init --recursive}
+    in \file{Netra}, then \cmd{scripts/local.sh up} again \\
+  \cmd{adb devices} lists nothing & USB debugging on the H12 (\menupath{Settings › About} › tap
+    \ui{Build number} 7 times › \menupath{Developer options}); a data cable, not a charging one;
+    allow the computer on the H12's screen. Or copy the APK to the H12 and open it in the file
+    manager \\
   The robot offline in NETRA & from .106: \cmd{curl http://<Mac>/healthz}; another network or
     the macOS firewall (allow Docker); \code{no NETRA token} in the journal: the token is empty;
     \code{401} in \cmd{scripts/local.sh logs api}: the token is wrong \\
