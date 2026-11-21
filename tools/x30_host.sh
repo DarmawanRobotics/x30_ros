@@ -9,7 +9,9 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: x30_host.sh env [ROLE]                     the ROS network of this shell:
+usage: x30_host.sh build [catkin_make args]       the workspace, as the robot runs it: Release,
+                                                 no tests, on the perception host its packages
+       x30_host.sh env [ROLE]                     the ROS network of this shell:
                                                  eval "$(bash tools/x30_host.sh env)"
        x30_host.sh check                          the network, the master, every node, the clocks;
                                                  Deep Robotics' autonomy (navigation host), the
@@ -35,6 +37,10 @@ PROC=${X30_PROC:-/proc}
 SETTLE_SEC=${X30_SETTLE_SEC:-10}
 # the exit for the other host's role (sysexits' EX_CONFIG): its service is not restarted
 WRONG_HOST=78
+# what the perception host builds: its camera drivers, the recorder and what launches them
+# (x30_bringup README, "Two hosts"); check_deps.sh --perception checks their dependencies
+PERCEPTION_PACKAGES='x30_utils;x30_msgs;x30_recorder;x30_bringup'
+PERCEPTION_PACKAGES+=';hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
 # the navigation host's nodes that drive and guard the robot: the watchdog restarts the stack
 # when one stays away (a respawn takes seconds)
 CRITICAL=(/x30/x30_driver /control_mux_node /lidar_sector_node /path_follower_node)
@@ -192,6 +198,46 @@ ros_setup() { # <setup.bash>: ROS's and the workspace's, sourced as on the robot
   # shellcheck disable=SC1090
   source "$1"
   set -eu
+}
+
+cmd_build() { # [catkin_make arguments]: the workspace, as the robot runs it
+  local ws ros top toplevel role jobs mem only=''
+  ws=${X30_WS:-$(workspace)}
+  ros=${X30_ROS_SETUP:-/opt/ros/noetic/setup.bash}
+  toplevel=$(dirname "$ros")/share/catkin/cmake/toplevel.cmake
+  top=$ws/src/CMakeLists.txt
+  # the workspace's own CMakeLists.txt is a link to catkin's (catkin_make makes it); another
+  # one (copied along, left by an older workspace) fails the configuration
+  if [ -f "$toplevel" ] && { [ -L "$top" ] || [ -e "$top" ]; } && ! cmp -s "$top" "$toplevel"; then
+    mv -f -- "$top" "$top.orig"
+    ln -s "$toplevel" "$top"
+    say "$top was not catkin's: kept as CMakeLists.txt.orig, catkin's linked"
+  fi
+  role=$(this_role)
+  # the perception host builds its own packages only (neither FAST-LIO on its ARM cores nor
+  # what the navigation needs); anywhere else the whole workspace, a list once cached cleared
+  [ "$role" = perception ] && only=$PERCEPTION_PACKAGES
+  # FAST-LIO's compile units take up to 2 GB each: no more at once than the memory holds
+  jobs=$(nproc 2> /dev/null || echo 2)
+  mem=$(awk '/^MemTotal:/ {print int($2 / 2097152)}' "$PROC/meminfo" 2> /dev/null || true)
+  if [ -n "$mem" ] && [ "$mem" -lt "$jobs" ]; then
+    jobs=$((mem > 0 ? mem : 1))
+  fi
+  ros_setup "$ros"
+  # a newer setuptools in ~/.local (pip install --user) breaks catkin's reading of setup.py
+  export PYTHONNOUSERSITE=1
+  say "x30_ros: building $ws${role:+ (the $role host)}, $jobs jobs at once"
+  catkin_make -C "$ws" -DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release \
+    "-DCATKIN_WHITELIST_PACKAGES=$only" -j"$jobs" "$@" || return
+  if [ -z "$role" ]; then
+    return 0
+  elif [ -f "$SYSTEMD_DIR/x30-$role.service" ]; then
+    say "built; the service runs it from its next start:"
+    say "  sudo systemctl restart x30-$role"
+  else
+    say "built; next, the service:"
+    say "  sudo bash $HERE/x30_host.sh install"
+  fi
 }
 
 cmd_start() { # [<role>]
@@ -386,6 +432,7 @@ cmd_install() { # [<role>]
 main() {
   [ $# -ge 1 ] || usage
   case "$1" in
+    build) shift; cmd_build "$@" ;;
     env) [ $# -le 2 ] || usage; cmd_env "${2:-}" ;;
     check) [ $# = 1 ] || usage; cmd_check ;;
     start) [ $# -le 2 ] || usage; cmd_start "${2:-}" ;;

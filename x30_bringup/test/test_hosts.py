@@ -148,6 +148,58 @@ def test_the_navigation_host_starts_after_deep_robotics_services_and_the_masters
 ROS_HOOK = '[ -n "$X30_NEVER_SET" ] && echo set\n'  # ROS's 1.ros_distro.sh, in a service
 
 
+def test_build_runs_catkin_make_as_the_robot_needs_it(tmp_path):
+    bin_dir, ws, proc = tmp_path / 'bin', tmp_path / 'ws', tmp_path / 'proc'
+    bin_dir.mkdir()
+    (ws / 'src').mkdir(parents=True)
+    proc.mkdir()
+    (proc / 'meminfo').write_text('MemTotal:        3906252 kB\n')  # 3.7 GB: one job at a time
+    (tmp_path / 'ros.bash').write_text(ROS_HOOK)
+    toplevel = tmp_path / 'share' / 'catkin' / 'cmake' / 'toplevel.cmake'
+    toplevel.parent.mkdir(parents=True)
+    toplevel.write_text('# toplevel CMakeLists.txt for a catkin workspace\n')
+    # what the perception host had: a workspace CMakeLists.txt that is not catkin's
+    (ws / 'src' / 'CMakeLists.txt').write_text('\n' * 9 + 'include(config.cmake)\n')
+    made = tmp_path / 'catkin_make.args'
+    fake(bin_dir / 'catkin_make', f'printf "%s\\n" "$PYTHONNOUSERSITE" "$@" > {made}\nexit 0')
+    env = {
+        'PATH': f'{bin_dir}:{os.environ["PATH"]}',
+        'X30_ROS_SETUP': str(tmp_path / 'ros.bash'),
+        'X30_WS': str(ws),
+        'X30_PROC': str(proc),
+        'X30_SYSTEMD_DIR': str(tmp_path),
+        'X30_LOCAL_IPS': PER_IP,
+    }
+    env.pop('PYTHONNOUSERSITE', None)
+    out = host('build', '--pkg', 'x30_recorder', env=env)
+    assert out.returncode == 0, out.stdout + out.stderr
+    args = made.read_text().splitlines()
+    assert args[0] == '1'  # PYTHONNOUSERSITE: no setuptools from ~/.local in catkin's way
+    assert args[1:] == [
+        '-C',
+        str(ws),
+        '-DCATKIN_ENABLE_TESTING=OFF',
+        '-DCMAKE_BUILD_TYPE=Release',
+        '-DCATKIN_WHITELIST_PACKAGES=x30_utils;x30_msgs;x30_recorder;x30_bringup'
+        ';hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver',  # its own only
+        '-j1',
+        '--pkg',
+        'x30_recorder',
+    ]
+    top = ws / 'src' / 'CMakeLists.txt'
+    assert top.is_symlink() and top.resolve() == toplevel
+    assert 'include(config.cmake)' in (ws / 'src' / 'CMakeLists.txt.orig').read_text()
+    assert '\n  sudo bash ' in out.stdout and out.stdout.endswith('x30_host.sh install\n')
+    (tmp_path / 'x30-navigation.service').write_text('[Unit]\n')
+    out = host('build', env={**env, 'X30_LOCAL_IPS': NAV_IP})
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert '-DCATKIN_WHITELIST_PACKAGES=' in made.read_text().splitlines()  # all of it here
+    assert out.stdout.endswith('\n  sudo systemctl restart x30-navigation\n')
+    assert 'kept as' not in out.stdout  # catkin's own, left as it is
+    fake(bin_dir / 'catkin_make', 'exit 5')
+    assert host('build', env=env).returncode == 5  # a failed build fails the command
+
+
 def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     bin_dir, ws = tmp_path / 'bin', tmp_path / 'ws'
     bin_dir.mkdir()
