@@ -104,8 +104,17 @@ def tex(text) -> str:
 
 
 def unit(text: str) -> str:
-    """Typeset a unit such as m/s^2."""
-    return re.sub(r'\\textasciicircum\{\}(\d)', r'\\textsuperscript{\1}', tex(text))
+    """Typeset a unit such as m/s^2, deg/sqrt(m) or degC."""
+    out = re.sub(r'\\textasciicircum\{\}(\d)', r'\\textsuperscript{\1}', tex(text))
+    out = out.replace('degC', '\\textdegree{}C').replace('deg', '\\textdegree{}')
+    return re.sub(r'sqrt\(([a-z]+)\)', r'$\\sqrt{\\mathrm{\1}}$', out)
+
+
+def words(text: str) -> str:
+    """Escape a description; a long word (a URL, a topic) may break after its slashes."""
+    return ' '.join(
+        w.replace('/', '/\\allowbreak{}') if len(w) > 18 else w for w in tex(text).split(' ')
+    )
 
 
 def value(v) -> str:
@@ -117,12 +126,21 @@ def value(v) -> str:
     if isinstance(v, (list, tuple)):
         if not v:
             return r'\code{[]}'
-        text = ', '.join(str(x) if not isinstance(x, float) else f'{x:g}' for x in v)
-        return r'\texttt{[' + tex(text) + ']}'
+        # one item at a time, so a long list breaks between its items
+        return ', '.join(item(x) for x in v)
     if isinstance(v, str):
         return r'\code{' + v + '}' if v and ' ' not in v and '%' not in v else (
             r'\texttt{"' + tex(v) + '"}')  # fmt: skip
     return tex(v)
+
+
+def item(x) -> str:
+    """Typeset one item of a list default."""
+    if isinstance(x, float):
+        return f'{x:g}'
+    text = str(x)
+    return r'\code{' + text + '}' if text and ' ' not in text and '%' not in text else (
+        r'\texttt{' + tex(text) + '}')  # fmt: skip
 
 
 def span(spec) -> str:
@@ -136,9 +154,9 @@ def span(spec) -> str:
 
 HEAD = (
     '\\begin{small}\n'
-    '\\begin{longtable}{@{}>{\\raggedright}p{0.27\\linewidth}>{\\raggedright}p{0.15\\linewidth}'
-    '>{\\raggedright}p{0.08\\linewidth}>{\\raggedright}p{0.1\\linewidth}'
-    '>{\\raggedright\\arraybackslash}p{0.32\\linewidth}@{}}\n'
+    '\\begin{longtable}{@{}>{\\raggedright}p{0.26\\linewidth}>{\\raggedright}p{0.15\\linewidth}'
+    '>{\\raggedright}p{0.07\\linewidth}>{\\raggedright}p{0.1\\linewidth}'
+    '>{\\raggedright\\arraybackslash}p{0.3\\linewidth}@{}}\n'
     '\\toprule\n'
     '\\textbf{Parameter} & \\textbf{Default} & \\textbf{Unit} & \\textbf{Range} & '
     '\\textbf{Description} \\\\\n'
@@ -162,7 +180,7 @@ def typed_rows(module: str, cls: str, prefix: str) -> list[str]:
         mark = '' if spec.live else '$^\\dagger$'
         rows.append(
             f'\\code{{{entry.name}}}{mark} & {value(entry.default)} & {unit(spec.unit)} & '
-            f'{span(spec)} & {tex(spec.doc)} \\\\\n'
+            f'{span(spec)} & {words(spec.doc)} \\\\\n'
         )
     return rows
 
@@ -183,8 +201,8 @@ def driver_rows() -> list[str]:
             note = [] if not line.strip() else note
             continue
         name, default, comment = match.groups()
-        words = comment or (note[-1] if note else '')
-        rows.append(f'\\code{{{name}}} & \\code{{{default or "{}"}}} & & & {tex(words)} \\\\\n')
+        note_text = comment or (note[-1] if note else '')
+        rows.append(f'\\code{{{name}}} & \\code{{{default or "{}"}}} & & & {words(note_text)} \\\\\n')
         note = []
     return rows
 
