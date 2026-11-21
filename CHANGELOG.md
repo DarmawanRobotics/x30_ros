@@ -38,6 +38,8 @@ versions follow [SemVer](https://semver.org).
   role`; `env`, `start` and `install` take the role from the host's address when left out.
 
 ### Fixed
+- tools: `x30_host.sh start` refuses a settings file with a comment after a value (systemd
+  keeps it in the value: a token or the launch arguments with its words), `check` names it.
 - tools: `x30-<role>.service` died at every start (`ROS_DISTRO: unbound variable`): ROS's setup
   is sourced outside `set -eu`; a workspace not built says so.
 - tools: on the robot `x30_host.sh` refuses the other host's role (Deep Robotics names the

@@ -36,8 +36,9 @@ SYSTEMD_DIR=${X30_SYSTEMD_DIR:-/etc/systemd/system}
 SYSTEMCTL=${X30_SYSTEMCTL:-systemctl}
 PROC=${X30_PROC:-/proc}
 SETTLE_SEC=${X30_SETTLE_SEC:-10}
-# the exit for the other host's role (sysexits' EX_CONFIG): its service is not restarted
-WRONG_HOST=78
+# the exit for what no restart mends, the other host's role or a settings file systemd reads
+# wrong (sysexits' EX_CONFIG): the service is not restarted for it
+EX_CONFIG=78
 # what the perception host builds: its camera drivers, the recorder and what launches them
 # (x30_bringup README, "Two hosts"); check_deps.sh --perception checks their dependencies
 PERCEPTION_PACKAGES='x30_utils;x30_msgs;x30_recorder;x30_bringup'
@@ -84,7 +85,7 @@ host_role() { # [<role>]: the one asked for, else this computer's; never the oth
   if [ -n "$here" ] && [ "$1" != "$here" ]; then
     say "this is the $here host ($(role_ip "$here")), the $1 host is $(role_ip "$1"):" \
       "leave the role out, it is this computer's" >&2
-    exit "$WRONG_HOST"
+    exit "$EX_CONFIG"
   fi
   say "$1"
 }
@@ -133,13 +134,18 @@ launch_args() { # <role>: X30_LAUNCH_ARGS here, else the service's
 }
 
 cmd_check() {
-  local ips role other problems=0 pid unit='' cameras=()
+  local ips role other problems=0 pid unit='' cameras=() commented
   ips=" $(local_ips | tr '\n' ' ') "
   role=$(this_role)
   if [ -n "$role" ]; then
     other=$PER_IP
     [ "$role" = perception ] && other=$NAV_IP
     row host ok "the $role host"
+    commented=$(settings_comments "$role")
+    if [ -n "$commented" ]; then
+      row settings MISS "$ETC/$role.env, a comment after a value: ${commented//$'\n'/; }"
+      problems=1
+    fi
   else
     row host WARN "neither $NAV_IP nor $PER_IP here: a laptop? (ROS_IP: one of this computer's)"
     other=$NAV_IP
@@ -192,6 +198,14 @@ settle_dr() { # stop Deep Robotics' autonomy until a round, 30 s after the first
   done
 }
 
+settings_comments() { # <role>: the variables of its settings file with a comment after them
+  # systemd reads no comment after a value: it stays in the value (a token, a password, the
+  # launch arguments); their lines and names only, never what a value holds
+  [ -r "$ETC/$1.env" ] || return 0
+  grep -nE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=.*[[:space:]]#' "$ETC/$1.env" |
+    sed -E 's/^([0-9]+):[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=.*/line \1, \2/' || true
+}
+
 ros_setup() { # <setup.bash>: ROS's and the workspace's, sourced as on the robot
   # their hooks read variables a service's environment has not set (ROS_DISTRO) and end on
   # failed tests: never under set -eu, or the service dies before its launch
@@ -242,8 +256,14 @@ cmd_build() { # [catkin_make arguments]: the workspace, as the robot runs it
 }
 
 cmd_start() { # [<role>]
-  local role ws args=() setup sweep
+  local role ws args=() setup sweep commented
   role=$(host_role "$1")
+  commented=$(settings_comments "$role")
+  if [ -n "$commented" ]; then
+    say "$ETC/$role.env: a comment after a value becomes part of it (systemd reads none" \
+      "there), put it on a line of its own: ${commented//$'\n'/; }" >&2
+    exit "$EX_CONFIG"
+  fi
   ws=${X30_WS:-$(workspace)}
   ros_setup "${X30_ROS_SETUP:-/opt/ros/noetic/setup.bash}"
   setup=$ws/devel/setup.bash
@@ -361,8 +381,9 @@ NotifyAccess=main
 WatchdogSec=60
 TimeoutStartSec=360
 Restart=on-failure
-# the other host's role (x30_host.sh exits $WRONG_HOST): no restart helps that
-RestartPreventExitStatus=$WRONG_HOST
+# the other host's role or a settings file read wrong (x30_host.sh exits $EX_CONFIG): no
+# restart helps that
+RestartPreventExitStatus=$EX_CONFIG
 RestartSec=10
 KillSignal=SIGINT
 TimeoutStopSec=70
