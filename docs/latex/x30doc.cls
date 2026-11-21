@@ -43,6 +43,11 @@
   UprightFont=*-Regular, BoldFont=*-SemiBold, ItalicFont=*-Italic, BoldItalicFont=*-Italic]
 \newfontfamily\xheavy{BarlowSemiCondensed}[Path=fonts/, Extension=.ttf, UprightFont=*-Bold]
 \newfontfamily\xmedium{BarlowSemiCondensed}[Path=fonts/, Extension=.ttf, UprightFont=*-Medium]
+% the heavy face with wider word spaces, for big titles (WordSpace only works at load)
+\newfontfamily\xheavychap{BarlowSemiCondensed}[Path=fonts/, Extension=.ttf, UprightFont=*-Bold,
+  WordSpace=1.12]
+\newfontfamily\xheavywide{BarlowSemiCondensed}[Path=fonts/, Extension=.ttf, UprightFont=*-Bold,
+  WordSpace=1.6]
 \IfFontExistsTF{DejaVu Sans Mono}
   {\setmonofont{DejaVu Sans Mono}[Scale=0.84]}
   {\setmonofont{lmmono10-regular.otf}}
@@ -115,7 +120,7 @@
   {\xheavy\color{ink}}
   {\xmedium\large\color{accent}\MakeUppercase{\chaptertitlename}~\thechapter}
   {2pt}
-  {\addfontfeature{WordSpace=1.3}\fontsize{24}{27}\selectfont}
+  {\xheavychap\fontsize{24}{27}\selectfont}
   [\vspace{4pt}{\color{line}\titlerule[0.8pt]}]
 \titleformat{name=\chapter,numberless}[display]
   {\xheavy\color{ink}}{}{0pt}{\fontsize{24}{27}\selectfont}[\vspace{4pt}{\color{line}\titlerule[0.8pt]}]
@@ -192,7 +197,7 @@
       {\xheavy\color{gold}\addfontfeature{LetterSpace=28}\large EZRA\hspace{0.7em}ROBOTICS};
     \node[anchor=north west,inner sep=0,text width=\paperwidth-40mm,align=left]
       (title) at ($(brand.south west)+(0,-6mm)$)
-      {\xheavy\color{white}\addfontfeature{WordSpace=1.6}%
+      {\xheavywide\color{white}%
        \ifxdoc@afive\fontsize{27}{29}\else\fontsize{38}{40}\fi\selectfont \xdoc@title};
     \node[anchor=north west,inner sep=0,text width=\paperwidth-46mm,align=left]
       (sub) at ($(title.south west)+(0,-5mm)$)
@@ -263,7 +268,7 @@
   \newtcolorbox{#1}[1][#4]{enhanced,breakable,colback=#3,colframe=#2,boxrule=0pt,
     leftrule=3.2pt,arc=1.5pt,outer arc=1.5pt,left=7pt,right=7pt,top=5pt,bottom=5pt,
     before skip=8pt,after skip=8pt,
-    fontupper=\color{ink},
+    fontupper=\color{ink},before upper={\raggedright},
     title={##1},fonttitle=\xheavy\color{#2},coltitle=#2,
     attach title to upper={\enspace}}}
 \xdoc@box{notebox}{accent}{accentsoft}{Note}
@@ -278,8 +283,7 @@
   breakatwhitespace=false,showstringspaces=false,upquote=true,
   backgroundcolor=\color{codeback},frame=l,framerule=2pt,rulecolor=\color{accent},
   xleftmargin=6pt,framesep=6pt,aboveskip=7pt,belowskip=7pt,
-  commentstyle=\color{muted}\itshape,keywordstyle=\color{accent}\bfseries,
-  stringstyle=\color{orange!80!black},
+  commentstyle=\color{muted}\itshape,keywordstyle={},stringstyle={},
   literate={›}{{\textrangle}}1 {°}{{\textdegree}}1 {…}{{\ldots}}1 {·}{{\textperiodcentered}}1}
 
 % ----------------------------------------------------------------------------------- words
@@ -294,7 +298,7 @@
 \newcommand{\srv}[1]{\code{#1}}        % navigation/start
 \newcommand{\param}[1]{\code{#1}}      % max_vx
 \newcommand{\file}[1]{\code{#1}}       % /etc/x30/navigation.env
-\newcommand{\cmd}[1]{\texttt{#1}}      % a short command inline
+\newcommand{\cmd}[1]{\texttt{\detokenize{#1}}}      % a short command inline: raw _ { } ~ (balanced braces)
 \newcommand{\ui}[1]{\textbf{#1}}       % a label on a screen
 \newcommand{\key}[1]{\tcbox[on line,colback=white,colframe=muted,boxrule=0.5pt,arc=2pt,
   left=2pt,right=2pt,top=0pt,bottom=0pt,boxsep=1pt]{\ttfamily\bfseries\small #1}}
