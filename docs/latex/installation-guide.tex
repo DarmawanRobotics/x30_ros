@@ -1,0 +1,32 @@
+% X30 Installation Guide. Build: make -C docs pdf (docs/pdf/X30-Installation-Guide.pdf)
+\documentclass{x30doc}
+\doctitle{X30 Installation Guide}
+\docheader{X30 Installation Guide}
+\docsubtitle{From nothing to the first patrol: the stack on the Jueying X30, the app on the
+  Skydroid H12 and the NETRA command center}
+\docversion{1.0}
+\docdate{2026-11-21}
+\docaudience{For the engineer who installs a robot and its command center: a Mac or a Linux
+  laptop, a terminal and SSH. Every step is a command to copy; no ROS knowledge is needed to
+  follow them.}
+\docnote{Operating the robot is in the X30 User Manual; what each setting does and how to tune
+  it for a site in the X30 Tuning Guide. The robot's own hardware (battery, charging pile,
+  power switch, the emergency stops) is described in Deep Robotics' Jueying X30 Pro User Manual,
+  the cameras in the HIKMICRO and Hertzino manuals.}
+\revision{1.0}{2026-11-21}{First version: x30\_ros 0.19, X30Controller 1.0, NETRA with the
+  substation module}
+\begin{document}
+\makefront
+\input{installation-guide/overview}
+\input{installation-guide/before}
+\input{installation-guide/mac}
+\input{installation-guide/robot}
+\input{installation-guide/services}
+\input{installation-guide/handheld}
+\input{installation-guide/netra}
+\input{installation-guide/bringup}
+\input{installation-guide/updates}
+\input{installation-guide/troubleshooting}
+\appendix
+\input{installation-guide/reference}
+\end{document}

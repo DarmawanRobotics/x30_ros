@@ -1,0 +1,126 @@
+\chapter{The stack on the robot}
+\label{ch:i-robot}
+
+From here on the Mac is on the robot's Wi-Fi (\code{X30*****}, password \code{12345678}), or on
+a cable to the Debug Ethernet port at the tail.
+
+\section{SSH keys}
+
+Every host takes user \code{ysc} with password \code{'} (one single quote). Install your key
+once, so the commands below never ask again:
+
+\begin{lstlisting}[language=bash]
+ssh-copy-id ysc@192.168.1.106
+ssh-copy-id ysc@192.168.1.105
+\end{lstlisting}
+
+\section{Copy and unpack}
+
+\begin{lstlisting}[language=bash]
+cd ~/x30
+scp x30_sources.tar.gz ysc@192.168.1.106:~/
+scp x30_sources.tar.gz ysc@192.168.1.105:~/
+\end{lstlisting}
+
+On each host (\cmd{ssh ysc@192.168.1.106}, then the same on .105):
+
+\begin{lstlisting}[language=bash]
+mkdir -p ~/x30_ws && tar -xzf ~/x30_sources.tar.gz -C ~/x30_ws
+\end{lstlisting}
+
+The workspace is \file{~/x30_ws} with \file{src/} (x30\_ros and its sources) and
+\file{Livox-SDK/}.
+
+\section{Dependencies}
+\label{sec:i-apt}
+
+\file{check_deps.sh} reads only what is installed (\cmd{dpkg}, the workspace,
+\file{/usr/local/lib}) and prints one \cmd{apt install} line for what is missing:
+
+\begin{lstlisting}[language=bash]
+bash ~/x30_ws/src/x30_ros/tools/check_deps.sh                # navigation host
+bash ~/x30_ws/src/x30_ros/tools/check_deps.sh --perception   # perception host
+\end{lstlisting}
+
+The robot borrows the Mac's internet through SSH for the missing packages. The Mac must then be
+on the robot \emph{and} online: a cable to the Debug Ethernet port and Wi-Fi to the internet, or
+the robot's Wi-Fi and a phone on USB tethering.
+
+\begin{lstlisting}[language=bash]
+ssh -R 1080 ysc@192.168.1.106      # on the Mac: a SOCKS proxy back to it while it is open
+# in that session, on the robot:
+P='-o Acquire::http::Proxy=socks5h://127.0.0.1:1080 -o Acquire::https::Proxy=socks5h://127.0.0.1:1080'
+sudo apt $P update && sudo apt $P install -y <the packages check_deps.sh printed>
+\end{lstlisting}
+
+Where SSH forwarding is refused, the robot names the files it needs and the Mac fetches them:
+
+\begin{lstlisting}[language=bash]
+sudo apt-get install --print-uris -qq <packages> | cut -d"'" -f2 > ~/urls.txt   # robot
+scp ysc@192.168.1.106:~/urls.txt . && mkdir -p debs \
+  && (cd debs && xargs -n1 curl -fsSLO < ../urls.txt)                         # Mac, online
+scp -r debs ysc@192.168.1.106:~/ && ssh ysc@192.168.1.106 'sudo dpkg -i ~/debs/*.deb'
+\end{lstlisting}
+
+\section{Build}
+
+\textbf{Navigation host} (.106): the Livox SDK once, then the whole workspace.
+
+\begin{lstlisting}[language=bash]
+cd ~/x30_ws/Livox-SDK/build && cmake .. && make -j"$(nproc)" && sudo make install
+cd ~/x30_ws && catkin_make -DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+\end{lstlisting}
+
+\textbf{Perception host} (.105): only the cameras, the recorder and what launches them. Run the
+\cmd{catkin_make} line \file{check_deps.sh --perception} prints once everything is there; it
+names the packages with \code{-DCATKIN_WHITELIST_PACKAGES}.
+
+\begin{notebox}
+A \cmd{pip install --user} that put a setuptools in \file{~/.local} stops catkin
+(\code{module 'importlib_metadata' has no attribute 'EntryPoints'}). \file{check_deps.sh}
+warns, and its build line then starts with \code{PYTHONNOUSERSITE=1}, which leaves
+\file{~/.local} out without touching it.
+\end{notebox}
+
+\section{Deep Robotics' autonomy off}
+\label{sec:i-dr}
+
+The navigation host also runs Deep Robotics' localization, navigation, mapping, URDF publisher
+and its bridge to the robot. Next to the stack they only take CPU and get in its way
+(\topic{/initialpose}, \topic{/map}, TF, the UDP port of the motion host's reports). Turn them
+off, now and at boot:
+
+\begin{lstlisting}[language=bash]
+bash ~/x30_ws/src/x30_ros/tools/dr_services.sh off
+bash ~/x30_ws/src/x30_ros/tools/dr_services.sh status   # 'udp 43897 ... free'
+\end{lstlisting}
+
+The sensor drivers (\topic{/livox/lidar}, \topic{/imu/data}), the ROS master and the robot
+server stay. The motion host and the perception host are never touched. \cmd{dr_services.sh on}
+puts everything back as it was.
+
+\section{The motion host's reports}
+\label{sec:i-networktoml}
+
+The motion host sends its 200 Hz reports only to the addresses in its \file{network.toml}
+(Deep Robotics' Application Manual, 4.3.2). Add the navigation host with port 43897 and restart
+the motion program; otherwise the robot takes commands but reports nothing, and the driver's
+state says \code{no reports from 192.168.1.103 yet (network.toml on the motion host?)}.
+
+\section{The hosts and their clocks}
+
+Deep Robotics' drivers on the navigation host register under the name \code{ysc-perception}.
+On the perception host, make that name resolve:
+
+\begin{lstlisting}[language=bash]
+echo '192.168.1.106 ysc-perception' | sudo tee -a /etc/hosts     # on .105
+\end{lstlisting}
+
+Without internet the two clocks drift apart; nothing in the stack depends on it, but logs and
+reports of the two hosts then disagree. Let the navigation host be the perception host's clock
+with \cmd{chrony} (\code{allow 192.168.1.0/24} and \code{local stratum 10} on .106,
+\code{server 192.168.1.106 iburst} on .105), or once after each boot on .105:
+
+\begin{lstlisting}[language=bash]
+sudo date -s "$(ssh ysc@192.168.1.106 date -Ins)"
+\end{lstlisting}

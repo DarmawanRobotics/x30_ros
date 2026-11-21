@@ -1,0 +1,123 @@
+\chapter{Perception: the sector scans}
+\label{ch:t-perception}
+
+\code{lidar_sector_node} (navigation host, on Deep Robotics' own LiDAR driver there) turns every LiDAR
+cloud into two sector scans: the
+range of the nearest obstacle in each angular sector around the robot.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.27\linewidth}p{0.3\linewidth}X@{}}
+  \toprule
+  \textbf{Scan} & \textbf{Sectors} & \textbf{Read by} \\
+  \midrule
+  \topic{perception/safety_scan} & 72 over \ang{360}, \SIrange{0.1}{4}{m} & the protective field
+    and the follower's guard \\
+  \topic{perception/sector_scan} & 32 over \ang{180} ahead, \SIrange{0.1}{8}{m} & reactive
+    avoidance \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Which points are obstacles}
+
+Each cloud goes through four filters before it is binned:
+
+\begin{enumerate}
+  \item \textbf{Noise}: Livox tags every point with its confidence. Adhesion points (bits 0--1,
+    the glue of two surfaces) and particle points (bits 2--3: rain, dust) at the confidence of
+    \param{noise_level} are dropped.
+  \item \textbf{Self}: points inside the footprint grown by \param{self_margin} are the robot.
+  \item \textbf{Levelling}: the cloud is rotated by the base's roll and pitch (from odom, TF), so
+    heights count from the floor even while the body pitches in its gait. Without a recent
+    roll and pitch (\param{tilt_max_age}) every sector is BLOCKED: an unlevelled cloud could put
+    the floor in the band.
+  \item \textbf{Height band}: only points between \param{height_min} (\SI{0.10}{m}) and
+    \param{height_max} (\SI{1.60}{m}) above the floor are obstacles. With
+    \param{ground_segmentation} the floor height is estimated per \param{ground_cell} first, for
+    ramps and uneven yards.
+\end{enumerate}
+
+\subsection{Binning}
+
+A sector's range is its $k$-th nearest point (\param{k} = 2): one stray return never blocks a
+sector, and a sector needs $k$ points to count. Beyond \param{range_max} a sector is free; a
+non-finite or blocked range is treated by every consumer as an obstacle at the robot.
+
+\section{A blind LiDAR}
+
+A covered window, a failed sensor or heavy rain empties the cloud. Fewer than \param{min_points}
+(\num{100}) valid points in a cloud, or with \param{regions} and \param{min_region_points} fewer
+than the minimum in any azimuth region, make the cloud blind: every sector BLOCKED, the field in
+its BLIND state (Section~\ref{sec:t-field}). No cloud for \param{timeout_sec} does the same.
+
+\begin{tipbox}[A partly covered sensor]
+\param{min_region_points} catches what the total count misses: a bag on one side of the robot
+leaves enough points overall. To find the normal count, set \param{min_region_points} very
+high for a moment at the site: the warning \code{scans BLOCKED ... N points in region k} names the
+weakest region's count. Then set the minimum at a third of it (a start-only parameter: restart).
+\end{tipbox}
+
+\section{The near-field blind zone}
+
+A LiDAR sees nothing below its lowest beam. With the sensor at height $H$ above the floor and its
+steepest beam $\delta$ below the horizontal, an object of height $h$ disappears from the cloud
+once it is closer than
+\begin{equation}
+  r(h) = \frac{H - h}{\tan\delta}
+\end{equation}
+The robot walking toward a low obstacle sees it from afar, then loses it right where it matters.
+The \textbf{obstacle memory} keeps every obstacle cell in the odom frame for \param{memory_sec}
+(\SI{10}{s}) and adds it back to the scans while it is below the view, within \param{radius}.
+The model takes $H$ from \param{base_height} and the LiDAR's mount (\code{lidar_pose}), and
+$\delta$ from \param{lower_fov_deg} and the mount's tilt.
+
+\begin{center}
+\begin{small}
+\begin{tabular}{@{}rrrr@{}}
+  \toprule
+  & \multicolumn{3}{c}{\textbf{blind radius} $r(h)$ for an object of height} \\
+  \textbf{Lowest beam} $\delta$ & \SI{0.10}{m} & \SI{0.20}{m} & \SI{0.30}{m} \\
+  \midrule
+  \ang{7} (Mid-360, level) & \SI{3.1}{m} & \SI{2.3}{m} & \SI{1.5}{m} \\
+  \ang{30} & \SI{0.66}{m} & \SI{0.48}{m} & \SI{0.31}{m} \\
+  \bottomrule
+\end{tabular}
+\end{small}
+\end{center}
+\noindent ($H = \SI{0.48}{m}$, the sensor at base\_link height.) The X30's downward LiDARs see much
+closer than a level sensor: set \param{lower_fov_deg} to the steepest beam of the cloud the node
+reads, and check with a box of the height of \param{height_min} that the scan keeps it while the
+robot walks up to it.
+
+\begin{warnbox}[The memory forgets on a jump]
+An odometry jump larger than the motion (\param{max_jump}) clears the memory: remembered cells
+would land in the wrong place. A restarted odometry does the same.
+\end{warnbox}
+
+\section{Motion smear}
+
+The Livox accumulates a cloud over $T = \SI{0.1}{s}$ while the robot moves. The cloud is read
+as it arrives, so a point measured at the start of the sweep is off by up to
+\begin{equation}
+  \Delta \approx v\,T + \omega\,T\,r
+\end{equation}
+for a point at range $r$: \SI{7.5}{cm} straight ahead at \SI{0.75}{m/s}, \SI{14}{cm} at \SI{2}{m}
+while walking at \SI{0.5}{m/s} and turning at \SI{0.45}{rad/s}. The protective field's
+\param{margin} and the guard's \param{lateral_margin} must cover it. To remove it instead,
+read FAST-LIO's undistorted cloud (\cmd{input.type: pointcloud2},
+\cmd{input.pointcloud_topic: /cloud_registered_body}) with its frame in TF; it arrives one LIO
+step later.
+
+\section{Tuning the band}
+
+\begin{description}
+  \item[\param{height_min}] above the floor's unevenness and the gravel, below the lowest thing that
+    can trip the robot. Points of a slope rise into the band: enable
+    \param{ground_segmentation} on ramps rather than raise the bottom.
+  \item[\param{height_max}] above the highest part of the robot with its payload (the PTZ camera on
+    its mast): anything lower that hangs over the route must be seen.
+  \item[\param{range_max} (safety)] at least the field's distance at full speed plus the footprint:
+    \SI{1.62}{m} + \SI{0.50}{m} for the X30; \SI{4}{m} leaves room.
+  \item[\param{num_sectors}] 72 gives \ang{5} sectors: at \SI{2}{m} a sector is \SI{17}{cm} wide.
+    More sectors resolve a narrow gap better and need more points each.
+\end{description}

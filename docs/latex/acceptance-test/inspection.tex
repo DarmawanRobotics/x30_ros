@@ -1,0 +1,26 @@
+\chapter{Inspection and recording}
+\label{ch:s-inspection}
+
+\begin{notebox}
+Teach the inspection points in NETRA first (\menupath{Substation › Inspection points}), on the
+stops of the route under test, and set the day's air temperature on the robot.
+\end{notebox}
+
+\begin{tests}
+  I1 & Run the route; at each stop, watch the camera on the H12. & The camera turns to every
+    target; NETRA gets a result for every point, with the thermal and visible images. & \result \\
+  I2 & Measure one target with the reference thermometer at the same time. & The robot's reading
+    within \SI{\pm 2}{\celsius} or \SI{\pm 2}{\percent} of the reference. Robot \blank, reference
+    \blank & \result \\
+  I3 & Put the heat source on a target of a point with three regions (phases), about \SI{10}{K} above
+    the others. & The finding is at least warning (similar criterion), the hot region marked. &
+    \result \\
+  I4 & A partial discharge point, with a source or a known corona. & The class and the severity in
+    NETRA match the source (corona: attention). & \result \\
+  I5 & \ui{Inspect} on the H12 at a stop point. & The point is inspected where the robot stands; the
+    result on the H12 and in NETRA. & \result \\
+  I6 & During the patrol, the recorder. & \ui{REC} on the H12 and in NETRA; a session folder on the
+    perception host with video and thermal frames. & \result \\
+  I7 & Recorder on and off from NETRA (\menupath{Live control}). & It starts and stops; the session
+    is kept. & \result \\
+\end{tests}

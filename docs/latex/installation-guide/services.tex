@@ -1,0 +1,117 @@
+\chapter{The services}
+\label{ch:i-services}
+
+Each host runs its part of the stack as a systemd service under a watchdog: it starts at boot,
+restarts when something it depends on goes away, and is never given up on.
+
+\section{Install}
+
+\begin{lstlisting}[language=bash]
+sudo bash ~/x30_ws/src/x30_ros/tools/x30_host.sh install navigation   # on .106
+sudo bash ~/x30_ws/src/x30_ros/tools/x30_host.sh install perception   # on .105
+\end{lstlisting}
+
+This writes \file{/etc/systemd/system/x30-<role>.service} and its settings file
+\file{/etc/x30/<role>.env} (mode 600: root and \code{ysc} only), and enables the service. Run it
+with the robot up: the navigation host's service is ordered after Deep Robotics' services and
+the one running the ROS master, as it finds them.
+
+\begin{warnbox}[An existing settings file is kept]
+\cmd{install} never overwrites \file{/etc/x30/<role>.env}. On a robot installed before
+version~0.19, add the line \code{X30_NETRA_TOKEN=} to \file{/etc/x30/navigation.env} yourself.
+\end{warnbox}
+
+\section{Settings}
+
+\file{/etc/x30/navigation.env} (shell words: a quoted value stays one argument):
+
+\begin{lstlisting}[language=bash]
+X30_LAUNCH_ARGS="site:=gardu controller:=neupan netra_url:=http://192.168.1.50 netra_robot_id:=x30-01"
+X30_PYTHON=/home/ysc/x30_ws/neupan/bin/python   # only for controller:=neupan
+X30_TELEOP_TOKEN=<the handheld's token>
+X30_NETRA_TOKEN=<CC_TOKEN from NETRA>
+# X30_LOG_DIR=/home/ysc/x30/logs                # each node's JSON lines log
+# X30_ROS_LOG_MB=2048                           # ROS's own logs, pruned at every start
+\end{lstlisting}
+
+\file{/etc/x30/perception.env}:
+
+\begin{lstlisting}[language=bash]
+X30_LAUNCH_ARGS=""                # e.g. hikmicro_host:=192.168.1.64 hertzino_host:=192.168.2.204
+HIKMICRO_PASSWORD=<thermal camera admin password>
+HERTZINO_PASSWORD=<acoustic camera password>
+\end{lstlisting}
+
+\subsection{Launch arguments of the navigation host}
+
+\begin{center}
+\begin{small}
+\begin{longtable}{@{}>{\raggedright}p{0.26\linewidth}>{\raggedright}p{0.18\linewidth}>{\raggedright\arraybackslash}p{0.48\linewidth}@{}}
+  \toprule
+  \textbf{Argument} & \textbf{Default} & \textbf{What it does} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  \code{site} & last run's & the site at start (routes, tags, inspection points), created when
+    missing \\
+  \code{sites_dir} & \file{~/x30/map} & where the sites are \\
+  \code{controller} & \code{holonomic} & the path controller; \code{neupan} needs its venv and
+    \code{X30_PYTHON} \\
+  \code{health}, \code{inspection} & \code{true} & the health monitor; the inspection at the stop
+    points \\
+  \code{bridge} & \code{true} & the H12 gateway on UDP 9870 \\
+  \code{netra_url}, \code{netra_robot_id} & empty & NETRA's address and this robot's ID; the uplink
+    runs when \code{netra_url} is set \\
+  \code{reports_dir} & \file{~/x30/reports} & the inspection reports \\
+  \code{lidar_frame}, \code{lidar_pose} & \code{livox_frame}, 0s & the frame of
+    \topic{/livox/lidar} and its mount (Section~\ref{sec:i-profile}) \\
+  \code{odometry_method} & \code{fast_lio} & \code{external} when another estimator publishes
+    \topic{/Odometry} \\
+  \code{blackbox}, \code{blackbox_dir} & \code{true}, \file{~/x30/blackbox} & the rolling rosbag
+    of the last 3 h \\
+\end{longtable}
+\end{small}
+\end{center}
+
+\section{Start, stop, watch}
+
+\begin{lstlisting}[language=bash]
+sudo systemctl start x30-navigation        # .106 first: the perception host uses its master
+sudo systemctl start x30-perception        # .105
+systemctl status x30-navigation            # the watchdog's status line
+journalctl -u x30-navigation -f            # the log
+bash ~/x30_ws/src/x30_ros/tools/x30_host.sh check
+\end{lstlisting}
+
+\cmd{x30_host.sh check} tells this host's role and address, whether the other host answers,
+the ROS master and every registered node from here, the two clocks, and on the navigation host
+that Deep Robotics' autonomy is off, on the perception host the cameras' ports.
+
+\section{What the watchdog does}
+
+The service's main process starts the host's launch file, tells systemd it is ready once the
+master and the critical nodes answer (on the navigation host: the driver, the control mux, the
+LiDAR scans and the path follower), then checks them every 5~s. The service restarts when:
+
+\begin{itemize}
+  \item the master restarted (its nodes are lost with it; the perception host follows this way);
+  \item the master or a critical node stays away longer than 45~s;
+  \item the start takes longer than 4~min, or roslaunch exits;
+  \item the watchdog itself hangs (systemd's \code{WatchdogSec=60}).
+\end{itemize}
+
+Meanwhile the robot stands: the control mux stops a command that is not renewed, and the motion
+host stops taking commands without the driver's heartbeat. On the navigation host the watchdog
+also turns off, every 30~s, whatever of Deep Robotics' autonomy one of its services started
+again late, and names it in the journal.
+
+\section{Run by hand}
+
+For a test without the services (stop them first):
+
+\begin{lstlisting}[language=bash]
+eval "$(bash ~/x30_ws/src/x30_ros/tools/x30_host.sh env navigation)"   # .105: perception
+roslaunch x30_bringup navigation_host.launch site:=gardu
+roslaunch --wait x30_bringup perception_host.launch                    # on .105
+\end{lstlisting}

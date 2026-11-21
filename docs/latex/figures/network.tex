@@ -1,0 +1,44 @@
+% The computers of an X30 deployment and what talks to what.
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  % the robot's network
+  \draw[zone] (0,0) rectangle (16.4,11.2);
+  \node[zonelabel] at (0,11.2) {Robot network 192.168.1.x \textperiodcentered{} Wi-Fi \texttt{X30*****} or the Debug Ethernet port};
+
+  % operators
+  \node[box,minimum width=5.2cm] (h12) at (3.4,9.4)
+    {\twolines{Skydroid H12}{X30Controller app: sticks, keys, camera, map}};
+  \node[box,minimum width=5.6cm] (mac) at (12.6,9.4)
+    {\twolines{Mac or laptop: NETRA}{Docker, dashboard and robot API on port 80}};
+
+  % the robot's computers
+  \node[box,minimum width=4.4cm,minimum height=2.6cm,anchor=north] (per) at (2.6,7.1)
+    {\twolines{Perception host .105}{RK3588 inside the body}\\[3pt]\color{ink}
+     \footnotesize hikmicro\_driver, hertzino\_driver\\\footnotesize x30\_recorder};
+  \node[hot,minimum width=5.4cm,minimum height=2.6cm,anchor=north] (nav) at (8.3,7.1)
+    {\twolines{Navigation host .106}{x86 + GPU, the controller on the back}\\[3pt]\color{ink}
+     \footnotesize ROS master, driver, control mux, perception,\\
+     \footnotesize FAST-LIO, localization, navigation, health,\\
+     \footnotesize inspection, x30\_bridge, x30\_fleet};
+  \node[box,minimum width=3.6cm,minimum height=2.6cm,anchor=north] (mot) at (14.2,7.1)
+    {\twolines{Motion host .103}{the walking}\\[3pt]\color{ink}\footnotesize Deep Robotics' motion\\\footnotesize program, joints, IMU};
+
+  % sensors
+  \node[box,minimum width=4.4cm,anchor=north] (cams) at (2.6,2.9)
+    {\twolines{Inspection cameras}{HIKMICRO PTZ 192.168.1.64}\\\color{muted}Hertzino 192.168.2.204};
+  \node[box,minimum width=5.4cm,anchor=north] (lidar) at (8.3,2.9)
+    {\twolines{4 × Livox Mid-360, body IMU}{LiDAR switch 192.168.2.x, Deep Robotics' drivers}};
+
+  % links
+  \draw[flowa] (h12.south) |- ($(nav.north)+(-0.9,0.55)$) -- ($(nav.north)+(-0.9,0)$);
+  \node[lab,anchor=south] at ($(h12.south)!0.5!($(nav.north)+(-0.9,0.55)$)+(1.3,-0.08)$) {UDP 9870};
+  \draw[flowa] ($(nav.north)+(0.9,0)$) -- ($(nav.north)+(0.9,0.55)$) -| (mac.south);
+  \node[lab,anchor=south] at ($($(nav.north)+(0.9,0.55)$)!0.5!(mac.south|-nav.north)+(0.2,0.47)$) {WebSocket + HTTP :80};
+  \draw[flow,<->] (per.east) -- node[lab,above] {ROS} (nav.west);
+  \draw[flow,<->] (nav.east) -- node[lab,above,align=center] {UDP\\[-2pt]43893/43897} (mot.west);
+  \draw[flow,<->] (cams.north) -- node[lab,right] {ISAPI, RTSP} (per.south);
+  \draw[flow] (lidar.north) -- node[lab,right] {/livox/lidar, /imu/data} (nav.south);
+\end{tikzpicture}
+\end{document}

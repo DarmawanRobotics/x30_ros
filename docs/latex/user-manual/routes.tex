@@ -1,0 +1,43 @@
+\chapter{Teaching a route}
+\label{ch:u-routes}
+
+A route is a walk the robot repeats. You teach it once, by walking the robot along it, and mark
+the stop points where it will stand still and inspect.
+
+\section{Where routes go}
+
+\begin{itemize}
+  \item Along walkways and roads people may use while the equipment is energized, outside every
+    minimum approach distance.
+  \item On even, solid ground the robot can see: no steps down, no holes, no loose gravel slopes.
+  \item With room: at least 1~m wider than the robot (0.47~m) where it passes things, so it can
+    step around an obstacle.
+  \item Starting at the dock, so every patrol begins where the robot was started.
+\end{itemize}
+
+\section{Teach}
+
+\begin{enumerate}
+  \item REMOTE (key \key{A}). The robot stands on the dock, \ui{Start pose} in the top bar.
+  \item \ui{Record}: \ui{Recording a route}.
+  \item Walk the route slowly and smoothly, as you want it repeated. The robot remembers its path
+    every few centimetres.
+  \item At each place to inspect, stop the robot where the cameras see the equipment and press
+    \ui{Point}: \ui{Stop point, inspect 10 s}. The robot will stand there on every patrol.
+  \item At the end, \ui{Finish}: \ui{Route saved}. Its name is the date and the time.
+\end{enumerate}
+
+The route is saved on the robot and sent to NETRA by itself (\menupath{Routes}), now or as soon as
+NETRA is reachable.
+
+\begin{tipbox}[Stop points]
+Stop where the robot sees the equipment straight and close enough, without leaning into any
+approach distance. The inspection points are then taught for that stop
+(Chapter~\ref{ch:u-inspection}); a stop with none simply waits its time.
+\end{tipbox}
+
+\section{Tags}
+
+Where the site has markers (tags) on walls or posts, put the robot in view of one near the start
+and press \ui{Tags}: the robot records where it is. On later patrols, each time it sees that tag
+it corrects the small drift of its position. Ask the technician where tags help.

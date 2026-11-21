@@ -1,0 +1,32 @@
+% X30 Tuning Guide. Build: make -C docs pdf (docs/pdf/X30-Tuning-Guide.pdf)
+\documentclass{x30doc}
+\doctitle{X30 Tuning Guide}
+\docheader{X30 Tuning Guide}
+\docsubtitle{The models behind every setting of the X30 stack, how to measure them on the robot,
+  and the complete parameter reference}
+\docversion{1.0}
+\docdate{2026-11-21}
+\docaudience{For the engineers who commission and tune the X30: the braking model and the
+  protective field, the scans, odometry and localization, route following and avoidance, the
+  inspection criteria. Basic ROS knowledge assumed.}
+\docnote{Installing the stack is in the X30 Installation Guide, operating it in the X30 User
+  Manual, the nodes, topics and protocols in the X30 Architecture \& Technical Reference. The
+  parameter tables in Appendix~\ref{ch:t-reference} are generated from the sources
+  (\file{docs/tools/params.py}) and always match the code of this version.}
+\revision{1.0}{2026-11-21}{First version, for x30\_ros 0.19}
+\begin{document}
+\makefront
+\input{tuning-guide/layers}
+\input{tuning-guide/profile}
+\input{tuning-guide/driver}
+\input{tuning-guide/control}
+\input{tuning-guide/perception}
+\input{tuning-guide/odometry}
+\input{tuning-guide/localization}
+\input{tuning-guide/following}
+\input{tuning-guide/obstacles}
+\input{tuning-guide/inspection}
+\input{tuning-guide/system}
+\appendix
+\input{tuning-guide/reference}
+\end{document}

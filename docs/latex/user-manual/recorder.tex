@@ -1,0 +1,32 @@
+\chapter{The recorder}
+\label{ch:u-recorder}
+
+The robot records its cameras on its own disk: the visible and thermal video, every raw thermal
+frame (temperatures per pixel, for analysis later) with the robot's position, and the acoustic
+camera's data. Nothing goes over the network while it records, so a weak link loses nothing.
+
+\section{When it records}
+
+\begin{itemize}
+  \item \textbf{Every patrol}, by itself: from the moment the robot walks onto the route until
+    30~s after it finished.
+  \item \textbf{On request}: start and stop it from the H12 (the recorder action) or in NETRA
+    (\menupath{Live control › Recorder}, the switch). A manual recording that runs into a patrol
+    goes on as one session.
+\end{itemize}
+
+\section{What you see}
+
+\begin{itemize}
+  \item \textbf{H12}: \ui{REC 4:12 · 250 frames · patrol}, or \ui{Recorder ready}; \ui{Recorder
+    not answering} when the perception host does not answer.
+  \item \textbf{NETRA}: a red \ui{REC} badge on the robot's card; in \menupath{Live control} the
+    duration, who started it, the thermal frames, the videos, the free disk, and a warning when
+    frames are dropped because the disk is too slow.
+\end{itemize}
+
+\section{The disk}
+
+Before each session and every 30~s while it runs, the oldest recordings are removed until 10~GB
+is free; below 3~GB nothing is recorded and the recorder says why. Copy recordings you want to
+keep off the robot (the technician: \file{~/x30/recordings} on the perception host).

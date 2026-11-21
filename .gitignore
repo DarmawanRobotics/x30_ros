@@ -16,3 +16,10 @@ __pycache__/
 .vscode/
 *.swp
 .DS_Store
+
+# docs: LaTeX output (the committed PDFs are in docs/pdf), the website's build
+docs/build/
+docs/site/node_modules/
+docs/site/content/
+docs/site/.vitepress/cache/
+docs/site/.vitepress/dist/

@@ -1,0 +1,43 @@
+\chapter{The robot and the system}
+\label{ch:u-robot}
+
+\section{What it does}
+
+The X30 walks routes taught by an operator and inspects the equipment at their stop points:
+
+\begin{itemize}
+  \item \textbf{Teach once, repeat}: an operator walks the robot along the route with the H12 and
+    marks where it stops. The robot repeats the route as often as asked, on its own or on a
+    schedule. There is no map: the route is the robot's memory of the walk.
+  \item \textbf{Inspect at every stop}: the thermal camera looks at each piece of equipment taught
+    there and measures its temperatures; the acoustic camera listens for partial discharge.
+    Every finding has a severity, from normal to critical.
+  \item \textbf{Record}: during every patrol the cameras' video, their raw thermal frames and the
+    acoustic data are recorded on the robot.
+  \item \textbf{Report}: NETRA, the command center, shows the robot live, keeps every patrol,
+    every inspection with its images, and the trend of every piece of equipment.
+\end{itemize}
+
+\section{Its parts}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.34\linewidth}X@{}}
+  \toprule
+  Part & What it is for \\
+  \midrule
+  Jueying X30 Pro & the four-legged robot, Deep Robotics \\
+  HIKMICRO PTZ camera & thermal and visible camera that pans, tilts and zooms \\
+  Hertzino HZ-FA-371 & acoustic camera for partial discharge \\
+  Four LiDARs & see around the body: obstacles, the robot's own position \\
+  Skydroid H12 & the handheld with the X30Controller app \\
+  NETRA & the command center on a laptop or server \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Its start spot}
+
+The robot knows where it is relative to the spot it was started on, usually its dock. Start it
+there every time, facing the same way: every route was taught from that spot, and the robot
+repeats it from there. Markers on the walls (tags), where the site has them, correct the small
+drift that grows with every metre walked.

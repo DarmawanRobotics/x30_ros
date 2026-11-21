@@ -1,0 +1,72 @@
+\chapter{Patrols}
+\label{ch:u-patrol}
+
+\section{Start a patrol}
+
+\begin{description}
+  \item[From the H12] \ui{Routes}, pick the route, AUTO (key \key{A}), \ui{Start}.
+  \item[From NETRA] \menupath{Patrols › Start a patrol now} with the robot and the route, or a
+    schedule in \menupath{Schedules} (days and time). The robot downloads the route and its
+    inspection points itself.
+\end{description}
+
+The robot walks onto the route, follows it, stops and inspects at every stop point, and ends at
+the route's end. During the patrol the H12 and NETRA show its state:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.36\linewidth}X@{}}
+  \toprule
+  State on the H12 & Meaning \\
+  \midrule
+  Walking onto the route & on its way to the route \\
+  Patrolling & following the route \\
+  Approaching a stop & slowing down to a stop point or the end \\
+  Inspecting & standing at a stop: the cameras at work \\
+  Paused & someone paused it, or the e-stop, REMOTE, localization or the battery \\
+  Blocked & something is in its way (below) \\
+  Off the route & too far from the route to follow it \\
+  Route finished & done \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{center}
+\includegraphics[width=\linewidth]{follower}
+\end{center}
+
+\section{Obstacles}
+
+The robot slows down near an obstacle and stops before it. Then, on its own:
+
+\begin{enumerate}
+  \item it steps to the side and passes the obstacle if there is room (path shift);
+  \item if not, it tries a short detour around it;
+  \item if the way stays blocked, it backs up a little and tries again, and finally reports
+    \ui{Blocked} on the H12 and as an alert in NETRA.
+\end{enumerate}
+
+Clear the way and it goes on by itself; or take it over in REMOTE.
+
+\section{Pause, take over, end}
+
+\begin{itemize}
+  \item \ui{Pause} / \ui{Resume}: the robot stands and waits.
+  \item REMOTE (key \key{A}) during a patrol pauses it: drive the robot, then AUTO and
+    \ui{Resume}. Bring it back near its route first.
+  \item \ui{End}: the patrol stops; the robot stands where it is.
+  \item STOP (key \key{B}): the e-stop; after the release the patrol stays paused until
+    \ui{Resume}.
+\end{itemize}
+
+\section{When the robot does not know where it is}
+
+The top bar shows \ui{No loc} and the patrol pauses (Paused: localization). This happens after
+the robot's odometry restarted. Walk the robot back to its start spot, facing the usual way:
+
+\begin{itemize}
+  \item with a recorded tag in view, press \ui{Localize}: the robot finds its place from the tag;
+  \item without a tag, sit the robot down on the start spot and restart it (or ask the technician
+    to restart its service): the start spot becomes its origin again.
+\end{itemize}
+
+Then start the patrol again.

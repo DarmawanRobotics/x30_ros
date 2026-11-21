@@ -1,0 +1,54 @@
+\chapter{Inspection and recording}
+\label{ch:a-inspection}
+
+\section{The plan}
+
+Inspection points are places where the robot stands (map frame), each with its targets: where
+the PTZ camera looks (pan, tilt, zoom) and what is checked there. Points are matched by
+position, not by route: every route that stops within \param{match_radius_m} of a point inspects
+it.
+
+\begin{lstlisting}
+points:
+  - name: bay1_disconnector
+    x: 12.40
+    y: -3.10
+    targets:
+      - name: bay1_ds_clamps
+        pan_deg: 35.0
+        tilt_deg: -10.0
+        zoom: 4.0
+        thermal: {enabled: true, strips: 3, max_temp_c: 0.0}
+        acoustic: {enabled: true, duration_sec: 5.0}
+\end{lstlisting}
+
+The site's own file and NETRA's plan are merged; a NETRA point never replaces a point of the same
+name in the site's file.
+
+\section{At a stop}
+
+\begin{center}
+\includegraphics[width=\linewidth]{inspection}
+\end{center}
+
+\code{inspection_node} answers \topic{navigation/stop_point}: for each target it moves the
+camera (\code{hikmicro_ptz_node} on the perception host), waits until it settles, takes the
+temperatures of the regions several times (median), a visible and a thermal image and the raw
+temperatures, runs the acoustic detection, judges the findings (Tuning Guide, ``Inspection'')
+and publishes one \topic{inspection/report}. The report folder is written before the message
+goes out, so the uplink always finds the files it names.
+
+\section{The recorder}
+
+\code{recorder_node} on the perception host writes a session per patrol or request:
+
+\begin{lstlisting}
+~/x30/recordings/<YYYYMMDD>/<HHMMSS>_<patrol|manual>/
+  session.json              reason, start and end, site, what was recorded (rewritten as it grows)
+  thermal/*.npz             a raw frame each: degC per pixel, the pose, pan, tilt, zoom
+  video/<stream>_*.mp4      the camera's streams, segment by segment (ffmpeg, RTSP), and their logs
+  acoustic/*.npz            the acoustic camera's data in chunks, and detections.jsonl
+\end{lstlisting}
+
+Files go to the disk through a bounded queue; a full queue drops and counts rather than blocks.
+The video is copied as the camera encodes it (no re-encoding on the robot).

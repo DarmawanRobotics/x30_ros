@@ -1,0 +1,136 @@
+\chapter{Data flow}
+\label{ch:a-dataflow}
+
+\section{Topics}
+
+Names relative to the node's namespace; the nodes run in the global namespace, the driver in
+\code{/x30}. Latched topics carry a state and arrive at once on subscription.
+
+\begin{center}
+\begin{small}
+\begin{longtable}{@{}>{\raggedright}p{0.27\linewidth}>{\raggedright}p{0.18\linewidth}>{\raggedright}p{0.21\linewidth}>{\raggedright\arraybackslash}p{0.26\linewidth}@{}}
+  \toprule
+  \textbf{Topic} & \textbf{Type} & \textbf{From} & \textbf{To} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  \multicolumn{4}{@{}l}{\textit{Motion}} \\
+  \topic{/x30/cmd_vel} & Twist & control mux & \code{x30_driver} \\
+  \topic{control/nav_cmd_vel} & Twist & path follower, docking & control mux, avoidance \\
+  \topic{control/remote/handheld/cmd_vel} & Twist & handheld gateway & control mux \\
+  \topic{control/estop_request} & String & gateway, uplink & control mux (latches at once) \\
+  \topic{control/status} & ControlStatus (latched) & control mux & follower, docking, health,
+    gateway, uplink \\
+  \multicolumn{4}{@{}l}{\textit{Sensing}} \\
+  \topic{/livox/lidar} & Livox CustomMsg & Deep Robotics' driver & scans, FAST-LIO \\
+  \topic{/imu/data} & Imu & Deep Robotics' driver & start gate, FAST-LIO, monitor, levelling \\
+  \topic{perception/safety_scan} & SectorScan & \code{lidar_sector_node} & control mux, follower,
+    health \\
+  \topic{perception/sector_scan} & SectorScan & \code{lidar_sector_node} & avoidance \\
+  \topic{/Odometry} & Odometry & FAST-LIO & monitor, localization \\
+  \topic{odometry/status} & OdometryStatus (latched) & odometry monitor & health \\
+  \topic{odometry/trip} & TripStatus (latched) & odometry monitor & gateway \\
+  \topic{odometry/restarted} & Empty & odometry monitor & localization \\
+  \multicolumn{4}{@{}l}{\textit{Where and where to}} \\
+  \topic{localization/status} & LocalizationStatus & localization & follower, route recorder,
+    health \\
+  \topic{localization/pose} & PoseWithCovariance & localization & recorder \\
+  \topic{site/status} & SiteStatus (latched) & site manager & route recorder, inspection,
+    recorder \\
+  \topic{navigation/waypoints} & WaypointPath & path loader & follower \\
+  \topic{navigation/avoidance} & AvoidanceCommand & avoidance & follower \\
+  \topic{navigation/status} & NavigationStatus (latched) & follower & gateway, uplink, recorder \\
+  \topic{navigation/stop_point} & StopPointEvent & follower & inspection \\
+  \topic{route/saved} & String & route recorder & uplink \\
+  \multicolumn{4}{@{}l}{\textit{Inspection and the rest}} \\
+  \topic{inspection/report} & InspectionReport & inspection & uplink \\
+  \topic{inspection/status} & InspectionStatus (latched) & inspection & gateway, uplink \\
+  \topic{recorder/status} & RecorderStatus (latched) & recorder & gateway, uplink \\
+  \topic{health/status} & HealthStatus (latched) & health monitor & control mux, gateway, uplink \\
+  \topic{/diagnostics} & DiagnosticArray & health monitor & gateway, uplink (the computer's figures) \\
+  \topic{/x30/diagnostics} & DiagnosticArray & driver & gateway, uplink (the driver's status) \\
+\end{longtable}
+\end{small}
+\end{center}
+
+\section{Services}
+
+\begin{center}
+\begin{small}
+\begin{longtable}{@{}>{\raggedright}p{0.38\linewidth}>{\raggedright}p{0.14\linewidth}>{\raggedright\arraybackslash}p{0.4\linewidth}@{}}
+  \toprule
+  \textbf{Service} & \textbf{Type} & \textbf{Does} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  \srv{control/set_mode} & SetMode & AUTO or REMOTE (with the source) \\
+  \srv{control/estop/engage}, \srv{release} & Trigger & the software e-stop \\
+  \srv{navigation/start}, \srv{stop}, \srv{pause}, \srv{resume} & Trigger & the follower; start waits
+    for a pose \\
+  \srv{navigation/set_path} & SetPath & a path given directly \\
+  \srv{navigation/load_path} & LoadPath & a route CSV of the sites directory \\
+  \srv{route/start}, \srv{stop}, \srv{mark_stop_point} & Trigger, MarkStopPoint & teach a route \\
+  \srv{site/list}, \srv{site/load} & ListSites, LoadSite & the sites \\
+  \srv{localization/start} & Trigger & localize from a tag in view (no gate) \\
+  \srv{localization/reset}, \srv{assume_origin} & Trigger & forget $\T{map}{odom}$; take odom as the
+    map \\
+  \srv{localization/record_tags}, \srv{load_tags} & Trigger, LoadFile & the site's tags \\
+  \srv{docking/dock}, \srv{undock}, \srv{cancel} & Trigger & docking \\
+  \srv{inspection/inspect} & Trigger & the point where the robot stands (minutes) \\
+  \srv{inspection/add_target} & AddTarget & teach a target from the camera's current pose \\
+  \srv{recorder/start}, \srv{stop} & Trigger & manual recording \\
+  \srv{odometry/trip_reset} & Trigger & the trip meter \\
+  \srv{/x30/stand_up}, \srv{sit_down}, \srv{gait_walk}, \ldots & Trigger & the driver's robot
+    commands \\
+\end{longtable}
+\end{small}
+\end{center}
+
+\section{Transforms}
+
+\begin{center}
+\includegraphics[width=0.92\linewidth]{tf}
+\end{center}
+
+\begin{description}
+  \item[$\T{map}{odom}$] \code{localization_node}: identity at the start (the start spot is the
+    origin), corrected by tags. A correction is published as the old value just before its time
+    and the new one at it, so a lookup between two corrections never interpolates across a jump.
+  \item[$\T{odom}{base\_link}$] the localization's bridge of FAST-LIO: FAST-LIO's pose levelled by
+    gravity at the start (the IMU's up direction gives roll and pitch), so \code{odom}'s $z$ is
+    up even when the robot started on a slope.
+  \item[base\_link to the sensors] \code{robot_state_publisher} from the URDF; the LiDAR's frame
+    from \code{lidar_pose}.
+\end{description}
+
+\section{Messages}
+
+\begin{center}
+\begin{small}
+\begin{longtable}{@{}>{\raggedright}p{0.26\linewidth}>{\raggedright\arraybackslash}p{0.68\linewidth}@{}}
+  \toprule
+  \textbf{Message} & \textbf{Carries} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  ControlStatus & who drives, the e-stop and its reasons, the protective field's state \\
+  SectorScan & the nearest obstacle per angular sector (REP-103), blocked sectors \\
+  OdometryStatus, TripStatus & trust in the odometry; distance and speeds since the reset \\
+  LocalizationStatus & NONE, LOCALIZED or UNCERTAIN, the last correction's source, $\sigma_{xy}$,
+    $\sigma_\psi$, the time since the last correction \\
+  SiteStatus & the active site and what it holds \\
+  Waypoint, WaypointPath & a route: poses with their dwell (stop points) \\
+  NavigationStatus & the follower's state, progress, pause reasons, message \\
+  StopPointEvent & the follower at a stop point \\
+  AvoidanceCommand & reactive avoidance's bend of the command, its emergency \\
+  DockingStatus & docking onto a tagged charger \\
+  InspectionReport, InspectionFinding & everything measured at a point; one criterion's result \\
+  InspectionStatus & ready, busy, the last point's severity \\
+  RecorderStatus & what the perception host records, where, the free disk \\
+  HealthStatus & the overall level, the issues, the speed scale \\
+\end{longtable}
+\end{small}
+\end{center}

@@ -1,0 +1,56 @@
+\chapter{Safety first}
+\label{ch:u-safety}
+
+The X30 walks among energized high-voltage equipment. Read this chapter before you use the robot
+for the first time, and follow it on every shift.
+
+\section{The substation's rules come first}
+
+\begin{itemize}
+  \item The robot works under the substation's safety rules and permits. Only people trained on
+    this manual and authorized by the substation operate it; one of them is responsible for the
+    robot during every patrol, scheduled ones included.
+  \item \textbf{Safe distances.} The robot and everything on it stay outside the minimum approach
+    distance of every energized part. Teach routes only along walkways and roads people may use
+    while the equipment is energized: the robot does not know where live parts are, the route is
+    what keeps it away from them.
+  \item \textbf{Switching and maintenance.} No patrol through a bay under switching or
+    maintenance. Stop the schedule in NETRA and keep the robot on its dock while work goes on.
+  \item \textbf{Weather.} No patrols in rain, lightning or standing water, nor on ground the
+    robot was not taught on.
+\end{itemize}
+
+\section{Four ways to stop the robot}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.3\linewidth}X@{}}
+  \toprule
+  Stop & What happens \\
+  \midrule
+  Hard emergency stop (tail) & cuts the joints at once: the robot drops. Only when it must stop
+    whatever it costs \\
+  H12: key \key{B} or STOP & software e-stop: the robot stands, the patrol pauses; release by
+    holding STOP for a second \\
+  NETRA: \ui{E-stop} & the same e-stop from the dashboard \\
+  Deep Robotics' handheld & takes over the robot (manual mode), past the whole stack \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{dangerbox}[The software stops are not certified]
+The e-stop of the H12 and of NETRA, and the robot's protective field, are software. They are a
+second line, never the only one: keep the hard emergency stop and Deep Robotics' handheld within
+reach of someone responsible whenever people are near the robot.
+\end{dangerbox}
+
+\section{What the robot watches, and what it does not}
+
+\begin{itemize}
+  \item \textbf{It watches} the space around its body with four LiDARs: it slows down and stops
+    before obstacles in its way (the protective field), and stops when it cannot see.
+  \item \textbf{It does not see} holes, steps down or the edge of a platform; objects lower than
+    about 10~cm close to its legs; thin wires. Keep routes on even, solid ground.
+  \item \textbf{It does not know} where the live parts are. The route keeps it away from them.
+  \item \textbf{It stops itself} when it loses its position, when its sensors fail, or when its
+    battery runs low, and says why on the H12 and in NETRA.
+\end{itemize}

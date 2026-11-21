@@ -1,0 +1,123 @@
+\chapter{Inspection and recording}
+\label{ch:t-inspection}
+
+\section{At a stop point}
+
+\code{inspection_node} runs when the follower reaches a stop point: it finds the inspection
+points of the site within \param{match_radius_m} (\SI{1.5}{m}) of the stop, and for each target
+moves the PTZ camera, waits, measures and judges.
+
+\begin{center}
+\includegraphics[width=\linewidth]{inspection}
+\end{center}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.32\linewidth}p{0.12\linewidth}X@{}}
+  \toprule
+  \textbf{Setting} & \textbf{Default} & \textbf{Tune when} \\
+  \midrule
+  \param{camera.move_timeout_sec} & \SI{20}{s} & a long pan fails: the camera is slow in the cold \\
+  \param{camera.settle_sec} & \SI{1}{s} & images blur or the focus hunts: raise to \SIrange{2}{3}{s} at high zoom \\
+  \param{thermal.samples} & 3 & readings jump: more samples (the median is used) \\
+  \param{thermal.sample_interval_sec} & \SI{0.3}{s} & the frames are the same: longer \\
+  \param{max_duration_sec} & \SI{150}{s} & a point has many targets: later targets are skipped \\
+  \param{acoustic.duration_sec} & \SI{5}{s} & the acoustic camera needs longer to classify \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{notebox}
+\param{max_duration_sec} must stay below the follower's \param{hooks.inspection_timeout_sec}
+(\SI{180}{s} on the X30): otherwise the robot walks on while the camera still works.
+\end{notebox}
+
+\section{Thermal criteria}
+
+Each target has one or more regions on the thermal image. With $T_{\max}$ the hottest region and
+$T_a$ the air temperature (\param{thermal.ambient_c}), three differences are judged against their
+levels, after NETA MTS practice:
+\begin{align}
+  \text{absolute:}&\quad T_{\max}\\
+  \text{ambient:}&\quad \Delta T_a = T_{\max} - T_a\\
+  \text{similar:}&\quad \Delta T_s = T_{\max} - \operatorname{median}\{T_j : j \ne \max\}
+    \qquad\text{(two regions or more)}
+\end{align}
+
+\begin{center}
+\begin{small}
+\begin{tabular}{@{}lrrr@{}}
+  \toprule
+  \textbf{Criterion} & \textbf{Attention} & \textbf{Warning} & \textbf{Critical} \\
+  \midrule
+  absolute $T_{\max}$ & \SI{80}{\celsius} & \SI{90}{\celsius} & \SI{105}{\celsius} (or the target's \param{max_temp_c}) \\
+  ambient $\Delta T_a$ & \SI{11}{K} & \SI{21}{K} & \SI{41}{K} \\
+  similar $\Delta T_s$ & \SI{2}{K} & \SI{4}{K} & \SI{16}{K} \\
+  \bottomrule
+\end{tabular}
+\end{small}
+\end{center}
+
+\noindent The target's severity is the highest of its three. A target taught with a rated
+temperature (\param{max_temp_c} in NETRA) uses it as its absolute critical level.
+
+\begin{center}
+\includegraphics[width=\linewidth]{severity}
+\end{center}
+
+\begin{warnbox}[The air temperature is live: set it]
+$\Delta T_a$ is only as good as $T_a$. The default \SI{30}{\celsius} misjudges a hot afternoon or a
+cool night by the difference. Set it each day (it takes effect within a second):
+\cmd{rosparam set /inspection_node/thermal/ambient_c 34}.
+\end{warnbox}
+
+\subsection{Getting good temperatures}
+
+\begin{itemize}
+  \item \textbf{Emissivity}: the camera's setting applies to every target. Bare, oxidized copper and
+    aluminium read far too cold; the similar criterion compares like with like and suffers least.
+  \item \textbf{Distance and zoom}: a region needs several pixels of the hot spot; zoom in from the
+    stop rather than teach a closer stop next to the equipment.
+  \item \textbf{Sun and reflections}: a reflection of the sun on a busbar is hot to the camera. Patrol
+    thermal routes at night or on a cloudy day where it matters.
+  \item \textbf{Load}: a joint's heating rises with the square of the current. Readings at light
+    load understate a defect; NETRA's trend over patrols shows it best.
+\end{itemize}
+
+\section{Partial discharge}
+
+The acoustic camera classifies what it hears; each class maps to a severity:
+\param{acoustic.corona} (attention), \param{acoustic.surface} (warning), \param{acoustic.floating}
+(critical), noise is normal. \param{intensity_warning} and \param{intensity_critical} raise a
+discharge by its intensity as well (0: off): set them after a few patrols, from the intensities
+the site's normal corona shows.
+
+\section{Reports}
+
+Every point inspected writes a folder under \param{reports_dir} with the readings, the images and,
+with \param{camera.raw_thermal}, the raw temperatures per pixel. The oldest days go while less
+than \param{reports_min_free_gb} (\SI{6}{GB}) is free; \param{reports_keep_days} bounds them by age.
+
+\section{The recorder}
+
+\code{recorder_node} (perception host) records the cameras during every patrol (\param{patrol.enabled}) and on
+request: the visible and thermal streams as MP4 segments of \param{video.segment_sec}, every raw
+thermal frame with the robot's pose and the camera's pan, tilt and zoom, and the acoustic data in
+chunks.
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.3\linewidth}p{0.12\linewidth}X@{}}
+  \toprule
+  \textbf{Setting} & \textbf{Default} & \textbf{Meaning} \\
+  \midrule
+  \param{disk.min_free_gb} & \SI{10}{GB} & the oldest sessions go while less is free \\
+  \param{disk.stop_free_gb} & \SI{3}{GB} & below this nothing more is written \\
+  \param{disk.check_sec} & \SI{30}{s} & checked this often while recording \\
+  \param{patrol.stop_after_sec} & \SI{30}{s} & after the route ends; laps stay one session \\
+  \param{thermal.min_interval_sec} & 0 & every thermal frame; raise it to save disk \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\noindent A raw thermal frame holds a temperature for every pixel: at the camera's full frame
+rate an hour of patrol fills gigabytes. Set \param{thermal.min_interval_sec} to \SI{1}{s} or more
+when the raw frames serve trends rather than video.

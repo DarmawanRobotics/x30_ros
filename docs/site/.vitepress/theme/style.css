@@ -1,0 +1,109 @@
+/* Shared look of the documentation sites (brand colours come from site.config.mjs). */
+
+:root {
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, var(--vp-c-brand-1) 30%, var(--vp-c-brand-2));
+  --vp-home-hero-image-background-image: linear-gradient(-45deg, var(--vp-c-brand-soft) 50%, transparent 50%);
+  --vp-home-hero-image-filter: blur(56px);
+}
+
+.VPHero .image-src {
+  max-width: 260px;
+  max-height: 260px;
+}
+
+/* figures: a paragraph holding only an image, its alt text as caption */
+.vp-doc figure {
+  margin: 20px 0;
+  text-align: center;
+}
+.vp-doc figure img {
+  margin: 0 auto;
+  border-radius: 8px;
+  box-shadow: var(--vp-shadow-2);
+}
+.vp-doc figcaption {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+}
+
+/* wide tables scroll instead of squeezing their columns */
+.vp-doc table {
+  display: block;
+  overflow-x: auto;
+}
+.vp-doc td code,
+.vp-doc th code {
+  white-space: nowrap;
+}
+
+/* the title block of a versioned guide */
+.vp-doc h1.doc-title {
+  margin-bottom: 4px;
+}
+.vp-doc p.doc-subtitle {
+  margin-top: 0;
+  font-size: 18px;
+  color: var(--vp-c-text-2);
+}
+
+/* guides numbered like their PDF: chapters (h1) 1, 2, ...; sections (h2) 1.1, 1.2, ... */
+.numbered .vp-doc {
+  counter-reset: chapter;
+}
+.numbered .vp-doc h1:not(.doc-title):not(.unnumbered) {
+  counter-increment: chapter;
+  counter-reset: section;
+  margin-top: 56px;
+  padding-top: 24px;
+  border-top: 1px solid var(--vp-c-divider);
+}
+.numbered .vp-doc h2:not(.unnumbered) {
+  counter-increment: section;
+}
+.numbered .vp-doc h1:not(.doc-title):not(.unnumbered)::before {
+  content: counter(chapter) '  ';
+  color: var(--vp-c-brand-1);
+}
+.numbered .vp-doc h2:not(.unnumbered)::before {
+  content: counter(chapter) '.' counter(section) '  ';
+  color: var(--vp-c-brand-1);
+}
+
+/* cards of the home page's document list */
+.docs-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 16px 0 32px;
+}
+.docs-cards p {
+  margin: 0;
+}
+.docs-cards a {
+  display: block;
+  height: 100%;
+  padding: 20px;
+  border: 1px solid var(--vp-c-bg-soft);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+  transition: border-color 0.25s;
+}
+.docs-cards a:hover {
+  border-color: var(--vp-c-brand-1);
+}
+.docs-cards a span {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--vp-c-text-2);
+}
+.VPHome .vp-doc {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 0 24px 48px;
+}

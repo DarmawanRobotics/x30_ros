@@ -1,0 +1,33 @@
+% The path follower's states (x30_navigation core/follower/state.py).
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[state] (in) at (0,4) {INACTIVE};
+  \node[state,draw=accent,fill=accentsoft] (jo) at (3.2,4) {JOINING};
+  \node[state,draw=accent,fill=accentsoft] (fo) at (6.6,4) {FOLLOWING};
+  \node[state,draw=accent,fill=accentsoft] (ap) at (10.0,4) {APPROACHING};
+  \node[state,draw=accent,fill=accentsoft] (dw) at (10.0,1.6) {DWELLING};
+  \node[state,draw=green,fill=greensoft] (gr) at (13.4,4) {GOAL\_REACHED};
+  \node[state,draw=orange,fill=orangesoft] (pa) at (3.2,1.6) {PAUSED};
+  \node[state,draw=orange,fill=orangesoft] (bl) at (6.6,1.6) {BLOCKED};
+  \node[state,draw=red,fill=redsoft] (of) at (3.2,6.4) {OFF\_PATH};
+  \node[state,draw=red,fill=redsoft] (fa) at (6.6,6.4) {FAILED};
+  \draw[flowa] (in) -- node[lab,above] {start} (jo);
+  \draw[flowa] (jo) -- node[lab,above] {on the path} (fo);
+  \draw[flowa] (fo) -- node[lab,above] {stop or end} (ap);
+  \draw[flowa] (ap) -- node[lab,above] {the end} (gr);
+  \draw[flowa] (ap) -- node[lab,right] {a stop point} (dw);
+  \draw[flowa] (dw.north west) -- node[lab,above,sloped] {dwell over} (fo.south east);
+  \draw[flow,<->] (fo) -- (bl);
+  \node[lab,below=1mm of bl,align=center] {an obstacle on the route:\\path shift, detour, backtrack};
+  \draw[flow,<->] (jo) -- (pa);
+  \node[lab,below=1mm of pa,align=center] {pause reasons: operator, e-stop,\\remote, localization, battery};
+  \draw[flow,draw=red] (fo) -- node[lab,right] {lost the path} (fa);
+  \draw[flow,draw=red] (jo) -- node[lab,left] {too far off} (of);
+  \node[lab,anchor=north west,align=left,text width=6.6cm] at (8.4,7.2)
+    {Every state may stop (\texttt{navigation/stop}: INACTIVE) or fail. A finished, failed or
+     off-path route starts again with \texttt{navigation/start}. PAUSED and BLOCKED return to
+     the state they halted.};
+\end{tikzpicture}
+\end{document}

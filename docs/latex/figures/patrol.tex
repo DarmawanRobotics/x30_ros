@@ -1,0 +1,27 @@
+% A patrol started from NETRA: who sends what (robot API v1, x30_fleet).
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\newcommand{\msg}[5][flow]{% style, y, from x, to x, text
+  \draw[#1] (#3,#2) -- (#4,#2) node[lab,midway,above,fill=white,inner sep=1pt] {#5};}
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \foreach \x/\n/\s in {0/Operator/NETRA dashboard,3.6/NETRA/server on the Mac,7.6/x30\_fleet/navigation host,11.6/The stack/navigation and inspection,15.2/x30\_recorder/perception host} {
+    \node[box,minimum width=3.0cm] at (\x,0) {\twolines{\n}{\s}};
+    \draw[line,line width=0.8pt,dash pattern=on 2pt off 2pt] (\x,-0.55) -- (\x,-12.2);}
+  \msg{-1.1}{0}{3.6}{start a patrol on a route}
+  \msg[flowa]{-1.9}{3.6}{7.6}{\texttt{start\_patrol} \{route, patrol\}}
+  \msg{-2.7}{7.6}{3.6}{GET the route, GET its inspection plan}
+  \msg[flowa]{-3.5}{7.6}{11.6}{route and plan into the site; load, start}
+  \msg{-4.3}{7.6}{3.6}{\texttt{ack}, \texttt{patrol\_event} started}
+  \msg[dashedflow]{-5.1}{11.6}{15.2}{\texttt{navigation/status}: a route runs}
+  \node[lab,anchor=west] at (15.3,-5.5) {records};
+  \draw[zone,fill=accentsoft,draw=accent] (11.3,-6.0) rectangle (11.9,-8.4);
+  \node[lab,anchor=east,align=right] at (11.2,-7.2) {each stop point:\\inspect, report};
+  \msg{-7.8}{11.6}{7.6}{\texttt{inspection/report}}
+  \msg[flowa]{-8.6}{7.6}{3.6}{POST the inspection (spool, multipart)}
+  \msg{-9.4}{7.6}{3.6}{\texttt{telemetry} 1 Hz, \texttt{stop\_event}, \texttt{alert}}
+  \msg{-10.2}{11.6}{7.6}{goal reached}
+  \msg{-11.0}{7.6}{3.6}{\texttt{patrol\_event} finished}
+  \msg{-11.8}{3.6}{0}{findings, captures, the patrol's recap}
+\end{tikzpicture}
+\end{document}

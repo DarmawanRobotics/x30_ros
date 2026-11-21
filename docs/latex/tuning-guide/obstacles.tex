@@ -1,0 +1,97 @@
+\chapter{Getting past obstacles}
+\label{ch:t-obstacles}
+
+A substation's walkways are narrow and lined with energized equipment: getting past a bucket or a
+person must never mean walking off the walkway. The X30 has five layers, from the gentlest to the
+last resort:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.22\linewidth}X@{}}
+  \toprule
+  Layer & What it does \\
+  \midrule
+  Path shift & slides sideways off the route and back, keeping the heading (holonomic robots) \\
+  Detour & stuck: turns toward a gap and walks a short straight through it \\
+  Backing up & stuck for long: backs up along the driven path and tries again \\
+  The guard & the follower stops its own command before it could hit anything \\
+  The field & the control mux stops whatever is left (Chapter~\ref{ch:t-control}) \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Path shift}
+
+The free corridor along the route ahead (\param{look_ahead}, \SI{2}{m} beyond the front edge) is
+evaluated in route coordinates for candidate lateral offsets every \param{step} (\SI{0.1}{m}) up to
+\param{max_offset} (\SI{0.8}{m}) on either side, the body plus \param{clearance} beside it. The
+robot takes the free offset nearest the one it holds: a new side must be clearer by
+\param{switch_margin} and pays \param{switch_cost} (hysteresis), so it does not hesitate between
+left and right. It slides onto the offset at \param{offset_rate}, and comes back onto the route once
+the way back has stayed free for \param{return_delay_sec}.
+
+When no offset is free, the robot slows to the speed that stops \param{stop_margin} before the
+obstacle (Eq.~\ref{eq:t-stopping-speed} on the free distance less the margin) and waits. After
+\param{patience_sec} it searches wider, up to \param{search_offset} (\SI{1.5}{m}). A lane with less
+than \param{centre_room} beside the body is walked in its middle.
+
+\begin{dangerbox}[Set the offsets to the walkway]
+\param{max_offset} and \param{search_offset} are how far the robot may leave the taught route.
+Next to energized equipment they must be smaller than the room the walkway gives on either side,
+less the minimum approach distance. A walkway \SI{1.5}{m} wide taught along its middle leaves
+$(1.5 - 0.47)/2 \approx \SI{0.5}{m}$: set \param{max_offset} and \param{search_offset} to
+\SI{0.5}{m} or less there, or teach the route where there is room.
+\end{dangerbox}
+
+\section{Detours and backing up}
+
+\begin{description}
+  \item[Detour] stuck for \param{detour.after_sec} (\SI{1.5}{s}) while following, the robot turns
+    toward a gap within \param{max_angle_deg} (\ang{75}) of the route's direction and walks straight
+    through it, at most \param{length} (\SI{2}{m}) at \param{speed}, only if the run brings it
+    \param{min_progress} along the route. A detour leaves the route more than path shift does:
+    disable it (\cmd{detour.enabled: false}) where the walkway leaves no room.
+  \item[Backing up] no progress along the route for \param{backtrack.after_sec} (\SI{30}{s}): the
+    robot backs up \param{distance} (\SI{1}{m}) along the path it walked, with the guard on the
+    rear sectors, and tries again; after \param{max_attempts} at one place it stays BLOCKED and
+    NETRA gets the alert.
+\end{description}
+
+\section{Reactive avoidance}
+
+\code{obstacle_avoidance_node} reads the front sector scan and turns it into a bend of the
+command: a heading offset, a sideways bias and a speed scale. With \cmd{avoidance_mode: reactive}
+the follower applies them; in every mode but \code{off}, its \textbf{emergency} stops the forward
+motion: an obstacle within \param{emergency_distance} (\SI{0.75}{m}) in the frontal
+\param{emergency_cone_deg} (\ang{60}). With path shift and \param{emergency_slide}, the robot may
+still slide out sideways.
+
+Every policy works on the danger of each sector, from 0 beyond \param{safe_distance} $r_s$
+(\SI{1.5}{m}) to 1 at the robot:
+\begin{equation}
+  \delta_j = \operatorname{clip}\!\left(1 - \frac{r_j}{r_s},\ 0,\ 1\right)
+\end{equation}
+
+\begin{description}
+  \item[\code{vfh}] (the X30's) the headings whose sectors are free, in runs at least
+    \param{min_gap_width_deg} wide; it takes the free heading nearest straight ahead and slows by
+    the frontal danger: $s = \max(0, 1 - k_v\,\delta_{\text{front}})$.
+  \item[\code{follow_gap}] removes a bubble of \param{bubble_radius} around the nearest obstacle
+    (half-angle $\arctan(r_b/r_{\min})$) and aims at the centre of the widest remaining gap.
+  \item[\code{potential_field}] each obstacle inside $r_s$ pushes with
+    $F = k_r\,(1/r - 1/r_s)/r^2$; the sideways sum steers ($k_\theta\arctan F_y$) and pushes
+    (\param{lateral_gain}, capped at \param{max_lateral}).
+  \item[\code{braitenberg}] the danger left and right (triangular weights around
+    \param{steering_zone_center_deg}) steers away: $\Delta\theta = k_s(\delta_R - \delta_L)$; the
+    danger ahead and beside slows: $s = \max(0, 1 - k_v\delta_{\text{side}})(1 - \delta_{\text{ahead}})$.
+\end{description}
+
+The outputs are smoothed with \param{shared.smoothing} toward steering and speeding up, never
+toward braking: a stop is never delayed.
+
+\section{The guard}
+
+Before it publishes, the follower checks its own command against the safety scan with the same
+braking and separation model as the field, with its own margins (\param{safety.*},
+Chapter~\ref{ch:t-following}). The guard's margins are at least the field's, and the follower
+checks that at start: the follower stops itself before the field ever has to. A field that limits
+the follower's commands in normal operation means the two are tuned apart.

@@ -1,0 +1,61 @@
+% x30fig: the look of the figures (latex/figures/*.tex), compiled standalone to PDF for the
+% documents and to SVG for the website. Same fonts and colours as x30doc.cls.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{x30fig}[2026/11/21 X30 figures]
+
+\RequirePackage{fontspec}
+\RequirePackage{amsmath}
+\RequirePackage{unicode-math}
+\setmainfont{BarlowSemiCondensed}[
+  Path=fonts/, Extension=.ttf,
+  UprightFont=*-Regular, BoldFont=*-SemiBold, ItalicFont=*-Italic, BoldItalicFont=*-Italic]
+\newfontfamily\xheavy{BarlowSemiCondensed}[Path=fonts/, Extension=.ttf, UprightFont=*-Bold]
+\IfFontExistsTF{DejaVu Sans Mono}{\setmonofont{DejaVu Sans Mono}[Scale=0.84]}{}
+\IfFontExistsTF{DejaVu Math TeX Gyre}
+  {\setmathfont{DejaVu Math TeX Gyre}[Scale=0.94]}
+  {\setmathfont{latinmodern-math.otf}}
+
+\RequirePackage{xcolor}
+\definecolor{ink}{HTML}{16212A}
+\definecolor{muted}{HTML}{5B6B75}
+\definecolor{accent}{HTML}{1F6FB2}
+\definecolor{accentsoft}{HTML}{E6EFF8}
+\definecolor{orange}{HTML}{E8892C}
+\definecolor{orangesoft}{HTML}{FDF0E2}
+\definecolor{red}{HTML}{D64545}
+\definecolor{redsoft}{HTML}{FBE9E9}
+\definecolor{green}{HTML}{2E8B57}
+\definecolor{greensoft}{HTML}{E5F4EA}
+\definecolor{line}{HTML}{C3CED5}
+\definecolor{paper}{HTML}{F4F7F9}
+\definecolor{night}{HTML}{0F2742}
+\definecolor{gold}{HTML}{FFB020}
+
+\RequirePackage{tikz}
+\usetikzlibrary{calc,positioning,arrows.meta,shapes.geometric,shapes.misc,fit,backgrounds,
+  decorations.pathreplacing}
+\RequirePackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\tikzset{
+  every picture/.style={font=\small,color=ink,line cap=round},
+  >={Stealth[length=2.2mm,width=1.6mm]},
+  flow/.style={draw=muted,line width=0.8pt,->},
+  flowa/.style={draw=accent,line width=1pt,->},
+  dashedflow/.style={draw=muted,line width=0.8pt,->,dash pattern=on 3pt off 2pt},
+  box/.style={draw=line,line width=0.8pt,fill=white,rounded corners=2.5pt,align=center,
+    inner xsep=6pt,inner ysep=4pt,minimum height=8mm},
+  hot/.style={box,draw=accent,line width=1.2pt,fill=accentsoft},
+  warm/.style={box,draw=orange,line width=1pt,fill=orangesoft},
+  bad/.style={box,draw=red,line width=1pt,fill=redsoft},
+  good/.style={box,draw=green,line width=1pt,fill=greensoft},
+  zone/.style={draw=line,line width=0.8pt,fill=paper,rounded corners=4pt},
+  zonelabel/.style={font=\small\bfseries,color=muted,anchor=north west,inner sep=4pt},
+  lab/.style={font=\footnotesize,color=muted,align=center},
+  nm/.style={font=\bfseries},
+  state/.style={draw=line,line width=0.9pt,fill=white,rounded corners=9pt,minimum height=8mm,
+    minimum width=21mm,align=center,font=\small\bfseries},
+}
+% \twolines{Title}{small line}
+% (no braces around the second line: \\ inside a group breaks a TikZ node)
+\newcommand{\twolines}[2]{{\bfseries #1}\\[-1pt]\footnotesize\color{muted}#2}

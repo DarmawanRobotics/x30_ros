@@ -19,7 +19,7 @@ blocks every node shares.**
 [Dependencies](#dependencies) ·
 [Interface](#interface) · [Deep Robotics' own software](#deep-robotics-own-software) ·
 [Verify on the real robot](#verify-on-the-real-robot) ·
-[Safety](#safety) · [Develop](#develop)
+[Safety](#safety) · [Develop](#develop) · [Documentation](#documentation)
 
 </div>
 
@@ -365,6 +365,19 @@ and `HERTZINO_PASSWORD` in the environment, never from a launch argument.
 x30_ros, x30.repos and the Livox SDK on a computer with internet (about 5 MB);
 `tools/check_deps.sh` on the robot lists, offline, every apt package, source package and the
 SDK still missing; the laptop's internet through `ssh -R` brings in the packages.
+
+## Documentation
+
+Five documents, as PDFs in [`docs/pdf`](docs/pdf) and as a website,
+**https://darmawanrobotics.github.io/x30_ros/** ([`docs/`](docs/README.md) has the sources):
+
+| | |
+|---|---|
+| [Installation Guide](docs/pdf/X30-Installation-Guide.pdf) | from nothing to the first patrol, on a robot without internet |
+| [User Manual](docs/pdf/X30-User-Manual.pdf) | for the operators: the H12, routes, patrols, inspection, NETRA (A5) |
+| [Tuning Guide](docs/pdf/X30-Tuning-Guide.pdf) | the models behind every setting and the complete parameter reference |
+| [Architecture](docs/pdf/X30-Architecture.pdf) | hosts, packages, data flow, safety chain, protocols, tests |
+| [Site Acceptance Test](docs/pdf/X30-Site-Acceptance-Test.pdf) | the tests and sign-off of a handover |
 
 ## Develop
 

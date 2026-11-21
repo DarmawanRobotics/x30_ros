@@ -1,0 +1,36 @@
+% The control mux: every command passes arbitration, the envelope, the health scale and the
+% protective field; the e-stop latch and the re-arm.
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[box,anchor=west,align=left,minimum width=3.9cm] (nav) at (0,3.2) {\texttt{control/nav\_cmd\_vel}\\[-1pt]\footnotesize\color{muted}navigation (AUTO)};
+  \node[box,anchor=west,align=left,minimum width=3.9cm] (h12) at (0,2.0) {\texttt{control/remote/handheld}\\[-1pt]\footnotesize\color{muted}the H12 (REMOTE)};
+  \node[box,anchor=west,align=left,minimum width=3.9cm] (dash) at (0,0.8) {\texttt{control/remote/dashboard}\\[-1pt]\footnotesize\color{muted}another operator (REMOTE)};
+  \node[hot,minimum width=2.5cm,minimum height=3.3cm] (arb) at (5.6,2.0) {\twolines{Arbitration}{mode, source,\\watchdog,\\e-stop latch,\\re-arm}};
+  \node[box,minimum width=2.1cm,minimum height=1.6cm] (env) at (8.3,2.0) {\twolines{Envelope}{robot limits\\x, y together}};
+  \node[box,minimum width=2.1cm,minimum height=1.6cm] (hs) at (10.75,2.0) {\twolines{Health}{speed scale}};
+  \node[hot,minimum width=2.6cm,minimum height=1.6cm] (field) at (13.4,2.0) {\twolines{Protective field}{translation, rotation,\\the commanded arc}};
+  \node[box,minimum width=2.4cm] (out) at (13.4,-0.6) {\texttt{/x30/cmd\_vel}};
+  \node[box,minimum width=2.4cm] (drv) at (10.6,-0.6) {\twolines{x30\_driver}{50 Hz axis stream}};
+  \draw[flow] (nav.east) -- (arb.west|-nav.east);
+  \draw[flow] (h12.east) -- (arb.west|-h12.east);
+  \draw[flow] (dash.east) -- (arb.west|-dash.east);
+  \draw[flowa] (arb) -- (env);
+  \draw[flowa] (env) -- (hs);
+  \draw[flowa] (hs) -- (field);
+  \draw[flowa] (field) -- (out);
+  \draw[flowa] (out) -- (drv);
+  \node[box,minimum width=2.6cm,font=\footnotesize] (scan) at (14.1,4.4) {\texttt{perception/safety\_scan}};
+  \node[box,minimum width=2.1cm,font=\footnotesize] (health) at (10.75,4.4) {\texttt{health/status}};
+  \draw[flow] (scan.south) -- (scan.south|-field.north);
+  \draw[dashedflow] (health) -- node[lab,right] {\texttt{use\_health\_limit}} (hs);
+  % e-stop
+  \node[bad,anchor=west,align=left,minimum width=3.9cm] (estop) at (0,-1.3)
+    {\twolines{E-stop sources}{\texttt{estop/engage}, \texttt{estop\_request},\\\texttt{hw\_estop}, an internal error}};
+  \draw[flow,draw=red] (estop.east) -| node[lab,pos=0.2,above] {latch: zero at once, held} (arb.south);
+  \node[good,anchor=west,align=left,minimum width=3.9cm] (rel) at (0,-3.0)
+    {\twolines{Release}{\texttt{estop/release}, then each source\\sends 3 neutral commands}};
+  \draw[flow,draw=green] (rel.east) -| ($(arb.south)+(0.6,0)$);
+\end{tikzpicture}
+\end{document}

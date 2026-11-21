@@ -1,0 +1,67 @@
+\chapter{Running on the robot}
+\label{ch:a-operations}
+
+\section{Services}
+
+Each host runs its part as a systemd service, \code{x30-navigation} and \code{x30-perception}
+(\cmd{tools/x30_host.sh install <role>}):
+
+\begin{description}
+  \item[\code{Type=notify}, \code{WatchdogSec=60}] \code{x30_watchdog.py} runs the host's launch file
+    and reports to systemd while the ROS master answers and every critical node is registered;
+    it restarts the launch when the master restarts or a critical node stays away.
+  \item[\code{Restart=on-failure}, \code{StartLimitIntervalSec=0}] never given up on.
+  \item[Order] the navigation host's service starts after Deep Robotics' services (\code{jy_*})
+    and the one running the ROS master; it never starts a master of its own (Deep Robotics' LiDAR
+    and IMU drivers depend on that master).
+  \item[Deep Robotics' autonomy] \cmd{tools/dr_services.sh off} at every start, and a sweep every
+    \SI{30}{s} by the watchdog: what Deep Robotics restarts late goes again (the journal names it).
+\end{description}
+
+\section{Settings files}
+
+\file{/etc/x30/<role>.env}, mode 600, owned by root and the robot's user: \code{X30_LAUNCH_ARGS}
+(the launch arguments, shell words), the secrets (\code{X30_TELEOP_TOKEN}, \code{X30_NETRA_TOKEN},
+\code{HIKMICRO_PASSWORD}, \code{HERTZINO_PASSWORD}), \code{X30_PYTHON} for NeuPAN, the log
+settings. \cmd{install} never overwrites an existing file.
+
+\section{Logs}
+
+\begin{description}
+  \item[The journal] \cmd{journalctl -u x30-navigation}: the service, the watchdog's verdicts.
+  \item[Each node's JSON lines] \file{~/x30/logs} (\code{X30_LOG_DIR}): one event per line, with the
+    node, the level, the message and its fields; easy to filter with \cmd{jq}.
+  \item[ROS's own logs] pruned at every start to \code{X30_ROS_LOG_MB} (\SI{2048}{MB}), the oldest
+    runs first, the newest five kept.
+  \item[The black box] (\code{blackbox:=true}) the last hours of status, commands, pose and log in
+    a rolling rosbag.
+\end{description}
+
+\section{Tools}
+
+\begin{center}
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.3\linewidth}X@{}}
+  \toprule
+  \textbf{Tool} & \textbf{Does} \\
+  \midrule
+  \cmd{x30_host.sh env|check|start|install} & the ROS network of a host, a full check of both hosts,
+    the launch by hand or as the service \\
+  \cmd{dr_services.sh status|off|on} & Deep Robotics' own localization, navigation, mapping and
+    bridge off, now and at boot \\
+  \cmd{check_deps.sh} & what the build and the stack need, checked offline \\
+  \cmd{pack_sources.sh} & the stack, its repositories and the Livox SDK in one archive, on a computer
+    with internet \\
+  \cmd{install_neupan.sh} & NeuPAN's environment for the \code{neupan} controller \\
+  \cmd{x30_check.py} & the ROS rows of \cmd{x30_host.sh check}: the master and every node reachable,
+    the other host's clock, the cameras' ports \\
+  \bottomrule
+\end{tabularx}
+\end{small}
+\end{center}
+
+\section{No internet on the robot}
+
+The robot never downloads: \cmd{pack_sources.sh} archives the sources on a computer with internet,
+\cmd{scp} carries the archive, \cmd{check_deps.sh} checks the apt packages offline (or through an
+SSH proxy of the computer). NETRA builds its images once with internet and starts offline after.

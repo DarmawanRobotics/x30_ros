@@ -1,0 +1,18 @@
+\chapter{Start and localization}
+\label{ch:s-start}
+
+\begin{tests}
+  B1 & The robot off on its dock. Switch it on and start the stopwatch. & Within \SI{3}{min}: the
+    H12 connects, the top bar shows \ui{Start pose}, \ui{Path clear}, no \ui{Needs attention}.
+    Time: \blank & \result \\
+  B2 & \cmd{systemctl status x30-navigation x30-perception} on the hosts. & Both active; the journal
+    without errors since the start. & \result \\
+  B3 & NETRA's dashboard. & The robot online with its battery, mode and pose within \SI{10}{s} of B1's
+    end. & \result \\
+  B4 & Stand the robot up; walk \SI{5}{m} in REMOTE and back onto the dock mark. & The pose shows the
+    robot within \SI{0.2}{m} of the start. Off by: \blank & \result \\
+  B5 & With a recorded tag in view, press \ui{Localize} (H12). & \ui{Tag} in the top bar; NETRA's pose
+    jumps at most the drift. & \result \\
+  B6 & Restart the navigation host's service with the robot standing elsewhere (no tag in view). &
+    \ui{No loc}; a patrol does not start until the robot is localized again. & \result \\
+\end{tests}

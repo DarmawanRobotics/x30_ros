@@ -1,0 +1,26 @@
+% The localization estimator: predict on odometry, gated corrections, map -> odom.
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[box,minimum width=3.6cm] (odo) at (0,3) {\twolines{FAST-LIO odometry}{steps of distance and turn}};
+  \node[box,minimum width=3.6cm] (pred) at (4.6,3) {\twolines{Predict}{$P \leftarrow P + Q(\Delta s, \Delta\theta)$}};
+  \node[hot,minimum width=3.6cm,minimum height=1.3cm] (state) at (9.2,3) {\twolines{\texttt{map} $\rightarrow$ \texttt{odom}}{$x, y, \theta$ and $P \in \mathbb{R}^{3\times3}$}};
+  \node[box,minimum width=3.6cm] (pub) at (13.6,3) {\twolines{Publish}{\texttt{/tf} at 20 Hz, status}};
+  \node[box,minimum width=3.6cm] (tag) at (0,0) {\twolines{A tag in view}{$z$, $R(d, \text{angle})$}};
+  \node[box,minimum width=3.6cm] (inn) at (4.6,0) {\twolines{Innovation}{$\nu$, $S = H P H^\top + R$}};
+  \node[warm,minimum width=3.6cm] (gate) at (9.2,0) {\twolines{Gate}{$\nu^\top S^{-1} \nu \le \chi^2_{3}(0.99) = 11.34$}};
+  \node[box,minimum width=3.6cm] (upd) at (13.6,0) {\twolines{Update}{Kalman gain, Joseph form}};
+  \node[box,minimum width=3.6cm] (exp) at (4.6,-2.4) {\twolines{Explicit}{\texttt{localization/start}, \texttt{/initialpose},\\\texttt{assume\_origin}: no gate}};
+  \draw[flow] (odo) -- (pred);
+  \draw[flowa] (pred) -- (state);
+  \draw[flowa] (state) -- (pub);
+  \draw[flow] (tag) -- (inn);
+  \draw[flow] (inn) -- (gate);
+  \draw[flow] (gate) -- node[lab,above] {passes} (upd);
+  \draw[flow,draw=red] (gate.south) -- ++(0,-0.6) node[lab,below,text=red] {rejected};
+  \draw[flowa] (upd.north) |- ($(state.south)+(0.6,-0.5)$) -- ($(state.south)+(0.6,0)$);
+  \draw[flow] (exp.east) -| ($(state.south)+(-0.6,0)$);
+  \draw[flow] (state.south) ++(0,0) -- ++(0,-0.4) -| (inn.north);
+\end{tikzpicture}
+\end{document}

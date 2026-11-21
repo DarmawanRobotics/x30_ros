@@ -1,0 +1,66 @@
+\chapter{The safety chain}
+\label{ch:a-safety}
+
+\begin{center}
+\includegraphics[width=\linewidth]{safety}
+\end{center}
+
+\section{Every command through one gate}
+
+Only \code{control_mux_node} publishes \topic{/x30/cmd_vel}. Navigation (\topic{control/nav_cmd_vel})
+and the operator sources (\topic{control/remote/<source>/cmd_vel}) publish to it; it forwards one of
+them, AUTO or REMOTE, after the envelope, the health speed scale (optional) and the protective
+field, and holds zeros during an e-stop. The follower has its own guard on the same scan, with
+margins at least the field's: in normal operation the field never has to act.
+
+\section{Stops}
+
+\begin{center}
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.25\linewidth}>{\raggedright}p{0.3\linewidth}X@{}}
+  \toprule
+  \textbf{Stop} & \textbf{Path} & \textbf{Effect} \\
+  \midrule
+  Hard emergency stop (robot) & Deep Robotics' hardware & the joints off: the robot drops \\
+  H12 STOP & gateway: \topic{control/estop_request} at once, then \srv{control/estop/engage} &
+    zeros held; a patrol pauses; release by a held STOP, then neutral sticks \\
+  NETRA \ui{E-stop} & uplink: the same two & as above \\
+  \code{emergency_stop} command & the driver's service; the e-stop latched too & the robot's own
+    emergency stop \\
+  \topic{control/hw_estop} & a hardware input (optional) & engaged while true or silent for
+    \param{hw_estop_timeout_sec} \\
+  Deep Robotics' handheld & takes over the robot (manual mode) & the stack's commands no longer
+    reach the legs until the robot is back in its mode \\
+  \bottomrule
+\end{tabularx}
+\end{small}
+\end{center}
+
+\section{When something falls silent}
+
+\begin{center}
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.34\linewidth}>{\raggedright}p{0.16\linewidth}X@{}}
+  \toprule
+  \textbf{Silent} & \textbf{After} & \textbf{Then} \\
+  \midrule
+  The handheld (stick) & \SI{0.3}{s} & the mux sends one zero; the gateway drops the handheld after
+    \SI{2}{s} \\
+  Navigation & \SI{0.5}{s} & the mux sends one zero \\
+  The safety scan & \SI{0.5}{s} & the field: STALE (AUTO stops, REMOTE creeps); the follower holds \\
+  The LiDAR (no cloud) & \SI{0.5}{s} & every sector BLOCKED \\
+  The robot's pose & \SI{0.5}{s} & the follower holds \\
+  The mux & \SI{0.5}{s} & the driver sends zeros, then stops streaming \\
+  The driver & \SI{1}{s} & the robot drops the axis by itself \\
+  A critical node, the ROS master & watchdog & \code{x30_watchdog.py} restarts the host's launch \\
+  \bottomrule
+\end{tabularx}
+\end{small}
+\end{center}
+
+\section{What is not certified}
+
+The e-stops of the H12 and NETRA, the protective field and the guard are software on a computer
+without a safety rating. They reduce risk; the hard emergency stop on the robot, Deep Robotics'
+handheld and a responsible operator are the protection, and the site's risk assessment decides
+where the robot may walk.

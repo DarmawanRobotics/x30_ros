@@ -1,0 +1,85 @@
+name: docs
+
+# The five documents (docs/latex, XeLaTeX) and the website built from them (docs/site, VitePress):
+# built on every pull request that touches them; on main the PDFs are kept as an artifact and the
+# site is published to GitHub Pages once Pages is enabled (Settings -> Pages -> Source: GitHub
+# Actions); until then the build only reports it.
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "x30_*/src/**/config*.py", "x30_*/src/**/config/**", "x30_driver/config/driver_params.yaml", ".github/workflows/docs.yml"]
+  pull_request:
+    paths: ["docs/**", "x30_*/src/**/config*.py", "x30_*/src/**/config/**", "x30_driver/config/driver_params.yaml", ".github/workflows/docs.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      deploy: ${{ steps.pages.outcome == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: TeX Live, pandoc, poppler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends texlive-xetex texlive-latex-recommended \
+            texlive-latex-extra texlive-pictures texlive-science texlive-fonts-recommended latexmk \
+            fonts-dejavu-core fonts-dejavu-extra fonts-lmodern pandoc poppler-utils librsvg2-bin python3-numpy > /dev/null
+      - name: The parameter tables match the code
+        run: |
+          python3 docs/tools/params.py
+          git diff --exit-code docs/latex/generated ||
+            { echo "::error title=Parameter reference::run make -C docs reference and commit docs/latex/generated"; exit 1; }
+      - name: The documents
+        run: make -C docs figures pdf
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x30-documents
+          path: docs/pdf/*.pdf
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/site/package-lock.json
+      - name: GitHub Pages
+        id: pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        continue-on-error: true # not enabled yet: build only
+        uses: actions/configure-pages@v5
+      - name: Build the site
+        env:
+          DOCS_BASE: ${{ steps.pages.outputs.base_path && format('{0}/', steps.pages.outputs.base_path) || format('/{0}/', github.event.repository.name) }}
+        run: |
+          python3 docs/tools/tex2md.py
+          cd docs/site
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Pages not enabled
+        if: steps.pages.outcome == 'failure'
+        run: echo "::notice title=GitHub Pages::not enabled, the site was built but not published (Settings -> Pages -> Source -> GitHub Actions)"
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outcome == 'success'
+        with:
+          path: docs/site/.vitepress/dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.deploy == 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

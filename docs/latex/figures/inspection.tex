@@ -1,0 +1,24 @@
+% One inspection point at a stop: what x30_inspection does for each target.
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm,node distance=4mm]
+  \node[box,minimum width=3.5cm] (stop) at (0,0) {\twolines{Stop point}{the follower dwells}};
+  \node[box,minimum width=3.5cm] (find) at (4.2,0) {\twolines{Which point?}{the nearest within \texttt{match\_radius\_m}}};
+  \node[hot,minimum width=3.5cm] (ptz) at (8.4,0) {\twolines{Point the camera}{pan, tilt, zoom; wait until there}};
+  \node[box,minimum width=3.5cm] (settle) at (12.6,0) {\twolines{Settle}{focus, a fresh frame}};
+  \node[box,minimum width=3.5cm] (shot) at (12.6,-2.0) {\twolines{Evidence}{thermal and visible JPEG,\\the raw frame (.npz)}};
+  \node[box,minimum width=3.5cm] (meas) at (8.4,-2.0) {\twolines{Measure}{each region, \texttt{samples} times,\\the median}};
+  \node[warm,minimum width=3.5cm] (judge) at (4.2,-2.0) {\twolines{Judge}{absolute, ambient, similar}};
+  \node[box,minimum width=3.5cm] (pd) at (0,-2.0) {\twolines{Partial discharge}{one detection (acoustic targets)}};
+  \node[box,minimum width=3.5cm] (rep) at (0,-4.2) {\twolines{Report}{\texttt{report.json}, images, findings.csv}};
+  \node[box,minimum width=3.5cm] (pub) at (4.2,-4.2) {\twolines{Publish}{\texttt{inspection/report}}};
+  \node[box,minimum width=3.5cm] (netra) at (8.4,-4.2) {\twolines{NETRA}{x30\_fleet uploads NETRA's points}};
+  \node[box,minimum width=3.5cm] (park) at (12.6,-4.2) {\twolines{Park the camera}{the follower goes on}};
+  \draw[flow] (stop) -- (find); \draw[flowa] (find) -- (ptz); \draw[flowa] (ptz) -- (settle);
+  \draw[flowa] (settle) -- (shot); \draw[flowa] (shot) -- (meas); \draw[flowa] (meas) -- (judge);
+  \draw[flowa] (judge) -- (pd); \draw[flow] (pd) -- (rep); \draw[flow] (rep) -- (pub);
+  \draw[flow] (pub) -- (netra); \draw[flow] (netra) -- (park);
+  \draw[dashedflow] (pd.north) -- (0,-1.0) -- node[lab,above,pos=0.3] {next target} (7.6,-1.0) -- (7.6,-0.45);
+\end{tikzpicture}
+\end{document}

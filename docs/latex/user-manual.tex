@@ -1,0 +1,30 @@
+% X30 User Manual (A5). Build: make -C docs pdf (docs/pdf/X30-User-Manual.pdf)
+\documentclass[a5]{x30doc}
+\doctitle{X30 User Manual}
+\docheader{X30 User Manual}
+\docsubtitle{Substation patrol and inspection with the Jueying X30, the Skydroid H12 and NETRA}
+\docversion{1.0}
+\docdate{2026-11-21}
+\docaudience{For the substation's operators and the robot crew. No robotics knowledge needed:
+  everything here is done on the H12 or in NETRA.}
+\docnote{Installing the robot, the app and NETRA is in the X30 Installation Guide; settings and
+  their tuning in the X30 Tuning Guide. The robot's own hardware (battery, charging pile, power
+  switch, emergency stops, Deep Robotics' handheld) is in Deep Robotics' Jueying X30 Pro User
+  Manual.}
+\revision{1.0}{2026-11-21}{First version: patrols with inspection, the recorder, NETRA}
+\begin{document}
+\makefront
+\input{user-manual/safety}
+\input{user-manual/robot}
+\input{user-manual/handheld}
+\input{user-manual/shift}
+\input{user-manual/routes}
+\input{user-manual/patrol}
+\input{user-manual/inspection}
+\input{user-manual/recorder}
+\input{user-manual/netra}
+\input{user-manual/checks}
+\input{user-manual/trouble}
+\appendix
+\input{user-manual/glossary}
+\end{document}

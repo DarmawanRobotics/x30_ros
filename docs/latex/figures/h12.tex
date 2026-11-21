@@ -1,0 +1,23 @@
+% The Skydroid H12 as X30Controller uses it: sticks, keys and switch (not to scale).
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\newcommand{\stick}[3]{% x, y, name
+  \draw[line,line width=1pt,fill=paper] (#1,#2) circle (1.05);
+  \fill[ink!80] (#1,#2) circle (0.36);
+  \node[font=\footnotesize\bfseries,text=muted] at (#1,#2-1.45) {#3};}
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \draw[line,line width=1.2pt,fill=white,rounded corners=18pt] (-6.2,-2.6) rectangle (6.2,2.6);
+  \draw[line,line width=1pt,fill=night,rounded corners=4pt] (-2.9,-1.7) rectangle (2.9,1.9);
+  \node[text=white,font=\small\bfseries,align=center] at (0,0.3) {X30Controller\\[-1pt]\footnotesize\color{gold}camera, map, state};
+  \stick{-4.5}{0.1}{left stick}
+  \stick{4.5}{0.1}{right stick}
+  \draw[flowa,<->] (-4.5,1.35) -- (-4.5,2.15) node[lab,above,text=accent] {forward / back};
+  \draw[flowa,<->] (-5.85,0.1) -- (-6.65,0.1) node[lab,left,text=accent,align=right] {strafe\\left / right};
+  \draw[flowa,<->] (5.85,0.1) -- (6.65,0.1) node[lab,right,text=accent,align=left] {turn\\left / right};
+  \foreach \x/\k/\t in {-8.9/A/{AUTO / REMOTE},-6.9/B/STOP,-4.9/C/slower,-2.9/D/faster,-0.6/E/speed level} {
+    \node[draw=muted,fill=white,rounded corners=2pt,font=\ttfamily\bfseries,minimum size=6mm] (k\k) at (\x+4.3,-3.5) {\k};
+    \node[lab,anchor=north] at (\x+4.3,-3.85) {\t};}
+  \node[lab,anchor=west,align=left] at (4.6,-3.5) {keys A to D and switch E\\(CH5, CH6, CH9, CH10, CH7)};
+\end{tikzpicture}
+\end{document}

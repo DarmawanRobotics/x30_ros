@@ -1,0 +1,51 @@
+\chapter{The handheld}
+\label{ch:i-handheld}
+
+\section{Install the app}
+
+\textbf{With a cable} (USB debugging on: \menupath{Settings › About}, tap \ui{Build number}
+seven times, then \menupath{Developer options › USB debugging}):
+
+\begin{lstlisting}[language=bash]
+adb devices                                  # the H12 is listed
+adb install -r ~/x30/x30-controller-*.apk
+\end{lstlisting}
+
+\textbf{Without a cable}: on a network with internet, open
+\url{https://github.com/DarmawanRobotics/X30Controller/releases/latest} in the H12's browser,
+download \file{x30-controller-<version>.apk}, open it and allow \ui{Install unknown apps} for the
+browser.
+
+\begin{notebox}
+Until the repository has a release key (README, ``Releases''), every APK is signed by CI's
+debug key: when a new version refuses to install over the old one, uninstall the old app first.
+\end{notebox}
+
+\section{First connection}
+
+\begin{enumerate}
+  \item Join the H12 to the robot's Wi-Fi (\code{X30*****}, \code{12345678}).
+  \item Open X30Controller. On the start screen tap the version number three times.
+  \item Robot: \code{192.168.1.106}, port \code{9870}; token: the value of
+    \code{X30_TELEOP_TOKEN} in \file{/etc/x30/navigation.env}.
+  \item The drive screen shows the robot's battery, mode, localization and the camera.
+\end{enumerate}
+
+\section{The H12's sticks}
+
+The H12 sends its sticks over its own radio, not as an Android gamepad; the app reads them
+through Skydroid's SDK. In \menupath{Settings (gear) › Skydroid H12 sticks} the link and every
+channel show live:
+
+\begin{itemize}
+  \item pick the channels of forward, strafe and turn (default 2, 1, 3: the left stick drives and
+    strafes, the right stick turns) and tick \ui{reverse} for one that goes the wrong way;
+  \item a released stick must read about 1500. A stick without a centring spring (a throttle
+    stick) must never drive: map forward to a stick that centres by itself, such as CH4.
+\end{itemize}
+
+\begin{center}
+\includegraphics[width=0.92\linewidth]{h12}
+\end{center}
+
+On any other Android phone or tablet the app drives with touch sticks on the screen.

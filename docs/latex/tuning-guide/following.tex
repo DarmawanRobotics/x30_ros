@@ -1,0 +1,150 @@
+\chapter{Following a route}
+\label{ch:t-following}
+
+\code{path_follower_node} walks the robot along a taught route, stops and dwells at its stop
+points, and reports its state on \topic{navigation/status}.
+
+\begin{center}
+\includegraphics[width=\linewidth]{follower}
+\end{center}
+
+\section{From a recording to a route}
+
+Teaching records the localized pose every \param{min_spacing_m} (\SI{0.2}{m}). Loading the route
+then cleans it: duplicate points go, the route is resampled every \param{processing.spacing}
+(\SI{0.1}{m}) and smoothed between anchors that never move (the ends and the stop points). The
+smoothed points $\vect{y}_i$ are the fixed point of the gradient smoother on the recording
+$\vect{x}_i$:
+\begin{equation}
+  \alpha\,(\vect{x}_i - \vect{y}_i) + \beta\,(\vect{y}_{i-1} - 2\vect{y}_i + \vect{y}_{i+1}) = 0,
+  \qquad \alpha = w_d\,(1 - 2w_s),\quad \beta = w_s
+\end{equation}
+solved at once as a tridiagonal system, with $w_d$ \param{smooth_weight_data} (\num{0.05}) and
+$w_s$ \param{smooth_weight_smooth} (\num{0.4}). A larger $w_s$ cuts the operator's wobbles and
+the corners more. The node warns when a point moves more than \param{max_deviation}
+(\SI{0.3}{m}): the robot would leave the walkway that was taught.
+
+\section{The speed profile}
+
+Each point of the route gets a speed limit, computed once when the route loads:
+
+\begin{enumerate}
+  \item \textbf{Curves}: with $\kappa$ the curvature, $v \le \sqrt{a_{\text{lat}}/\kappa}$,
+    clipped to [\param{min_speed}, \param{cruise}] ($a_{\text{lat}}$:
+    \param{lateral_accel}).
+  \item \textbf{Stops}: stop points and the end at \param{approach_speed}.
+  \item \textbf{Braking into them}, backwards along the route:
+    $v_i \le \sqrt{v_{i+1}^2 + 2\,a_{\text{dec}}\,\Delta s_i}$, and the reaction time of the
+    braking model (Eq.~\ref{eq:t-stopping-speed}) before each stop.
+  \item \textbf{Accelerating out}, forwards: $v_{i+1} \le \sqrt{v_i^2 + 2\,a_{\text{acc}}\,\Delta s_i}$.
+\end{enumerate}
+
+\begin{center}
+\begin{small}
+\begin{tabular}{@{}lrrrr@{}}
+  \toprule
+  \textbf{Curve radius} & \SI{0.5}{m} & \SI{1}{m} & \SI{2}{m} & straight \\
+  \midrule
+  \textbf{Limit} ($a_{\text{lat}}$ \SI{0.3}{m/s^2}) & \SI{0.39}{m/s} & \SI{0.55}{m/s} & \SI{0.77}{m/s} &
+    \param{cruise} \\
+  \bottomrule
+\end{tabular}
+\end{small}
+\end{center}
+
+\noindent The X30's \param{cruise} is \SI{0.4}{m/s}: only curves tighter than about \SI{0.5}{m}
+slow it. \param{accel} and \param{decel} (\SI{0.3}{m/s^2}) are comfort values, below the profile's
+braking: the robot slows into a stop point gently, not at the field's limit.
+
+\section{The path controllers}
+
+Every controller gets the robot's pose, the route, its progress $s$ along it, the speed of the
+profile and the path shift offset, and returns $(v_x, v_y, \omega)$. \param{controller} picks one;
+the X30 uses \code{holonomic}.
+
+\subsection{Holonomic (the X30's)}
+
+A carrot is taken \param{lookahead} (\SI{0.6}{m}) ahead along the route. The robot walks toward
+it in its own frame at $\min(v, d_{\text{carrot}})$, and turns toward the route's direction over
+the next \param{heading_lookahead}:
+\begin{equation}
+  \omega = k_\psi\, e_\psi,\qquad
+  (v_x, v_y) = \min(v, d)\,\hat{\vect{u}}_{\text{carrot}}\cdot
+    \max\bigl(\text{\param{min_alignment_scale}},\ \cos e_\psi\bigr)
+\end{equation}
+with $k_\psi$ \param{kp_yaw} (\SI{1.5}{1/s}). The sideways part is capped at
+\param{max_lateral_speed} (above the X30's Walk gait the envelope caps it again at
+\param{max_vy}), the backward part at \param{max_reverse_speed}. A longer lookahead cuts corners
+and sways less; a shorter one tracks tighter.
+
+\subsection{The others}
+
+\begin{description}
+  \item[\code{pure_pursuit}] the arc through the carrot at lookahead $L$: with the carrot at $(x,
+    y)$ in the robot frame, $\kappa = 2y/(x^2 + y^2)$ and $\omega = v\,\kappa$.
+  \item[\code{stanley}] the route's curvature as feedforward plus the cross-track error $e$ and the
+    heading error $e_\psi$:
+    $\omega = v\,\kappa_{\text{route}} - k_h\,\bigl(e_\psi + \arctan\frac{k\,e}{v + k_s}\bigr)$.
+    $k_s$ keeps low speeds from over-steering.
+  \item[\code{pid}] PID on the heading error toward the carrot, the integral clamped at
+    \param{integral_limit} and frozen while the output saturates (anti-windup).
+  \item[\code{lqr}] the path error $\vect{e} = (e, e_\psi)$ of a unicycle at speed $v$, discretized
+    at the control period $T$: $\vect{e}_{k+1} = \left(\begin{smallmatrix}1 & vT\\0 & 1\end{smallmatrix}\right)
+    \vect{e}_k + \left(\begin{smallmatrix}0\\T\end{smallmatrix}\right)\omega_k$. The gain $\mat{K}$ solves the
+    discrete Riccati equation for $\mat{Q} = \operatorname{diag}(q_e, q_\psi)$ and $r_\omega$ (cached
+    every \SI{5}{cm/s} of speed); $\omega = v\,\kappa_{\text{route}} - \mat{K}\vect{e}$.
+  \item[\code{mppi}] \param{samples} yaw-rate sequences drawn around the previous plan, each rolled
+    out as a unicycle over \param{horizon_steps}; the cost is the distance to the route, the
+    distance of the end to the carrot and \param{obstacle_weight} times the deepest intrusion
+    into \param{clearance}. The sequences are averaged with the weights
+    $w_j \propto \exp\!\bigl(-(J_j - J_{\min})/\lambda\bigr)$, $\lambda$ \param{temperature}.
+  \item[\code{neupan}] NeuPAN plans forward, sideways and yaw motion over a horizon straight from
+    the scan's points, with a network (DUNE) trained for the X30's footprint. It avoids by itself;
+    the guard and the field stay. It needs its own Python environment
+    (\file{tools/install_neupan.sh}).
+\end{description}
+
+\section{Stops, joining and dwelling}
+
+\begin{description}
+  \item[Joining] a robot up to \param{join.max_distance} (\SI{3}{m}) from the route first walks onto
+    it, within \param{join.on_route}.
+  \item[Approach] \param{approach.radius} before a stop point the follower leaves the controller
+    and converges onto the exact pose: $\vect{v} = k_{xy}\,\vect{e}_{xy}$, $\omega = k_\psi\,
+    e_\psi$, capped at \param{approach.max_speed} and \param{approach.max_yaw_rate} and never below
+    \param{approach.min_speed} (the X30's slowest step). It arrives within
+    \param{position_tolerance} (\SI{5}{cm}) and \param{yaw_tolerance_deg} (\ang{3}); a stop the
+    robot passed by more than \param{skip_margin} counts as skipped.
+  \item[Dwelling] at the stop the inspection runs (\param{hooks.inspection}); the follower waits
+    for it up to the dwell plus \param{hooks.inspection_timeout_sec} (\SI{180}{s} on the X30,
+    above the inspection's own \SI{150}{s} per point).
+  \item[Battery] below \param{low_battery} the lap finishes and no new one starts; below
+    \param{critical_battery} the robot pauses.
+\end{description}
+
+\section{Smoothness}
+
+The command passes a last stage before it leaves: the profile's envelope, a smoothing of the yaw
+rate and the sideways speed,
+$\omega \leftarrow w\,\omega_{\text{new}} + (1-w)\,\omega$ with $w$ \param{speed.smoothing}
+(\num{0.5}; 1: off), and the acceleration limits. A robot that weaves on a straight needs a
+lower $w$ or a longer lookahead; one that lags in curves, the opposite.
+
+\section{The supervisor}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.36\linewidth}X@{}}
+  \toprule
+  \textbf{Setting} & \textbf{Effect} \\
+  \midrule
+  \param{tf_timeout_sec}, \param{scan_timeout_sec} & an older pose or safety scan stops the robot \\
+  \param{off_path_slow}, \param{off_path_stop} & farther from the route than \SI{0.6}{m}: the
+    floor speed; than \SI{1.5}{m}: OFF\_PATH, stopped \\
+  \param{blocked_timeout_sec} & standing still (moved less than \param{stall_distance} and turned
+    less than \param{stall_yaw_deg}) for \SI{10}{s}: BLOCKED, reported to NETRA \\
+  \param{lateral_margin}, \param{human_speed}, \param{pass_margin}, \param{yaw_margin_deg} & the
+    guard's model; at least the protective field's values, checked at start against
+    \param{control_node} \\
+  \bottomrule
+\end{tabularx}
+\end{center}
