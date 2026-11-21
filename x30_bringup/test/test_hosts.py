@@ -202,6 +202,21 @@ def test_build_runs_catkin_make_as_the_robot_needs_it(tmp_path):
     assert host('build', env=env).returncode == 5  # a failed build fails the command
 
 
+def test_a_comment_after_a_value_stops_the_service_and_never_shows_the_value(tmp_path):
+    """systemd keeps a comment after a value in the value: the token would hold its words."""
+    (tmp_path / 'etc').mkdir()
+    settings = tmp_path / 'etc' / 'navigation.env'
+    settings.write_text(
+        "# the handheld's secret\nX30_TELEOP_TOKEN=s3cret   # the same in the app\n"
+        'X30_LAUNCH_ARGS="site:=gardu"\n'
+    )
+    env = {'X30_ETC': str(tmp_path / 'etc'), 'X30_LOCAL_IPS': NAV_IP}
+    out = host('start', env=env)
+    assert out.returncode == 78, out.stdout + out.stderr  # never restarted for it
+    assert 'line 2, X30_TELEOP_TOKEN' in out.stderr and 's3cret' not in out.stderr
+    assert 'line 2, X30_TELEOP_TOKEN' in host('check', env=env).stdout
+
+
 def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     bin_dir, ws = tmp_path / 'bin', tmp_path / 'ws'
     bin_dir.mkdir()
