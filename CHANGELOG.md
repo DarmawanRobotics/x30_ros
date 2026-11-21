@@ -38,6 +38,9 @@ versions follow [SemVer](https://semver.org).
   role`; `env`, `start` and `install` take the role from the host's address when left out.
 
 ### Fixed
+- tools: `x30_host.sh build` makes the empty `src/config.cmake` that Deep Robotics' catkin on
+  the perception host includes in its `toplevel.cmake` (`include could not find load file:
+  config.cmake` failed the configuration there).
 - tools: `x30_host.sh start` refuses a settings file with a comment after a value (systemd
   keeps it in the value: a token or the launch arguments with its words), `check` names it.
 - tools: `x30-<role>.service` died at every start (`ROS_DISTRO: unbound variable`): ROS's setup
