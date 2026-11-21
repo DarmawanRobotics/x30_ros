@@ -1,0 +1,32 @@
+\chapter{Safety}
+\label{ch:s-safety}
+
+\begin{dangerbox}[Before the first motion]
+Test the hard emergency stop first. No other test runs until S1 passed.
+\end{dangerbox}
+
+\begin{tests}
+  S1 & Robot standing. Press the hard emergency stop on the robot. & The joints go off at once;
+    the robot rests on its body. & \result \\
+  S2 & REMOTE, walk forward at about \SI{0.5}{m/s}; press STOP (key B) on the H12. & The robot stops;
+    the H12 shows \ui{E-stop on}; NETRA shows the e-stop. Distance: \blank & \result \\
+  S3 & With the e-stop on, hold the left stick forward and hold STOP to release; keep the stick
+    forward. & The robot does not move until the stick was let go once. & \result \\
+  S4 & AUTO patrol running; press \ui{E-stop} in NETRA. & The robot stops within \SI{1}{s}; the patrol
+    pauses; release in NETRA and \ui{Resume} continue it. & \result \\
+  S5 & REMOTE, walk at about \SI{0.5}{m/s}; close the app on the H12 (or switch the H12 off). & The
+    robot stops within \SI{1}{s}. Time: \blank & \result \\
+  S6 & AUTO, a route straight toward the \SI{0.5}{m} box across the whole walkway. & The robot stops
+    without touching, at least \SI{0.3}{m} before the box; \ui{Blocked} after \SI{10}{s}.
+    Gap: \blank & \result \\
+  S7 & REMOTE, full stick forward toward the box. & The robot slows and stops at least \SI{0.1}{m}
+    before it. Gap: \blank & \result \\
+  S8 & AUTO, a person steps into the route \SI{2}{m} ahead of the robot walking at cruise speed. &
+    The robot slows and stops before the person; it goes on after the person left. & \result \\
+  S9 & Robot standing; cover the LiDAR windows with a cloth (in REMOTE). & The field reports
+    \ui{No scan} or blind; AUTO does not start; REMOTE creeps at most \SI{0.15}{m/s}. & \result \\
+  S10 & In REMOTE, turn in place next to a wall (\SI{0.3}{m} from the body). & The turn slows and
+    stops before the body touches. & \result \\
+  S11 & Deep Robotics' handheld takes over during a patrol. & The stack's commands stop reaching the
+    robot; after the handover back, the robot moves only after a new command. & \result \\
+\end{tests}

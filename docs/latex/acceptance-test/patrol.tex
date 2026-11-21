@@ -1,0 +1,25 @@
+\chapter{Routes and patrols}
+\label{ch:s-patrol}
+
+\begin{tests}
+  P1 & Teach a route of at least \SI{30}{m} with three stop points (H12: \ui{Record}, \ui{Point},
+    \ui{Finish}). & \ui{Route saved}; the route in NETRA (\menupath{Routes}) within a minute.
+    & \result \\
+  P2 & Start the route from the H12 (AUTO, \ui{Start}). & The robot walks onto the route and follows
+    it; at each stop point it stands and inspects; it ends at the route's end. & \result \\
+  P3 & Measure the robot's position at each stop point against a mark made while teaching. & Within
+    \SI{0.15}{m} of the mark and \ang{5} of the heading, at every stop. Worst: \blank & \result \\
+  P4 & Watch the robot along the route. & It stays on the walkway taught: never more than
+    \SI{0.3}{m} off the taught line without an obstacle. & \result \\
+  P5 & Place the \SI{0.5}{m} box on the route, with room beside it. & The robot slides past it and
+    back onto the route, without touching it and without leaving the walkway. & \result \\
+  P6 & Place the box where the walkway leaves no room. & The robot stops before it, \ui{Blocked} on
+    the H12 and an alert in NETRA; after the box is removed it goes on by itself. & \result \\
+  P7 & Place the \SI{10}{cm} box on the route. & The robot treats it as an obstacle (stops or passes
+    it) and never steps on it. & \result \\
+  P8 & During a patrol: \ui{Pause}, then \ui{Resume}; then REMOTE, drive a little, AUTO,
+    \ui{Resume}. & The robot stands on pause; it resumes the route from where it is. & \result \\
+  P9 & Start the same route from NETRA (\menupath{Patrols › Start a patrol now}). & The patrol runs as
+    in P2; NETRA shows its timeline, stops and the laps. & \result \\
+  P10 & A schedule in NETRA two minutes ahead. & The patrol starts on time without anyone. & \result \\
+\end{tests}

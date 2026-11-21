@@ -1,0 +1,15 @@
+\chapter{Endurance}
+\label{ch:s-endurance}
+
+\begin{tests}
+  E1 & A loop of patrols for at least one hour (a closed route with \cmd{loop_route}, or a schedule
+    every lap), nobody intervening. & No intervention needed; every lap complete; every inspection
+    in NETRA. Laps: \blank, interventions: \blank & \result \\
+  E2 & The battery during E1. & Below \SI{20}{\percent} the robot finishes its lap and starts no
+    new one; below \SI{10}{\percent} it pauses. & \result \\
+  E3 & After E1: free disk on both hosts, the health report. & At least \SI{10}{GB} free on the
+    perception host; no health errors. & \result \\
+  E4 & Power the robot off and on during a patrol's dwell (simulated power loss). & The robot starts
+    again; nothing on disk is broken (routes, reports, the spool); NETRA receives what was waiting.
+    & \result \\
+\end{tests}

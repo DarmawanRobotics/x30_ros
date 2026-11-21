@@ -1,0 +1,39 @@
+% X30 Site Acceptance Test. Build: make -C docs pdf (docs/pdf/X30-Site-Acceptance-Test.pdf)
+\documentclass{x30doc}
+\doctitle{X30 Site Acceptance Test}
+\docheader{X30 Site Acceptance Test}
+\docsubtitle{The tests that hand an X30 patrol over to a substation: procedures, pass criteria,
+  record sheets and sign-off}
+\docversion{1.0}
+\docdate{2026-11-21}
+\docaudience{For the commissioning engineer and the substation's representatives who witness and
+  sign the acceptance. Print it, fill it in on site, keep the signed copy.}
+\docnote{Run it after the installation (X30 Installation Guide) and the tuning (X30 Tuning Guide),
+  on the site's own routes, with the robot and the software versions that will be handed over.}
+\revision{1.0}{2026-11-21}{First version, for x30\_ros 0.19, X30Controller 1.0.2}
+% the result cell of a test: tick one, and a line for what was measured
+\newcommand{\result}{\checkbox~Pass\newline\checkbox~Fail}
+\newcommand{\blank}[1][1.6cm]{\rule[-1pt]{#1}{0.4pt}}
+% one test table: ID, procedure, pass criterion, result
+\newenvironment{tests}{%
+  \begin{small}
+  \begin{longtable}{@{}>{\bfseries}p{0.06\linewidth}>{\raggedright}p{0.43\linewidth}%
+    >{\raggedright}p{0.29\linewidth}>{\raggedright\arraybackslash}p{0.12\linewidth}@{}}
+  \toprule
+  ID & Procedure & Pass when & Result \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot}
+  {\end{longtable}\end{small}}
+\begin{document}
+\makefront
+\input{acceptance-test/scope}
+\input{acceptance-test/safety}
+\input{acceptance-test/start}
+\input{acceptance-test/patrol}
+\input{acceptance-test/inspection}
+\input{acceptance-test/netra}
+\input{acceptance-test/endurance}
+\input{acceptance-test/signoff}
+\end{document}

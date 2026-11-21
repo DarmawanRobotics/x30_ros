@@ -1,0 +1,39 @@
+\chapter{Scope and conditions}
+\label{ch:s-scope}
+
+\section{The system under test}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.36\linewidth}X@{}}
+  \toprule
+  \textbf{Item} & \textbf{Record} \\
+  \midrule
+  Site (substation) & \blank[8cm] \\
+  Date, weather, air temperature & \blank[8cm] \\
+  Robot: Jueying X30 Pro, serial & \blank[8cm] \\
+  x30\_ros version (\file{CHANGELOG.md}) & \blank[8cm] \\
+  X30Controller version (start screen) & \blank[8cm] \\
+  NETRA version and license (\menupath{Settings › License}) & \blank[8cm] \\
+  HIKMICRO and Hertzino firmware & \blank[8cm] \\
+  Routes under test (names) & \blank[8cm] \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Conditions}
+
+\begin{itemize}
+  \item The substation's permit for the test is in place; the routes avoid every bay under work.
+  \item A person trained on the X30 User Manual operates the robot; one person stands by the hard
+    emergency stop or Deep Robotics' handheld during every test with motion.
+  \item The battery is charged; the robot starts on its dock; NETRA runs on its final computer.
+  \item Equipment: a tape measure, a stopwatch, a box \qtyproduct{0.5 x 0.5 x 0.5}{m}, a box
+    \SI{10}{cm} high, a contact thermometer or a calibrated handheld thermal camera, a heat source
+    (a hot-water bottle), a phone for the alerts.
+\end{itemize}
+
+\section{How to record}
+
+Tick \checkbox~Pass or \checkbox~Fail for each test and write what was measured on its line. A
+failed test goes to the punch list (Chapter~\ref{ch:s-signoff}) with its ID; the decision at the end
+says whether it blocks the acceptance.

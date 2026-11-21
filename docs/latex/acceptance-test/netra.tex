@@ -1,0 +1,16 @@
+\chapter{NETRA}
+\label{ch:s-netra}
+
+\begin{tests}
+  N1 & Pause, resume and stop a patrol from NETRA. & The robot follows each command within
+    \SI{2}{s}; NETRA shows the new state. & \result \\
+  N2 & During a patrol, switch NETRA's computer off the network for two stops, then back. & The
+    robot goes on; after the reconnection every result of those stops arrives in NETRA (the
+    spool). & \result \\
+  N3 & An alert (P6) with Telegram configured. & The alert reaches the Telegram group within
+    \SI{1}{min}. & \result \\
+  N4 & \menupath{Substation › Findings}, a point's trend, a patrol's PDF report. & The readings of the
+    patrols under test, the images, the severities, the report opens. & \result \\
+  N5 & \cmd{scripts/local.sh export} on NETRA's computer. & An export file with the database and the
+    photos. & \result \\
+\end{tests}
