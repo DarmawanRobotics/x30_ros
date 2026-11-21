@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <!-- X30: the inspection camera's crosshair on a hot spot, EZRA's night blue and gold -->
+  <rect x="20" y="20" width="560" height="560" rx="110" fill="#0f2742"/>
+  <rect x="62" y="62" width="476" height="476" rx="78" fill="none" stroke="#ffb020" stroke-width="16"/>
+  <circle cx="300" cy="300" r="138" fill="none" stroke="#ffb020" stroke-width="26"/>
+  <g stroke="#ffb020" stroke-width="26" stroke-linecap="round">
+    <path d="M300 112v88M300 400v88M112 300h88M400 300h88"/>
+  </g>
+  <circle cx="300" cy="300" r="46" fill="#e8892c"/>
+  <circle cx="300" cy="300" r="20" fill="#ffd27a"/>
+</svg>
