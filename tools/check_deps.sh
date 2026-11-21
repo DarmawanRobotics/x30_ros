@@ -35,8 +35,9 @@ BUILD=(
   python3-requests python3-websocket
   libeigen3-dev libpcl-dev libapr1-dev libaprutil1-dev
   libcurl4-openssl-dev libssl-dev libopencv-dev libtinyxml2-dev nlohmann-json3-dev
-  gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad ffmpeg
+  gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
 )
+# (ffmpeg only in PERCEPTION_BUILD: x30_recorder runs where the cameras' data arrives)
 TESTS=(python3-dev python3-pytest python3-nose ros-noetic-rostest ros-noetic-rosunit)
 GUI=(ros-noetic-rviz ros-noetic-joint-state-publisher-gui)
 # source packages: name, then the x30.repos entry that brings it

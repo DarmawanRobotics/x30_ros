@@ -255,7 +255,8 @@ def system(tmp_path):
     )
     fake.chmod(0o755)
     installed = tmp_path / 'installed.txt'
-    packages = array(TOOLS / 'check_deps.sh', 'BUILD')
+    script = TOOLS / 'check_deps.sh'
+    packages = array(script, 'BUILD') + array(script, 'PERCEPTION_BUILD')  # both hosts'
     installed.write_text('\n'.join(packages) + '\n')
     env = {
         'PATH': f'{bin_dir}:{os.environ["PATH"]}',
@@ -327,7 +328,10 @@ def test_check_deps_for_the_perception_host_checks_its_cameras_and_recorder_only
     out = run('check_deps.sh', '--src', str(src), env={**env, 'X30_LOCAL_IPS': '192.168.1.105'})
     assert out.returncode == 0 and 'of the perception host' in out.stdout, out.stdout
     script = TOOLS / 'check_deps.sh'
-    assert set(array(script, 'PERCEPTION_BUILD')) <= set(array(script, 'BUILD'))
+    # the navigation host builds all the perception host builds; the recorder's ffmpeg runs
+    # on the perception host only, never a MISS on the navigation host
+    assert set(array(script, 'PERCEPTION_BUILD')) - {'ffmpeg'} <= set(array(script, 'BUILD'))
+    assert 'ffmpeg' not in array(script, 'BUILD')
     installed.write_text(installed.read_text().replace('libtinyxml2-dev\n', ''))
     missing = run('check_deps.sh', '--perception', '--src', str(src), env=env)
     assert missing.returncode == 1 and 'sudo apt install -y libtinyxml2-dev' in missing.stdout
@@ -347,23 +351,24 @@ def test_check_deps_adds_the_test_packages_when_asked(system):
 
 
 def test_the_apt_lists_cover_every_dependency_of_the_stack():
+    """Each package's dependencies on the list of the host that runs it."""
     script = TOOLS / 'check_deps.sh'
-    listed_packages = {p for name in ('BUILD', 'TESTS', 'GUI') for p in array(script, name)}
+    navigation = {p for name in ('BUILD', 'TESTS', 'GUI') for p in array(script, name)}
+    perception = set(array(script, 'PERCEPTION_BUILD'))
     ours = {p.parent.name for p in ROOT.glob('*/package.xml')}
-    keys = set()
     for manifest in ROOT.glob('*/package.xml'):
-        for element in ET.parse(manifest).getroot():
-            if element.tag.endswith('depend'):
-                keys.add(element.text.strip())
-    needed = set()
-    for key in keys - ours - set(SOURCES):
-        if key.startswith('python3'):
-            needed.add('python3-dev' if key == 'python3' else key)
-        elif key in SYSTEM_KEYS:
-            needed.add(key)
-        else:
-            needed.add('ros-noetic-' + key.replace('_', '-'))
-    assert needed - listed_packages == set()
+        keys = {e.text.strip() for e in ET.parse(manifest).getroot() if e.tag.endswith('depend')}
+        needed = set()
+        for key in keys - ours - set(SOURCES):
+            if key.startswith('python3'):
+                needed.add('python3-dev' if key == 'python3' else key)
+            elif key in SYSTEM_KEYS:
+                needed.add(key)
+            else:
+                needed.add('ros-noetic-' + key.replace('_', '-'))
+        # x30_recorder records on the perception host only (x30_bringup README, "Two hosts")
+        listed = navigation | perception if manifest.parent.name == 'x30_recorder' else navigation
+        assert needed - listed == set(), manifest.parent.name
 
 
 # ---------------------------------------------------------------- pack_sources.sh
