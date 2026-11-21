@@ -63,8 +63,8 @@ its \param{robot_id} and the token of \code{X30_NETRA_TOKEN}.
   \item[\param{spool_dir}, \param{upload_period_sec}] routes and inspections wait on disk until
     NETRA confirms them, tried every \SI{5}{s}: a patrol without network loses nothing.
   \item[\param{clock_sync_period_sec}, \param{clock_warn_ms}] the offset to NETRA's clock, measured
-    every \SI{10}{s} and reported with the telemetry; above \SI{200}{ms} the robot warns: set the
-    robot's clock right (chrony).
+    every \SI{10}{s}, sent with the telemetry and applied to the times of the uploads; above
+    \SI{200}{ms} the robot warns: set the robot's clock right (chrony).
 \end{description}
 
 \section{The simulator}

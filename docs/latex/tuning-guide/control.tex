@@ -13,8 +13,9 @@ navigation or from an operator, passes through it in this order:
 \begin{description}
   \item[AUTO] navigation drives (\topic{control/nav_cmd_vel}); a silence longer than
     \param{nav_timeout_sec} (\SI{0.5}{s}) sends one zero.
-  \item[REMOTE] one operator source drives: \code{handheld} (the H12 gateway) or
-    \code{dashboard} (NETRA), each on \topic{control/remote/<source>/cmd_vel}; a silence longer than
+  \item[REMOTE] one operator source drives, each on \topic{control/remote/<source>/cmd_vel}:
+    \code{handheld} (the H12 gateway); \code{dashboard} is a second source nothing on the X30
+    publishes yet; a silence longer than
     \param{remote_timeout_sec} (\SI{0.3}{s}) sends one zero.
   \item[E-stop] while engaged, zeros at \param{estop_hold_hz}. After the release, after a mode
     change or a source's silence, the source must first send \param{rearm_neutral_count} neutral
