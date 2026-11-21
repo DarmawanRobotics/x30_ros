@@ -17,9 +17,9 @@
   The first build fails: \code{fast_lio/Pose6D.h: No such file or directory} & FAST-LIO
     compiled before its messages: build again (they are there the second time); an archive of
     \file{pack_sources.sh} from 0.19 on makes it wait \\
-  \cmd{catkin_make}: \code{include could not find load file: config.cmake} & the workspace's
-    \file{src/CMakeLists.txt} is not catkin's: \cmd{x30_host.sh build} replaces it, keeping
-    \file{CMakeLists.txt.orig} \\
+  \cmd{catkin_make}: \code{include could not find load file: config.cmake} & Deep Robotics'
+    catkin on the perception host includes \file{src/config.cmake}: \cmd{x30_host.sh build} from
+    0.19 on makes an empty one (by hand: \cmd{touch ~/x30_ws/src/config.cmake}) \\
   The service fails at once: \code{ROS_DISTRO: unbound variable} & an x30\_ros before 0.19 on
     the robot: pack the current one, unpack it clean and build (Section~\ref{sec:i-build}) \\
   \code{this is the perception host (192.168.1.105)}, \code{this is the navigation host} & a

@@ -198,6 +198,13 @@ def test_build_runs_catkin_make_as_the_robot_needs_it(tmp_path):
     assert '-DCATKIN_WHITELIST_PACKAGES=' in made.read_text().splitlines()  # all of it here
     assert out.stdout.endswith('\n  sudo systemctl restart x30-navigation\n')
     assert 'kept as' not in out.stdout  # catkin's own, left as it is
+    assert not (ws / 'src' / 'config.cmake').exists()  # catkin as released includes none
+    # Deep Robotics' catkin on the perception host: its toplevel.cmake includes config.cmake
+    toplevel.write_text('set(CATKIN_TOPLEVEL TRUE)\n\ninclude(config.cmake)\n')
+    out = host('build', env=env)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert (ws / 'src' / 'config.cmake').read_text().startswith('# empty')
+    assert 'config.cmake: empty' in out.stdout
     fake(bin_dir / 'catkin_make', 'exit 5')
     assert host('build', env=env).returncode == 5  # a failed build fails the command
 

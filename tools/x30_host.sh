@@ -228,6 +228,15 @@ cmd_build() { # [catkin_make arguments]: the workspace, as the robot runs it
     ln -s "$toplevel" "$top"
     say "$top was not catkin's: kept as CMakeLists.txt.orig, catkin's linked"
   fi
+  # Deep Robotics' catkin on the perception host includes the workspace's src/config.cmake in
+  # its toplevel.cmake (their workspaces carry one): an empty one, or the configuration fails
+  # (include could not find load file: config.cmake)
+  if grep -qE '^[[:space:]]*include\([[:space:]]*config\.cmake[[:space:]]*\)' "$toplevel" \
+    2> /dev/null && [ ! -e "$ws/src/config.cmake" ]; then
+    say "# empty: this host's catkin (its toplevel.cmake) includes it (x30_host.sh build)" \
+      > "$ws/src/config.cmake"
+    say "$ws/src/config.cmake: empty, this host's catkin includes it"
+  fi
   role=$(this_role)
   # the perception host builds its own packages only (neither FAST-LIO on its ARM cores nor
   # what the navigation needs); anywhere else the whole workspace, a list once cached cleared

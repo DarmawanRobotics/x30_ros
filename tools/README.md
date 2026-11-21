@@ -87,7 +87,7 @@ names the navigation host `ysc-perception`.
 
 | | |
 |---|---|
-| `build [ARGS]` | catkin_make as the robot needs it: ROS sourced, `PYTHONNOUSERSITE=1`, `-DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release`, one job per 2 GB of memory at most, on the perception host its packages only (`CATKIN_WHITELIST_PACKAGES`, cleared anywhere else); a workspace `CMakeLists.txt` that is not catkin's replaced (kept as `CMakeLists.txt.orig`); ARGS go to catkin_make |
+| `build [ARGS]` | catkin_make as the robot needs it: ROS sourced, `PYTHONNOUSERSITE=1`, `-DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release`, one job per 2 GB of memory at most, on the perception host its packages only (`CATKIN_WHITELIST_PACKAGES`, cleared anywhere else); a workspace `CMakeLists.txt` that is not catkin's replaced (kept as `CMakeLists.txt.orig`); an empty `src/config.cmake` where the host's catkin includes one (Deep Robotics' on the perception host); ARGS go to catkin_make |
 | `role` | this computer's role, nothing when neither |
 | `env [ROLE]` | the exports of that host: `ROS_MASTER_URI=http://192.168.1.106:11311`, its `ROS_IP`, no `ROS_HOSTNAME`, `PYTHONNOUSERSITE=1`, and `X30_PYTHON` when NeuPAN's venv is there; `eval` it |
 | `check` | this host's role, `ROS_IP` one of its addresses, the other host answering ping, NTP, the master answering (on the navigation host with the systemd service running it), every registered node reachable from here (a name that does not resolve: `/etc/hosts`), the other host's clock against this one's (below); on the navigation host Deep Robotics' autonomy off, on the perception host the cameras' ports (HIKMICRO 80 and 554, Hertzino 80 and 443, at the addresses of `X30_LAUNCH_ARGS` or `/etc/x30/perception.env`) |

@@ -135,9 +135,9 @@ the recorder and what launches them. Its arguments go to \cmd{catkin_make}
 \begin{notebox}
 A \cmd{pip install --user} that put a setuptools in \file{~/.local} stops catkin
 (\code{module 'importlib_metadata' has no attribute 'EntryPoints'}): the build leaves
-\file{~/.local} out (\code{PYTHONNOUSERSITE=1}) without touching it. A workspace
-\file{CMakeLists.txt} that is not catkin's (\code{include could not find load file:
-config.cmake}) is replaced; the old one stays as \file{CMakeLists.txt.orig}.
+\file{~/.local} out (\code{PYTHONNOUSERSITE=1}) without touching it. Deep Robotics' catkin on
+the perception host includes the workspace's \file{src/config.cmake} (\code{include could not
+find load file: config.cmake}): the build makes an empty one there.
 \end{notebox}
 
 \section{Deep Robotics' autonomy off}
