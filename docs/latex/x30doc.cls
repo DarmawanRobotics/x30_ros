@@ -47,9 +47,11 @@
 \AtBeginDocument{\frenchspacing}
 % word spaces of the big titles, after their \selectfont (em of the title's size)
 \newcommand{\titlespace}{\spaceskip=0.27em plus 0.08em minus 0.04em\relax\xspaceskip=\spaceskip}
+% code as typed: no TeX ligatures (" would print as a closing quote, -- as an en dash), so
+% what is copied from the PDF runs
 \IfFontExistsTF{DejaVu Sans Mono}
-  {\setmonofont{DejaVu Sans Mono}[Scale=0.84]}
-  {\setmonofont{lmmono10-regular.otf}}
+  {\setmonofont{DejaVu Sans Mono}[Scale=0.84, Ligatures=TeXOff]}
+  {\setmonofont{lmmono10-regular.otf}[Ligatures=TeXOff]}
 \IfFontExistsTF{DejaVu Math TeX Gyre}
   {\setmathfont{DejaVu Math TeX Gyre}[Scale=0.94]}
   {\setmathfont{latinmodern-math.otf}}
