@@ -10,7 +10,8 @@ set -u
 usage() {
   cat <<'EOF'
 usage: check_deps.sh [--perception] [--tests] [--gui] [--src DIR]
-  --perception  the perception host (192.168.1.105): its camera drivers and the recorder
+  --perception  the perception host (192.168.1.105): its camera drivers and the recorder;
+                on that host by its address without asking
   --tests       also what catkin_make run_tests needs
   --gui         also RViz and the joint state publisher GUI (display.launch)
   --src         the workspace's src (default: the folder holding x30_ros)
@@ -34,8 +35,9 @@ BUILD=(
   python3-requests python3-websocket
   libeigen3-dev libpcl-dev libapr1-dev libaprutil1-dev
   libcurl4-openssl-dev libssl-dev libopencv-dev libtinyxml2-dev nlohmann-json3-dev
-  gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad ffmpeg
+  gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
 )
+# (ffmpeg only in PERCEPTION_BUILD: x30_recorder runs where the cameras' data arrives)
 TESTS=(python3-dev python3-pytest python3-nose ros-noetic-rostest ros-noetic-rosunit)
 GUI=(ros-noetic-rviz ros-noetic-joint-state-publisher-gui)
 # source packages: name, then the x30.repos entry that brings it
@@ -66,8 +68,6 @@ PERCEPTION_SOURCES=(
   "hertzino_msgs drivers/hertzino_driver"
   "hertzino_driver drivers/hertzino_driver"
 )
-PERCEPTION_PACKAGES='x30_utils;x30_msgs;x30_recorder;x30_bringup'
-PERCEPTION_PACKAGES+=';hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
 ROLE=navigation
 LIVOX_SDK_LIB=${LIVOX_SDK_LIB:-/usr/local/lib/liblivox_sdk_static.a}
 ROS_DIR=${ROS_DIR:-/opt/ros/noetic}
@@ -77,7 +77,6 @@ SRC=$(dirname "$(dirname "$HERE")")
 PACKAGES=("${BUILD[@]}")
 MISSING=()
 PROBLEMS=0
-BUILD_ENV=''
 
 row() { printf '%-8s %-5s %s\n' "$1" "$2" "$3"; }
 
@@ -164,8 +163,7 @@ check_python() {  # pip --user packages shadow the system's: a newer setuptools 
   PYTHONPATH='' python3 -c 'import setuptools' > /dev/null 2>&1 && return 0
   if PYTHONPATH='' python3 -s -c 'import setuptools' > /dev/null 2>&1; then
     site=$(python3 -s -c 'import site; print(site.getusersitepackages())' 2>/dev/null)
-    row python WARN "setuptools in ${site:-the user site} breaks catkin: PYTHONNOUSERSITE=1"
-    BUILD_ENV='PYTHONNOUSERSITE=1 '
+    row python WARN "setuptools in ${site:-the user site} breaks catkin: x30_host.sh build leaves it out (PYTHONNOUSERSITE=1)"
   else
     row python MISS "python3 cannot import setuptools (python3-setuptools)"
     PROBLEMS=1
@@ -202,14 +200,18 @@ check_rosdep() {  # authoritative when the robot has a rosdep cache already (it 
   fi
 }
 
+perception() {  # what the perception host builds: its camera drivers and the recorder
+  ROLE=perception
+  PACKAGES=("${PERCEPTION_BUILD[@]}")
+  SOURCES=("${PERCEPTION_SOURCES[@]}")
+}
+
 main() {
+  # the host by its address, as x30_host.sh tells it; --perception for it on any computer
+  [ "$(bash "$HERE/x30_host.sh" role 2> /dev/null)" = perception ] && perception
   while [ $# -gt 0 ]; do
     case "$1" in
-      --perception)
-        ROLE=perception
-        PACKAGES=("${PERCEPTION_BUILD[@]}")
-        SOURCES=("${PERCEPTION_SOURCES[@]}")
-        ;;
+      --perception) perception ;;
       --tests) PACKAGES+=("${TESTS[@]}") ;;
       --gui) PACKAGES+=("${GUI[@]}") ;;
       --src) SRC=${2:?--src needs a folder}; shift ;;
@@ -231,10 +233,8 @@ main() {
   fi
   check_rosdep
   if [ "$PROBLEMS" = 0 ]; then
-    local only=''
-    [ "$ROLE" = perception ] && only="-DCATKIN_WHITELIST_PACKAGES='$PERCEPTION_PACKAGES' "
-    printf 'everything there: %scatkin_make %s-DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release\n' \
-      "$BUILD_ENV" "$only"
+    # catkin_make's flags, the perception host's packages and PYTHONNOUSERSITE are its own
+    printf 'everything there, the build:\n  bash %s/x30_host.sh build\n' "$HERE"
     return 0
   fi
   printf 'missing: README.md, "Robot without internet", tells how to bring it in\n'

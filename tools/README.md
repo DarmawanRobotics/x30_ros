@@ -6,9 +6,9 @@ nothing downloaded on the robot.
 | Script | Run on | |
 |---|---|---|
 | `dr_services.sh status\|off\|on` | the navigation host (192.168.1.106) | Deep Robotics' own localization, navigation, mapping, URDF and bridge off, now and at boot, and back on |
-| `check_deps.sh [--perception] [--tests] [--gui]` | the robot | what the build and the stack need, checked offline: the apt packages, the sources of x30.repos, the Livox SDK; `--perception` what the perception host builds (the camera drivers, the recorder) |
+| `check_deps.sh [--perception] [--tests] [--gui]` | the robot | what the build and the stack need, checked offline: the apt packages, the sources of x30.repos, the Livox SDK; on the perception host (by its address, or `--perception`) what it builds (the camera drivers, the recorder) |
 | `install_neupan.sh [--venv DIR] [--wheels DIR]`, `--download DIR`, `--check` | the navigation host | NeuPAN for the `neupan` controller: a venv with PyTorch (CPU), cvxpy and NeuPAN with the patches of [neupan/](neupan) |
-| `x30_host.sh env\|check\|start\|install` | each host | the ROS network of the navigation (192.168.1.106) and the perception host (192.168.1.105), whether they see each other, and each one's launch file by hand or as the service `x30-<role>` |
+| `x30_host.sh build\|role\|env\|check\|start\|install` | each host | the workspace built as the robot needs it, the ROS network of the navigation (192.168.1.106) and the perception host (192.168.1.105), whether they see each other, and each one's launch file by hand or as the service `x30-<role>`; the role is the host's own, by its address |
 | `x30_watchdog.py` | (the service) | the host's roslaunch under systemd's watchdog: restarts it when the master restarts or a critical node stays away |
 | `pack_sources.sh [OUT] [--skip PATH]` | a computer with internet | x30_ros, the repositories of x30.repos and the Livox SDK in one archive (about 5 MB) |
 
@@ -80,14 +80,19 @@ at mounting position A, (47.15, −1, 117) at B, (7.15, −1, 117) at C) rather 
 
 ## Two hosts and the watchdog
 
-`x30_host.sh` (x30_bringup README, "Two hosts", has the split and the why):
+`x30_host.sh` (x30_bringup README, "Two hosts", has the split and the why). ROLE is
+`navigation` or `perception`; left out, this computer's by its address, and on the robot the
+other host's is refused (exit 78, which its service is never restarted for): Deep Robotics
+names the navigation host `ysc-perception`.
 
 | | |
 |---|---|
-| `env navigation\|perception` | the exports of that host: `ROS_MASTER_URI=http://192.168.1.106:11311`, its `ROS_IP`, no `ROS_HOSTNAME`, `PYTHONNOUSERSITE=1`, and `X30_PYTHON` when NeuPAN's venv is there; `eval` it |
+| `build [ARGS]` | catkin_make as the robot needs it: ROS sourced, `PYTHONNOUSERSITE=1`, `-DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release`, one job per 2 GB of memory at most, on the perception host its packages only (`CATKIN_WHITELIST_PACKAGES`, cleared anywhere else); a workspace `CMakeLists.txt` that is not catkin's replaced (kept as `CMakeLists.txt.orig`); ARGS go to catkin_make |
+| `role` | this computer's role, nothing when neither |
+| `env [ROLE]` | the exports of that host: `ROS_MASTER_URI=http://192.168.1.106:11311`, its `ROS_IP`, no `ROS_HOSTNAME`, `PYTHONNOUSERSITE=1`, and `X30_PYTHON` when NeuPAN's venv is there; `eval` it |
 | `check` | this host's role, `ROS_IP` one of its addresses, the other host answering ping, NTP, the master answering (on the navigation host with the systemd service running it), every registered node reachable from here (a name that does not resolve: `/etc/hosts`), the other host's clock against this one's (below); on the navigation host Deep Robotics' autonomy off, on the perception host the cameras' ports (HIKMICRO 80 and 554, Hertzino 80 and 443, at the addresses of `X30_LAUNCH_ARGS` or `/etc/x30/perception.env`) |
-| `start navigation\|perception` | what the service runs: ROS and the workspace sourced, the network set (the service's settings win), ROS's logs pruned to `X30_ROS_LOG_MB` (2048, `x30_logs.py`: the oldest runs first, the newest 5 kept), each node's JSON lines log in `X30_LOG_DIR` (`~/x30/logs`; empty: none), on the navigation host `dr_services.sh off` until Deep Robotics' boot settled, then the host's launch file with `X30_LAUNCH_ARGS` under `x30_watchdog.py`, waiting for Deep Robotics' master (never one of its own: it would go with every restart, and Deep Robotics' LiDAR and IMU drivers with it); on the navigation host the watchdog runs `dr_services.sh sweep` every 30 s, so what one of Deep Robotics' services starts again late goes again (the journal names it) |
-| `install navigation\|perception` | with sudo: `/etc/x30/<role>.env` (kept when it exists; mode 600, the cameras' passwords, the handheld's token and NETRA's go there) and `/etc/systemd/system/x30-<role>.service` (`Type=notify`, `WatchdogSec=60`, `Restart=on-failure`, never given up on: `StartLimitIntervalSec=0`), enabled; the navigation host's starts after Deep Robotics' services (`jy_*`) and the one running the ROS master, as found (run it with the robot up) |
+| `start [ROLE]` | what the service runs: ROS and the workspace sourced (outside `set -eu`: ROS's hooks read unset variables), the network set (the service's settings win), ROS's logs pruned to `X30_ROS_LOG_MB` (2048, `x30_logs.py`: the oldest runs first, the newest 5 kept), each node's JSON lines log in `X30_LOG_DIR` (`~/x30/logs`; empty: none), on the navigation host `dr_services.sh off` until Deep Robotics' boot settled, then the host's launch file with `X30_LAUNCH_ARGS` under `x30_watchdog.py`, waiting for Deep Robotics' master (never one of its own: it would go with every restart, and Deep Robotics' LiDAR and IMU drivers with it); on the navigation host the watchdog runs `dr_services.sh sweep` every 30 s, so what one of Deep Robotics' services starts again late goes again (the journal names it) |
+| `install [ROLE]` | with sudo: `/etc/x30/<role>.env` (kept when it exists; mode 600, the cameras' passwords, the handheld's token and NETRA's go there) and `/etc/systemd/system/x30-<role>.service` (`Type=notify`, `WatchdogSec=60`, `Restart=on-failure`, never given up on: `StartLimitIntervalSec=0`, but not on the wrong host: `RestartPreventExitStatus=78`), enabled; the other host's service and settings, put on this one by an older x30_host.sh, removed; the navigation host's starts after Deep Robotics' services (`jy_*`) and the one running the ROS master, as found (run it with the robot up) |
 
 `X30_NAV_IP` and `X30_PER_IP` change the two addresses. The service's settings:
 
@@ -154,21 +159,35 @@ the robot standing still): `$X30_PYTHON $(rospack find x30_navigation)/scripts/b
 
    ```bash
    git clone https://github.com/DarmawanRobotics/x30_ros.git && cd x30_ros
-   bash tools/pack_sources.sh x30_sources.tar.gz   # --skip drivers/hikmicro_driver if the robot has it
+   bash tools/pack_sources.sh x30_sources.tar.gz
    scp x30_sources.tar.gz ysc@192.168.1.106:~/
+   scp x30_sources.tar.gz ysc@192.168.1.105:~/
    ```
+
+   `--skip drivers/hikmicro_driver` leaves out a repository the robot has already.
 
    The archive holds `src/` (x30_ros as checked out, FAST_LIO with its ikd-Tree,
    livox_ros_driver, the camera drivers; `src/SOURCES.txt` lists their commits) and
    `Livox-SDK/`, without git history or FAST_LIO's videos.
 
-2. On the robot, in its workspace (`~/hotdog` here):
+2. On each host of the robot, a clean workspace (the one before kept as `src.prev`: a package
+   x30_ros no longer has would stay in a tree unpacked over the old one), then its build:
 
    ```bash
-   mkdir -p ~/hotdog && tar -xzf ~/x30_sources.tar.gz -C ~/hotdog
-   bash ~/hotdog/src/x30_ros/tools/check_deps.sh
-   cd ~/hotdog/Livox-SDK/build && cmake .. && make -j"$(nproc)" && sudo make install   # once
-   cd ~/hotdog && catkin_make -DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+   mkdir -p ~/x30_ws && cd ~/x30_ws
+   rm -rf src.prev build devel
+   [ -d src ] && mv src src.prev
+   tar -xzf ~/x30_sources.tar.gz
+   bash src/x30_ros/tools/check_deps.sh
+   bash src/x30_ros/tools/x30_host.sh build
+   ```
+
+   Once, on the navigation host, the Livox SDK first (FAST-LIO's driver links it):
+
+   ```bash
+   cd ~/x30_ws/Livox-SDK/build
+   cmake .. && make -j4
+   sudo make install
    ```
 
    `check_deps.sh` reads only what is installed (`dpkg`, the workspace, `/usr/local/lib`); it
@@ -177,8 +196,9 @@ the robot standing still): `$X30_PYTHON $(rospack find x30_navigation)/scripts/b
    SDK. Where the robot has a rosdep cache, `rosdep check` runs too. `--tests` adds what
    `catkin_make run_tests` needs, `--gui` RViz. A setuptools that `pip install --user` put in
    `~/.local` stops catkin (`module 'importlib_metadata' has no attribute 'EntryPoints'`):
-   `check_deps.sh` warns, and its build line then starts with `PYTHONNOUSERSITE=1`, which leaves
-   `~/.local` out without touching it.
+   `check_deps.sh` warns, and `x30_host.sh build` sets `PYTHONNOUSERSITE=1`, which leaves
+   `~/.local` out without touching it. On the perception host both go by its address: its
+   dependencies, its packages.
 
 3. Missing packages: borrow the laptop's internet through SSH (the cable is enough, no Wi-Fi):
 

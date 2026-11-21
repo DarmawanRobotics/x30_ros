@@ -13,13 +13,14 @@ set -u
 
 usage() {
   cat <<'EOF'
-usage: dr_services.sh status|off|on|sweep [--dry-run] [--force]
+usage: dr_services.sh status|off|on|sweep [--dry-run]
   status   autorun_slam, the Deep Robotics processes, the busiest, the report port, boot starters
   off      stop the localization, navigation, mapping, URDF and bridge now; autorun_slam false
   on       autorun_slam as it was before off (back from the next boot)
   sweep    stop what of them runs again, one line each, nothing else (x30_ros running: no
            Deep Robotics script, which may stop processes by name)
   --dry-run  print what would be done, change nothing
+on the navigation host only: the perception host (.105) and the motion host (.103) refuse
 from a laptop: ssh ysc@192.168.1.106 'bash -s -- off' < tools/dr_services.sh
 EOF
   exit 2
@@ -44,7 +45,6 @@ STOP='^(localization|nav|planner|mapping|slam|transfer)/|locali[sz]ation|locatio
 KEEP='livox|lidar|yesense|(^|[/_])imu|robot_server|broker|rosmaster|roscore|rosout'
 REPORT_PORT=43897  # x30_driver's local_port, where the motion host's reports arrive
 DRY=0
-FORCE=0
 FAILED=0
 
 say() { printf '%s\n' "$*"; }
@@ -231,13 +231,18 @@ check_host() {
   fi
   local ips
   ips=$(hostname -I 2>/dev/null || true)
+  # never there, whatever it is asked: what Deep Robotics runs on those hosts stays
   case " $ips " in
-    *" 192.168.1.103 "* | *" 192.168.1.105 "*)
-      if [ "$FORCE" = 0 ]; then
-        say "this is the motion or the perception host ($ips): nothing to turn off here"
-        say "(--force to go on anyway)"
-        exit 1
-      fi
+    *" 192.168.1.103 "*)
+      say "this is the motion host (192.168.1.103): dr_services.sh is for the navigation host,"
+      say "192.168.1.106"
+      exit 1
+      ;;
+    *" 192.168.1.105 "*)
+      say "this is the perception host (192.168.1.105): Deep Robotics' software here stays (its"
+      say "elevation map, the charging, their transfer to the motion host); dr_services.sh is for"
+      say "the navigation host, 192.168.1.106"
+      exit 1
       ;;
   esac
 }
@@ -330,7 +335,6 @@ main() {
   for arg in "$@"; do
     case "$arg" in
       --dry-run) DRY=1 ;;
-      --force) FORCE=1 ;;
       status | off | on | sweep) command=$arg ;;
       *) usage ;;
     esac

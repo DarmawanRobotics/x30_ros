@@ -80,6 +80,24 @@ def services(root: Path, *args: str):
     return run('dr_services.sh', *args, env={'JY_COG': str(root)})
 
 
+def test_the_perception_and_motion_hosts_refuse_whatever_is_asked(jy, tmp_path):
+    """Deep Robotics' transfer, elevation map and charging there stay: no way around it."""
+    root, log, spawn = jy
+    bridge = spawn('transfer/lib/message_transformer_cpp/udp_receiver')
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    hostname = bin_dir / 'hostname'
+    for ips, host in (('192.168.2.105 192.168.1.105 172.17.0.1', 'perception'),
+                      ('192.168.1.103', 'motion')):  # fmt: skip
+        hostname.write_text(f'#!/bin/sh\necho "{ips} "\n')
+        hostname.chmod(0o755)
+        env = {'JY_COG': str(root), 'PATH': f'{bin_dir}:{os.environ["PATH"]}'}
+        out = run('dr_services.sh', 'off', env=env)
+        assert out.returncode == 1 and f'this is the {host} host' in out.stdout, out.stdout
+        assert run('dr_services.sh', 'off', '--force', env=env).returncode == 2  # no such flag
+    assert bridge.poll() is None and log.read_text() == ''  # nothing stopped, no kill script
+
+
 def test_status_sorts_the_jy_cog_processes(jy):
     root, _, spawn = jy
     nav, driver = spawn('nav/bin/move_base'), spawn('drivers/livox_lidar_publisher2')
@@ -255,7 +273,8 @@ def system(tmp_path):
     )
     fake.chmod(0o755)
     installed = tmp_path / 'installed.txt'
-    packages = array(TOOLS / 'check_deps.sh', 'BUILD')
+    script = TOOLS / 'check_deps.sh'
+    packages = array(script, 'BUILD') + array(script, 'PERCEPTION_BUILD')  # both hosts'
     installed.write_text('\n'.join(packages) + '\n')
     env = {
         'PATH': f'{bin_dir}:{os.environ["PATH"]}',
@@ -309,7 +328,8 @@ def test_check_deps_builds_past_a_user_site_that_breaks_setuptools(system, tmp_p
     out = run('check_deps.sh', '--src', str(src), env=env)
     assert out.returncode == 0, out.stdout
     assert re.search(r'python\s+WARN\s+setuptools in .*user.* breaks catkin', out.stdout)
-    assert 'everything there: PYTHONNOUSERSITE=1 catkin_make' in out.stdout
+    # the build command leaves the user site out itself: one short line to copy
+    assert out.stdout.endswith(f'everything there, the build:\n  bash {TOOLS}/x30_host.sh build\n')
 
 
 def test_check_deps_for_the_perception_host_checks_its_cameras_and_recorder_only(system):
@@ -321,13 +341,15 @@ def test_check_deps_for_the_perception_host_checks_its_cameras_and_recorder_only
     assert out.returncode == 0, out.stdout
     assert 'of the perception host' in out.stdout and 'livox' not in out.stdout
     assert 'neupan' not in out.stdout
-    whitelist = (
-        'x30_utils;x30_msgs;x30_recorder;x30_bringup;'
-        'hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
-    )
-    assert f"-DCATKIN_WHITELIST_PACKAGES='{whitelist}'" in out.stdout
+    assert f'bash {TOOLS}/x30_host.sh build' in out.stdout  # its packages only (test_hosts)
+    # on the perception host itself, by its address, without the flag
+    out = run('check_deps.sh', '--src', str(src), env={**env, 'X30_LOCAL_IPS': '192.168.1.105'})
+    assert out.returncode == 0 and 'of the perception host' in out.stdout, out.stdout
     script = TOOLS / 'check_deps.sh'
-    assert set(array(script, 'PERCEPTION_BUILD')) <= set(array(script, 'BUILD'))
+    # the navigation host builds all the perception host builds; the recorder's ffmpeg runs
+    # on the perception host only, never a MISS on the navigation host
+    assert set(array(script, 'PERCEPTION_BUILD')) - {'ffmpeg'} <= set(array(script, 'BUILD'))
+    assert 'ffmpeg' not in array(script, 'BUILD')
     installed.write_text(installed.read_text().replace('libtinyxml2-dev\n', ''))
     missing = run('check_deps.sh', '--perception', '--src', str(src), env=env)
     assert missing.returncode == 1 and 'sudo apt install -y libtinyxml2-dev' in missing.stdout
@@ -347,23 +369,24 @@ def test_check_deps_adds_the_test_packages_when_asked(system):
 
 
 def test_the_apt_lists_cover_every_dependency_of_the_stack():
+    """Each package's dependencies on the list of the host that runs it."""
     script = TOOLS / 'check_deps.sh'
-    listed_packages = {p for name in ('BUILD', 'TESTS', 'GUI') for p in array(script, name)}
+    navigation = {p for name in ('BUILD', 'TESTS', 'GUI') for p in array(script, name)}
+    perception = set(array(script, 'PERCEPTION_BUILD'))
     ours = {p.parent.name for p in ROOT.glob('*/package.xml')}
-    keys = set()
     for manifest in ROOT.glob('*/package.xml'):
-        for element in ET.parse(manifest).getroot():
-            if element.tag.endswith('depend'):
-                keys.add(element.text.strip())
-    needed = set()
-    for key in keys - ours - set(SOURCES):
-        if key.startswith('python3'):
-            needed.add('python3-dev' if key == 'python3' else key)
-        elif key in SYSTEM_KEYS:
-            needed.add(key)
-        else:
-            needed.add('ros-noetic-' + key.replace('_', '-'))
-    assert needed - listed_packages == set()
+        keys = {e.text.strip() for e in ET.parse(manifest).getroot() if e.tag.endswith('depend')}
+        needed = set()
+        for key in keys - ours - set(SOURCES):
+            if key.startswith('python3'):
+                needed.add('python3-dev' if key == 'python3' else key)
+            elif key in SYSTEM_KEYS:
+                needed.add(key)
+            else:
+                needed.add('ros-noetic-' + key.replace('_', '-'))
+        # x30_recorder records on the perception host only (x30_bringup README, "Two hosts")
+        listed = navigation | perception if manifest.parent.name == 'x30_recorder' else navigation
+        assert needed - listed == set(), manifest.parent.name
 
 
 # ---------------------------------------------------------------- pack_sources.sh
@@ -411,6 +434,12 @@ def test_pack_sources_brings_the_repositories_and_the_sdk_without_history(tmp_pa
     assert not any(n.startswith('src/drivers') for n in names)
     assert not any('.git' in Path(n).parts for n in names)
     assert re.search(rf'third_party/FAST_LIO {re.escape(lio)} main [0-9a-f]{{40}}', manifest)
+    assert not any('node_modules' in Path(n).parts for n in names)  # the docs site's npm
+    # what to run on the robot: one command a line, in the workspace the docs name
+    hint = out.stdout.split('To both hosts of the robot:')[1].splitlines()
+    assert '  tar -xzf ~/out.tar.gz' in hint and '  mkdir -p ~/x30_ws && cd ~/x30_ws' in hint
+    commands = [line for line in hint if line.startswith('  ')]
+    assert all(len(line) <= 52 and '#' not in line for line in commands), commands
 
 
 def test_x30_repos_keeps_the_layout_the_packer_reads():

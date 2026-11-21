@@ -68,8 +68,9 @@ main() {
   STAGE=$(mktemp -d)
   trap cleanup EXIT
   mkdir -p "$STAGE/src/x30_ros"
-  # the working tree as it is, uncommitted changes included
-  tar -C "$ROOT" --exclude=.git --exclude=__pycache__ -cf - . | tar -C "$STAGE/src/x30_ros" -xf -
+  # the working tree as it is, uncommitted changes included; not the docs site's npm packages
+  tar -C "$ROOT" --exclude=.git --exclude=__pycache__ --exclude=node_modules -cf - . |
+    tar -C "$STAGE/src/x30_ros" -xf -
   {
     echo "# packed by x30_ros/tools/pack_sources.sh, $(date -u '+%Y-%m-%d %H:%M UTC')"
     echo "x30_ros $(git -C "$ROOT" describe --always --dirty 2> /dev/null || echo 'not a git checkout')"
@@ -91,12 +92,18 @@ main() {
   find "$STAGE" -name .git -prune -exec rm -rf {} +
   rm -rf -- "$STAGE/src/third_party/FAST_LIO/doc"
   tar -C "$STAGE" -czf "$OUT" src Livox-SDK || exit 1
+  # one command a line, none longer than a phone's screen: copied, nothing runs half
   cat <<EOF
-packed $OUT ($(du -h "$OUT" | cut -f1)). To the robot, e.g. its navigation host:
+packed $OUT ($(du -h "$OUT" | cut -f1)). To both hosts of the robot:
   scp $OUT ysc@192.168.1.106:~/
-and there, into the workspace (~/hotdog here):
-  mkdir -p ~/hotdog && tar -xzf ~/$(basename "$OUT") -C ~/hotdog
-  bash ~/hotdog/src/x30_ros/tools/check_deps.sh
+  scp $OUT ysc@192.168.1.105:~/
+on each, a clean workspace (the one before kept as src.prev), then its build:
+  mkdir -p ~/x30_ws && cd ~/x30_ws
+  rm -rf src.prev build devel
+  [ -d src ] && mv src src.prev
+  tar -xzf ~/$(basename "$OUT")
+  bash src/x30_ros/tools/check_deps.sh
+  bash src/x30_ros/tools/x30_host.sh build
 EOF
 }
 

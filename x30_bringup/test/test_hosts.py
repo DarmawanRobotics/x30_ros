@@ -41,6 +41,47 @@ def test_each_host_joins_the_navigation_hosts_master():
     assert host('env', 'motion').returncode == 2
 
 
+NAV_IP, PER_IP = '192.168.1.106', '192.168.1.105'
+
+
+def test_the_role_is_this_computers_and_never_the_other_hosts(tmp_path):
+    # Deep Robotics calls the navigation host ysc-perception: its name misleads, its address not
+    perception = {'X30_LOCAL_IPS': f'192.168.2.105 {PER_IP}'}
+    assert f'export ROS_IP={PER_IP}' in host('env', env=perception).stdout
+    assert host('role', env=perception).stdout == 'perception\n'
+    out = host('env', 'navigation', env=perception)
+    assert out.returncode == 78 and f'this is the perception host ({PER_IP})' in out.stderr
+    # a service of the other host's role ends at once and for good (RestartPreventExitStatus)
+    assert host('start', 'navigation', env=perception).returncode == 78
+    settings = {
+        'X30_ETC': str(tmp_path / 'etc'),
+        'X30_SYSTEMD_DIR': str(tmp_path),
+        'X30_SYSTEMCTL': 'true',
+        'X30_PROC': str(tmp_path / 'no-proc'),
+    }
+    assert host('install', 'navigation', env={**perception, **settings}).returncode == 78
+    assert not (tmp_path / 'x30-navigation.service').exists()
+    # what an older x30_host.sh let through: the navigation host's service on this one
+    (tmp_path / 'x30-navigation.service').write_text('[Unit]\n')
+    (tmp_path / 'etc').mkdir()
+    (tmp_path / 'etc' / 'navigation.env').write_text('X30_TELEOP_TOKEN=\n')
+    calls = tmp_path / 'systemctl.calls'
+    systemctl = fake(tmp_path / 'systemctl', f'echo "$@" >> {calls}')
+    out = host('install', env={**perception, **settings, 'X30_SYSTEMCTL': str(systemctl)})
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert 'start perception' in (tmp_path / 'x30-perception.service').read_text()
+    assert 'removed x30-navigation.service' in out.stdout
+    assert not (tmp_path / 'x30-navigation.service').exists()
+    assert not (tmp_path / 'etc' / 'navigation.env').exists()
+    assert 'disable --now x30-navigation.service' in calls.read_text().splitlines()
+    assert '\n  sudo systemctl restart x30-perception\n' in out.stdout  # one command a line
+    laptop = {'X30_LOCAL_IPS': '10.0.0.2'}  # neither host: the role named, any
+    out = host('env', env=laptop)
+    assert out.returncode == 2 and 'say which, navigation or perception' in out.stderr
+    assert f'export ROS_IP={NAV_IP}' in host('env', 'navigation', env=laptop).stdout
+    assert host('role', env=laptop).stdout == ''  # and no failure: check_deps.sh asks
+
+
 def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp_path):
     env = {
         'X30_ETC': str(tmp_path / 'etc'),
@@ -57,6 +98,7 @@ def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp
     unit = (tmp_path / 'x30-perception.service').read_text()
     for line in ('Type=notify', 'NotifyAccess=main', 'WatchdogSec=60', 'Restart=on-failure'):
         assert line in unit
+    assert 'RestartPreventExitStatus=78\n' in unit  # the wrong host: never restarted
     assert 'StartLimitIntervalSec=0' in unit.split('[Service]')[0]  # never given up on
     assert f'ExecStart=/bin/bash {TOOLS}/x30_host.sh start perception' in unit
     assert f'EnvironmentFile={settings}' in unit
@@ -105,12 +147,67 @@ def test_the_navigation_host_starts_after_deep_robotics_services_and_the_masters
     assert f'After=network-online.target {after}\n' in unit
 
 
+ROS_HOOK = '[ -n "$X30_NEVER_SET" ] && echo set\n'  # ROS's 1.ros_distro.sh, in a service
+
+
+def test_build_runs_catkin_make_as_the_robot_needs_it(tmp_path):
+    bin_dir, ws, proc = tmp_path / 'bin', tmp_path / 'ws', tmp_path / 'proc'
+    bin_dir.mkdir()
+    (ws / 'src').mkdir(parents=True)
+    proc.mkdir()
+    (proc / 'meminfo').write_text('MemTotal:        3906252 kB\n')  # 3.7 GB: one job at a time
+    (tmp_path / 'ros.bash').write_text(ROS_HOOK)
+    toplevel = tmp_path / 'share' / 'catkin' / 'cmake' / 'toplevel.cmake'
+    toplevel.parent.mkdir(parents=True)
+    toplevel.write_text('# toplevel CMakeLists.txt for a catkin workspace\n')
+    # what the perception host had: a workspace CMakeLists.txt that is not catkin's
+    (ws / 'src' / 'CMakeLists.txt').write_text('\n' * 9 + 'include(config.cmake)\n')
+    made = tmp_path / 'catkin_make.args'
+    fake(bin_dir / 'catkin_make', f'printf "%s\\n" "$PYTHONNOUSERSITE" "$@" > {made}\nexit 0')
+    env = {
+        'PATH': f'{bin_dir}:{os.environ["PATH"]}',
+        'X30_ROS_SETUP': str(tmp_path / 'ros.bash'),
+        'X30_WS': str(ws),
+        'X30_PROC': str(proc),
+        'X30_SYSTEMD_DIR': str(tmp_path),
+        'X30_LOCAL_IPS': PER_IP,
+    }
+    env.pop('PYTHONNOUSERSITE', None)
+    out = host('build', '--pkg', 'x30_recorder', env=env)
+    assert out.returncode == 0, out.stdout + out.stderr
+    args = made.read_text().splitlines()
+    assert args[0] == '1'  # PYTHONNOUSERSITE: no setuptools from ~/.local in catkin's way
+    assert args[1:] == [
+        '-C',
+        str(ws),
+        '-DCATKIN_ENABLE_TESTING=OFF',
+        '-DCMAKE_BUILD_TYPE=Release',
+        '-DCATKIN_WHITELIST_PACKAGES=x30_utils;x30_msgs;x30_recorder;x30_bringup'
+        ';hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver',  # its own only
+        '-j1',
+        '--pkg',
+        'x30_recorder',
+    ]
+    top = ws / 'src' / 'CMakeLists.txt'
+    assert top.is_symlink() and top.resolve() == toplevel
+    assert 'include(config.cmake)' in (ws / 'src' / 'CMakeLists.txt.orig').read_text()
+    assert '\n  sudo bash ' in out.stdout and out.stdout.endswith('x30_host.sh install\n')
+    (tmp_path / 'x30-navigation.service').write_text('[Unit]\n')
+    out = host('build', env={**env, 'X30_LOCAL_IPS': NAV_IP})
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert '-DCATKIN_WHITELIST_PACKAGES=' in made.read_text().splitlines()  # all of it here
+    assert out.stdout.endswith('\n  sudo systemctl restart x30-navigation\n')
+    assert 'kept as' not in out.stdout  # catkin's own, left as it is
+    fake(bin_dir / 'catkin_make', 'exit 5')
+    assert host('build', env=env).returncode == 5  # a failed build fails the command
+
+
 def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     bin_dir, ws = tmp_path / 'bin', tmp_path / 'ws'
     bin_dir.mkdir()
     (ws / 'devel').mkdir(parents=True)
-    (ws / 'devel' / 'setup.bash').write_text('')
-    (tmp_path / 'ros.bash').write_text('')
+    (ws / 'devel' / 'setup.bash').write_text(ROS_HOOK)
+    (tmp_path / 'ros.bash').write_text(ROS_HOOK)  # an unset variable, a failed test: sourced
     launched = tmp_path / 'launched'
     fake = bin_dir / 'roslaunch'
     fake.write_text(
@@ -156,6 +253,9 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     ]
     assert '/x30/x30_driver' in out.stdout  # the critical nodes, logged by the watchdog
     assert 'dr_services.sh sweep' in out.stdout  # Deep Robotics' autonomy kept off meanwhile
+    (ws / 'devel' / 'setup.bash').unlink()
+    out = host('start', 'perception', env=env)
+    assert out.returncode == 1 and 'not built (bash ' in out.stderr  # says so, never a trace
 
 
 class FakeRos:

@@ -32,6 +32,22 @@ versions follow [SemVer](https://semver.org).
   beside the site's own points (the site's names win); the report keeps every region's reading,
   its time and the ambient temperature.
 - tools: `check_deps.sh` checks python3-requests and python3-websocket.
+- tools: `x30_host.sh build`, catkin_make as the robot needs it (ROS sourced,
+  `PYTHONNOUSERSITE=1`, Release, no tests, one job per 2 GB of memory, the perception host's
+  packages only there, a workspace `CMakeLists.txt` that is not catkin's replaced); `x30_host.sh
+  role`; `env`, `start` and `install` take the role from the host's address when left out.
+
+### Fixed
+- tools: `x30-<role>.service` died at every start (`ROS_DISTRO: unbound variable`): ROS's setup
+  is sourced outside `set -eu`; a workspace not built says so.
+- tools: on the robot `x30_host.sh` refuses the other host's role (Deep Robotics names the
+  navigation host `ysc-perception`), its service is not restarted for that
+  (`RestartPreventExitStatus=78`), and `install` removes the other host's service and settings
+  an older x30_host.sh let in.
+- tools: `check_deps.sh` knows the perception host by its address and prints
+  `x30_host.sh build`, one short line, instead of a catkin_make line that wrapped when copied;
+  `pack_sources.sh` names `~/x30_ws` (not `~/hotdog`), unpacks into a clean `src` (a package
+  x30_ros dropped stayed in a tree unpacked over the old one) and leaves `node_modules` out.
 
 ## [Unreleased] (0.18.0)
 
