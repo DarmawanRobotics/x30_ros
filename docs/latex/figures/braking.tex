@@ -1,0 +1,24 @@
+% Free distance the protective field needs ahead, with the X30's profile (t_r 0.3 s, a 0.6 m/s^2)
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\begin{document}
+\begin{tikzpicture}
+  \begin{axis}[width=12.5cm,height=7.2cm,xmin=0,xmax=0.8,ymin=0,ymax=2.0,
+    xlabel={speed $v$ (m/s)},ylabel={free distance needed (m)},
+    axis lines=left,grid=major,grid style={line,line width=0.3pt},
+    tick label style={font=\footnotesize},label style={font=\small},
+    legend style={draw=none,font=\footnotesize,at={(0.5,-0.2)},anchor=north,legend columns=1},
+    every axis plot/.append style={line width=1.4pt,smooth,samples=60,domain=0:0.8}]
+    \addplot[muted] {x*0.3 + x^2/(2*0.6)};
+    \addlegendentry{braking: $v\,t_r + v^2/2a$}
+    \addplot[accent] {x*0.3 + x^2/(2*0.6) + 0.5*(0.3 + x/0.6)};
+    \addlegendentry{and a person walking in at 0.5 m/s}
+    \addplot[orange] {x*0.3 + x^2/(2*0.6) + 0.5*(0.3 + x/0.6) + 0.15};
+    \addlegendentry{and the 0.15 m margin: the field}
+    \draw[dashed,muted] (axis cs:0.75,0) -- (axis cs:0.75,2.0);
+    \node[font=\footnotesize,text=muted,anchor=south west,rotate=90] at (axis cs:0.75,0.04) {\texttt{max\_vx} 0.75};
+    \fill[orange] (axis cs:0.75,1.619) circle (2pt);
+    \node[font=\footnotesize\bfseries,anchor=east,text=orange] at (axis cs:0.73,1.75) {1.62 m};
+  \end{axis}
+\end{tikzpicture}
+\end{document}

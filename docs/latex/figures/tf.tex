@@ -1,0 +1,30 @@
+% The TF tree of the X30 with localization, and who publishes each edge.
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm,frame/.style={box,font=\ttfamily\small,minimum width=2.6cm}]
+  \node[frame,draw=accent,line width=1.1pt] (map) at (0,0) {map};
+  \node[frame] (odom) at (0,-1.6) {odom};
+  \node[frame] (ci) at (0,-3.2) {camera\_init};
+  \node[frame] (body) at (0,-4.8) {body};
+  \node[frame,draw=accent,line width=1.1pt] (base) at (0,-6.4) {base\_link};
+  \node[frame] (torso) at (-4.3,-8.2) {TORSO, legs};
+  \node[frame] (imu) at (-1.4,-8.2) {imu\_link};
+  \node[frame] (lid) at (1.5,-8.2) {livox\_frame};
+  \node[frame] (cam) at (4.4,-8.2) {camera frames};
+  \node[frame] (tag) at (4.4,-9.8) {tag frames};
+  \draw[flow] (map) -- node[lab,right,align=left] {\textbf{localization\_node}: the EKF, 20 Hz\\corrected by tags and pose estimates} (odom);
+  \draw[flow] (odom) -- node[lab,right,align=left] {\textbf{localization\_node}, static:\\the level at the start $\cdot$ the IMU mount} (ci);
+  \draw[flow] (ci) -- node[lab,right] {\textbf{FAST-LIO}, 10 Hz} (body);
+  \draw[flow] (body) -- node[lab,right,align=left] {\textbf{localization\_node}, static:\\the inverse IMU mount} (base);
+  \draw[flow] (base.south) -- ++(0,-0.6) -| (torso.north);
+  \draw[flow] (base.south) -- ++(0,-0.6) -| (imu.north);
+  \draw[flow] (base.south) -- ++(0,-0.6) -| (lid.north);
+  \draw[flow] (base.south) -- ++(0,-0.6) -| (cam.north);
+  \draw[flow] (cam) -- node[lab,right] {\textbf{aruco\_detector\_node}} (tag);
+  \node[lab,anchor=north] at (-2.85,-8.75) {\textbf{robot\_state\_publisher}};
+  \node[lab,anchor=north] at (1.5,-8.75) {\textbf{lidar\_mount}, static};
+  \draw[dashedflow] (odom.west) to[out=200,in=160] node[lab,left,align=right,pos=0.5]
+    {or the driver's leg odometry\\(\texttt{leg\_odom\_tf:=true},\\without localization)} (base.west);
+\end{tikzpicture}
+\end{document}

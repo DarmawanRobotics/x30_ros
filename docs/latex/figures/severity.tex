@@ -1,0 +1,23 @@
+% The three overheating criteria and their thresholds (x30_inspection defaults, NETA MTS).
+\documentclass[border=3pt]{standalone}
+\usepackage{x30fig}
+\definecolor{attn}{HTML}{F2C14E}
+\newcommand{\band}[9]{% y, label, x1,x2,x3,(end) t1,t2,t3, unit
+  \node[anchor=east,align=right,font=\small] at (-0.2,#1) {#2};
+  \fill[greensoft] (0,#1-0.32) rectangle (#3,#1+0.32);
+  \fill[attn!45] (#3,#1-0.32) rectangle (#4,#1+0.32);
+  \fill[orange!55] (#4,#1-0.32) rectangle (#5,#1+0.32);
+  \fill[red!65] (#5,#1-0.32) rectangle (12,#1+0.32);
+  \foreach \x/\t in {#3/#6,#4/#7,#5/#8} {\draw[white,line width=1.2pt] (\x,#1-0.32) -- (\x,#1+0.32);
+    \node[font=\footnotesize\bfseries,anchor=north] at (\x,#1-0.34) {\t\,#9};}}
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \band{3.0}{\textbf{absolute}\\\footnotesize\color{muted}the hottest region}{4.4}{6.6}{9.6}{80}{90}{105}{°C}
+  \band{1.4}{\textbf{ambient}\\\footnotesize\color{muted}hottest over the air}{2.8}{4.8}{8.8}{+11}{+21}{+41}{K}
+  \band{-0.2}{\textbf{similar}\\\footnotesize\color{muted}hottest over the others}{1.2}{2.4}{8.0}{+2}{+4}{+16}{K}
+  \foreach \x/\t in {1.4/normal,4.0/attention,7.0/warning,10.8/critical} {\node[font=\small\bfseries,text=ink] at (\x,4.0) {\t};}
+  \node[lab,anchor=north west,align=left,text width=12cm] at (0,-1.05) {A finding takes the highest
+    severity of its criteria; a target's own \texttt{max\_temp\_c} replaces 105 °C as its critical
+    limit. Scales are not to scale between the rows.};
+\end{tikzpicture}
+\end{document}
