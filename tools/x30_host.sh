@@ -146,16 +146,27 @@ settle_dr() { # stop Deep Robotics' autonomy until a round, 30 s after the first
   done
 }
 
+ros_setup() { # <setup.bash>: ROS's and the workspace's, sourced as on the robot
+  # their hooks read variables a service's environment has not set (ROS_DISTRO) and end on
+  # failed tests: never under set -eu, or the service dies before its launch
+  set +eu
+  # shellcheck disable=SC1090
+  source "$1"
+  set -eu
+}
+
 cmd_start() { # <role>
   local role=$1 ws args=() setup sweep
   role_ip "$role" > /dev/null
   ws=${X30_WS:-$(workspace)}
-  # shellcheck disable=SC1090 # the ROS and workspace setup, sourced as on the robot
-  source "${X30_ROS_SETUP:-/opt/ros/noetic/setup.bash}"
+  ros_setup "${X30_ROS_SETUP:-/opt/ros/noetic/setup.bash}"
   setup=$ws/devel/setup.bash
   [ -f "$setup" ] || setup=$ws/install/setup.bash
-  # shellcheck disable=SC1090
-  source "$setup"
+  if [ ! -f "$setup" ]; then
+    say "no $ws/devel/setup.bash: the workspace is not built (bash $HERE/x30_host.sh build)" >&2
+    exit 1
+  fi
+  ros_setup "$setup"
   eval "$(cmd_env "$role" | grep -v -e ROS_MASTER_URI -e ROS_IP -e X30_PYTHON)"
   export ROS_MASTER_URI=${ROS_MASTER_URI:-http://$NAV_IP:$MASTER_PORT}
   export ROS_IP=${ROS_IP:-$(role_ip "$role")}

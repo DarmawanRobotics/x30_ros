@@ -105,12 +105,15 @@ def test_the_navigation_host_starts_after_deep_robotics_services_and_the_masters
     assert f'After=network-online.target {after}\n' in unit
 
 
+ROS_HOOK = '[ -n "$X30_NEVER_SET" ] && echo set\n'  # ROS's 1.ros_distro.sh, in a service
+
+
 def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     bin_dir, ws = tmp_path / 'bin', tmp_path / 'ws'
     bin_dir.mkdir()
     (ws / 'devel').mkdir(parents=True)
-    (ws / 'devel' / 'setup.bash').write_text('')
-    (tmp_path / 'ros.bash').write_text('')
+    (ws / 'devel' / 'setup.bash').write_text(ROS_HOOK)
+    (tmp_path / 'ros.bash').write_text(ROS_HOOK)  # an unset variable, a failed test: sourced
     launched = tmp_path / 'launched'
     fake = bin_dir / 'roslaunch'
     fake.write_text(
@@ -156,6 +159,9 @@ def test_start_runs_the_hosts_launch_under_the_watchdog(tmp_path):
     ]
     assert '/x30/x30_driver' in out.stdout  # the critical nodes, logged by the watchdog
     assert 'dr_services.sh sweep' in out.stdout  # Deep Robotics' autonomy kept off meanwhile
+    (ws / 'devel' / 'setup.bash').unlink()
+    out = host('start', 'perception', env=env)
+    assert out.returncode == 1 and 'not built (bash ' in out.stderr  # says so, never a trace
 
 
 class FakeRos:
