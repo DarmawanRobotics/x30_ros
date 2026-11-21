@@ -3,36 +3,62 @@
 
 \section{A new version of the stack}
 
+On the Mac, online (the four lines from \code{GIT_CONFIG_COUNT} are one command):
+
 \begin{lstlisting}[language=bash]
-# on the Mac, online
-cd ~/x30/x30_ros && git pull
-GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
-  GIT_CONFIG_VALUE_0=https://github.com/ \
-  bash tools/pack_sources.sh ~/x30/x30_sources.tar.gz
-# at the robot
-scp ~/x30/x30_sources.tar.gz ysc@192.168.1.106:~/   # and .105
-ssh ysc@192.168.1.106
-rm -rf ~/x30_ws/src && tar -xzf ~/x30_sources.tar.gz -C ~/x30_ws
-cd ~/x30_ws && catkin_make -DCATKIN_ENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
-sudo systemctl restart x30-navigation
+cd ~/x30/x30_ros
+git pull
+GIT_CONFIG_COUNT=1 \
+GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
+GIT_CONFIG_VALUE_0=https://github.com/ \
+bash tools/pack_sources.sh ~/x30/x30_sources.tar.gz
 \end{lstlisting}
 
-Run \file{check_deps.sh} again after an update: a new version may need a new package. The
-\code{CHANGELOG.md} of x30\_ros says what changed and whether a settings file needs a new line.
+At the robot, to both hosts:
+
+\begin{lstlisting}[language=bash]
+cd ~/x30
+scp x30_sources.tar.gz ysc@192.168.1.106:~/
+scp x30_sources.tar.gz ysc@192.168.1.105:~/
+\end{lstlisting}
+
+On each host a clean workspace and its build (Section~\ref{sec:i-build}):
+
+\begin{lstlisting}[language=bash]
+cd ~/x30_ws
+rm -rf src.prev build devel
+mv src src.prev
+tar -xzf ~/x30_sources.tar.gz
+bash src/x30_ros/tools/check_deps.sh
+bash src/x30_ros/tools/x30_host.sh build
+\end{lstlisting}
+
+The build ends with the host's restart: \cmd{sudo systemctl restart x30-navigation} on .106,
+\cmd{sudo systemctl restart x30-perception} on .105; the services stay installed. A new version
+may need a new package (\file{check_deps.sh} says so); the \code{CHANGELOG.md} of x30\_ros says
+what changed and whether a settings file needs a new line.
 
 \section{A new app}
 
 \begin{lstlisting}[language=bash]
-gh release download -R DarmawanRobotics/X30Controller -p 'x30-controller-*.apk' --clobber
+cd ~/x30
+gh release download -R DarmawanRobotics/X30Controller \
+  -p 'x30-controller-*.apk' --clobber
 adb install -r x30-controller-*.apk
 \end{lstlisting}
 
 \section{A new NETRA}
 
+Online:
+
 \begin{lstlisting}[language=bash]
-cd ~/x30/Netra && git pull && git submodule update --init --recursive
-scripts/local.sh up        # online: rebuilds what changed
+cd ~/x30/Netra
+git pull
+git submodule update --init --recursive
+scripts/local.sh up
 \end{lstlisting}
+
+\cmd{up} rebuilds what changed.
 
 \section{What to keep}
 
