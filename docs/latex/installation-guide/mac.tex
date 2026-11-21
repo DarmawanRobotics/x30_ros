@@ -28,15 +28,11 @@ the Livox SDK, and packs them into one archive of about 5 MB, without Git histor
 mkdir -p ~/x30 && cd ~/x30
 git clone git@github.com:DarmawanRobotics/x30_ros.git
 cd x30_ros
-GIT_CONFIG_COUNT=1 \
-GIT_CONFIG_KEY_0=url.git@github.com:.insteadOf \
-GIT_CONFIG_VALUE_0=https://github.com/ \
 bash tools/pack_sources.sh ~/x30/x30_sources.tar.gz
 \end{lstlisting}
 
-The last four lines are one command. Its three \code{GIT_CONFIG_*} variables make every clone of this one command go over SSH with
-your GitHub key, so private driver repositories come along too; nothing in your Git
-configuration changes. \file{src/SOURCES.txt} in the archive lists the commit of every
+A GitHub repository that HTTPS refuses, a private driver, comes over SSH with your GitHub key;
+nothing in your Git configuration changes. \file{src/SOURCES.txt} in the archive lists the commit of every
 repository.
 
 \section{The app}
