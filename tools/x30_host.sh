@@ -325,6 +325,18 @@ WantedBy=multi-user.target
 EOF
 }
 
+remove_misplaced() { # <role>: the other host's service and settings, installed here by mistake
+  local other=perception
+  [ "$1" = perception ] && other=navigation
+  # only where this computer is one of the hosts (a test machine may hold both)
+  if [ -z "$(this_role)" ] || [ ! -f "$SYSTEMD_DIR/x30-$other.service" ]; then
+    return 0
+  fi
+  "$SYSTEMCTL" disable --now "x30-$other.service" > /dev/null 2>&1 || true
+  rm -f -- "$SYSTEMD_DIR/x30-$other.service" "$ETC/$other.env"
+  say "removed x30-$other.service and $ETC/$other.env: the $other host is $(role_ip "$other")"
+}
+
 cmd_install() { # [<role>]
   local role user ws env unit after='' what
   role=$(host_role "$1")
@@ -356,14 +368,19 @@ cmd_install() { # [<role>]
       say "no Deep Robotics service found (the master not running?): after $after by name"
     fi
   fi
+  remove_misplaced "$role"
   unit_file "$role" "$user" "$after" > "$unit"
   say "wrote $unit"
   "$SYSTEMCTL" daemon-reload
   "$SYSTEMCTL" enable "x30-$role.service"
   [ "$role" = perception ] && what='X30_LAUNCH_ARGS, the passwords' ||
     what="X30_LAUNCH_ARGS, the handheld's X30_TELEOP_TOKEN, NETRA's X30_NETRA_TOKEN"
-  say "next: the settings in $env ($what)"
-  say "then: sudo systemctl start x30-$role; journalctl -u x30-$role -f"
+  # one command a line: copied from a narrow screen, nothing runs half
+  say "next, the settings ($what):"
+  say "  sudo nano $env"
+  say "then the service, and its log:"
+  say "  sudo systemctl restart x30-$role"
+  say "  journalctl -u x30-$role -f"
 }
 
 main() {

@@ -60,9 +60,20 @@ def test_the_role_is_this_computers_and_never_the_other_hosts(tmp_path):
     }
     assert host('install', 'navigation', env={**perception, **settings}).returncode == 78
     assert not (tmp_path / 'x30-navigation.service').exists()
-    out = host('install', env={**perception, **settings})
+    # what an older x30_host.sh let through: the navigation host's service on this one
+    (tmp_path / 'x30-navigation.service').write_text('[Unit]\n')
+    (tmp_path / 'etc').mkdir()
+    (tmp_path / 'etc' / 'navigation.env').write_text('X30_TELEOP_TOKEN=\n')
+    calls = tmp_path / 'systemctl.calls'
+    systemctl = fake(tmp_path / 'systemctl', f'echo "$@" >> {calls}')
+    out = host('install', env={**perception, **settings, 'X30_SYSTEMCTL': str(systemctl)})
     assert out.returncode == 0, out.stdout + out.stderr
     assert 'start perception' in (tmp_path / 'x30-perception.service').read_text()
+    assert 'removed x30-navigation.service' in out.stdout
+    assert not (tmp_path / 'x30-navigation.service').exists()
+    assert not (tmp_path / 'etc' / 'navigation.env').exists()
+    assert 'disable --now x30-navigation.service' in calls.read_text().splitlines()
+    assert '\n  sudo systemctl restart x30-perception\n' in out.stdout  # one command a line
     laptop = {'X30_LOCAL_IPS': '10.0.0.2'}  # neither host: the role named, any
     out = host('env', env=laptop)
     assert out.returncode == 2 and 'say which, navigation or perception' in out.stderr
