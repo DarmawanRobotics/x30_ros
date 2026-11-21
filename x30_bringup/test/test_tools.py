@@ -421,11 +421,12 @@ def test_pack_sources_brings_the_repositories_and_the_sdk_without_history(tmp_pa
         f'  third_party/FAST_LIO:\n    type: git\n    url: {lio}\n    version: main\n'
         f'  drivers/cam:\n    type: git\n    url: {cam}\n    version: main\n'
     )
-    out = run('pack_sources.sh', 'out.tar.gz', '--skip', 'cam', cwd=tmp_path, timeout=120,
+    # into a folder not made yet: made first, never a failure after the clones
+    out = run('pack_sources.sh', 'packs/out.tar.gz', '--skip', 'cam', cwd=tmp_path, timeout=120,
               env={'X30_REPOS': str(repos), 'LIVOX_SDK_URL': sdk})  # fmt: skip
     assert out.returncode == 0, out.stdout + out.stderr
     assert 'drivers/cam: skipped' in out.stdout
-    with tarfile.open(tmp_path / 'out.tar.gz') as archive:
+    with tarfile.open(tmp_path / 'packs' / 'out.tar.gz') as archive:
         names = archive.getnames()
         manifest = archive.extractfile('src/SOURCES.txt').read().decode()
     assert 'src/x30_ros/tools/pack_sources.sh' in names
@@ -438,6 +439,7 @@ def test_pack_sources_brings_the_repositories_and_the_sdk_without_history(tmp_pa
     # what to run on the robot: one command a line, in the workspace the docs name
     hint = out.stdout.split('To both hosts of the robot:')[1].splitlines()
     assert '  tar -xzf ~/out.tar.gz' in hint and '  mkdir -p ~/x30_ws && cd ~/x30_ws' in hint
+    assert '  scp packs/out.tar.gz ysc@192.168.1.105:~/' in hint  # as given
     commands = [line for line in hint if line.startswith('  ')]
     assert all(len(line) <= 52 and '#' not in line for line in commands), commands
 

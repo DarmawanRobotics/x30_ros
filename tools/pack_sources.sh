@@ -21,6 +21,7 @@ ROOT=$(dirname "$HERE")
 REPOS=${X30_REPOS:-$ROOT/x30.repos}
 LIVOX_SDK_URL=${LIVOX_SDK_URL:-https://github.com/Livox-SDK/Livox-SDK.git}
 OUT=x30_sources.tar.gz
+ARCHIVE=''
 SKIP=()
 STAGE=''
 
@@ -78,6 +79,10 @@ main() {
     shift
   done
   command -v git > /dev/null || { echo "git is needed here (not on the robot)"; exit 1; }
+  # the archive's folder made before a minute of clones, not found missing after them; tar
+  # writes it by its absolute path (-C moves tar into the stage), the steps name it as given
+  mkdir -p "$(dirname "$OUT")" || { echo "cannot make the folder of $OUT"; exit 1; }
+  ARCHIVE=$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")
   STAGE=$(mktemp -d)
   trap cleanup EXIT
   mkdir -p "$STAGE/src/x30_ros"
@@ -104,10 +109,10 @@ main() {
   # no git history (the robot cannot fetch anyway) and no FAST_LIO videos: ~10 MB, not 280
   find "$STAGE" -name .git -prune -exec rm -rf {} +
   rm -rf -- "$STAGE/src/third_party/FAST_LIO/doc"
-  tar -C "$STAGE" -czf "$OUT" src Livox-SDK || exit 1
+  tar -C "$STAGE" -czf "$ARCHIVE" src Livox-SDK || exit 1
   # one command a line, none longer than a phone's screen: copied, nothing runs half
   cat <<EOF
-packed $OUT ($(du -h "$OUT" | cut -f1)). To both hosts of the robot:
+packed $OUT ($(du -h "$ARCHIVE" | awk '{print $1}')). To both hosts of the robot:
   scp $OUT ysc@192.168.1.106:~/
   scp $OUT ysc@192.168.1.105:~/
 on each, a clean workspace (the one before kept as src.prev), then its build:
