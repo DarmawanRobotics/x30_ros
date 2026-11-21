@@ -52,7 +52,8 @@ versions follow [SemVer](https://semver.org).
   x30_ros dropped stayed in a tree unpacked over the old one) and leaves `node_modules` out.
 - tools: `check_deps.sh` asks ffmpeg (the recorder's) of the perception host only;
   `dr_services.sh` refuses the perception and the motion host, `--force` gone;
-  `pack_sources.sh` clones a GitHub repository HTTPS refuses (a private one) over SSH.
+  `pack_sources.sh` clones a GitHub repository HTTPS refuses (a private one) over SSH, and
+  makes the archive's folder before the clones (a missing one failed the pack after them).
 - docs: code in the PDFs as typed (`"` printed as a closing quote and `--` as an en dash, so a
   copied command failed) and code words with their spaces; every command of the guides one a
   line, none with a comment after it, checked by `docs/tools/check_listings.py` (`make check`,
