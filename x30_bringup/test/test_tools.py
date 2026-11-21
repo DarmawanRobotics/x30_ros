@@ -309,7 +309,8 @@ def test_check_deps_builds_past_a_user_site_that_breaks_setuptools(system, tmp_p
     out = run('check_deps.sh', '--src', str(src), env=env)
     assert out.returncode == 0, out.stdout
     assert re.search(r'python\s+WARN\s+setuptools in .*user.* breaks catkin', out.stdout)
-    assert 'everything there: PYTHONNOUSERSITE=1 catkin_make' in out.stdout
+    # the build command leaves the user site out itself: one short line to copy
+    assert out.stdout.endswith(f'everything there, the build:\n  bash {TOOLS}/x30_host.sh build\n')
 
 
 def test_check_deps_for_the_perception_host_checks_its_cameras_and_recorder_only(system):
@@ -321,11 +322,10 @@ def test_check_deps_for_the_perception_host_checks_its_cameras_and_recorder_only
     assert out.returncode == 0, out.stdout
     assert 'of the perception host' in out.stdout and 'livox' not in out.stdout
     assert 'neupan' not in out.stdout
-    whitelist = (
-        'x30_utils;x30_msgs;x30_recorder;x30_bringup;'
-        'hikmicro_msgs;hikmicro_driver;hertzino_msgs;hertzino_driver'
-    )
-    assert f"-DCATKIN_WHITELIST_PACKAGES='{whitelist}'" in out.stdout
+    assert f'bash {TOOLS}/x30_host.sh build' in out.stdout  # its packages only (test_hosts)
+    # on the perception host itself, by its address, without the flag
+    out = run('check_deps.sh', '--src', str(src), env={**env, 'X30_LOCAL_IPS': '192.168.1.105'})
+    assert out.returncode == 0 and 'of the perception host' in out.stdout, out.stdout
     script = TOOLS / 'check_deps.sh'
     assert set(array(script, 'PERCEPTION_BUILD')) <= set(array(script, 'BUILD'))
     installed.write_text(installed.read_text().replace('libtinyxml2-dev\n', ''))
