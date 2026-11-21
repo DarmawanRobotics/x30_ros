@@ -43,11 +43,10 @@
   UprightFont=*-Regular, BoldFont=*-SemiBold, ItalicFont=*-Italic, BoldItalicFont=*-Italic]
 \newfontfamily\xheavy{BarlowSemiCondensed}[Path=fonts/, Extension=.ttf, UprightFont=*-Bold]
 \newfontfamily\xmedium{BarlowSemiCondensed}[Path=fonts/, Extension=.ttf, UprightFont=*-Medium]
-% the heavy face with wider word spaces, for big titles (WordSpace only works at load)
-\newfontfamily\xheavychap{BarlowSemiCondensed}[Path=fonts/, Extension=.ttf, UprightFont=*-Bold,
-  WordSpace=1.12]
-\newfontfamily\xheavywide{BarlowSemiCondensed}[Path=fonts/, Extension=.ttf, UprightFont=*-Bold,
-  WordSpace=1.6]
+% one space after a full stop or colon too, as sans-serif manuals set it
+\AtBeginDocument{\frenchspacing}
+% word spaces of the big titles, after their \selectfont (em of the title's size)
+\newcommand{\titlespace}{\spaceskip=0.27em plus 0.08em minus 0.04em\relax\xspaceskip=\spaceskip}
 \IfFontExistsTF{DejaVu Sans Mono}
   {\setmonofont{DejaVu Sans Mono}[Scale=0.84]}
   {\setmonofont{lmmono10-regular.otf}}
@@ -79,6 +78,8 @@
 % ----------------------------------------------------------------------------------- packages
 \RequirePackage{graphicx}
 \RequirePackage{booktabs,longtable,tabularx,array,multirow}
+% X columns ragged right: justified narrow cells open wide gaps
+\renewcommand{\tabularxcolumn}[1]{>{\raggedright\arraybackslash}p{#1}}
 \RequirePackage{enumitem}
 \RequirePackage{caption}
 \RequirePackage{titlesec}
@@ -120,10 +121,10 @@
   {\xheavy\color{ink}}
   {\xmedium\large\color{accent}\MakeUppercase{\chaptertitlename}~\thechapter}
   {2pt}
-  {\xheavychap\fontsize{24}{27}\selectfont}
+  {\fontsize{24}{27}\selectfont\titlespace}
   [\vspace{4pt}{\color{line}\titlerule[0.8pt]}]
 \titleformat{name=\chapter,numberless}[display]
-  {\xheavy\color{ink}}{}{0pt}{\fontsize{24}{27}\selectfont}[\vspace{4pt}{\color{line}\titlerule[0.8pt]}]
+  {\xheavy\color{ink}}{}{0pt}{\fontsize{24}{27}\selectfont\titlespace}[\vspace{4pt}{\color{line}\titlerule[0.8pt]}]
 \titlespacing*{\chapter}{0pt}{-10pt}{14pt}
 \titleformat{\section}{\xheavy\Large\color{ink}}{\textcolor{accent}{\thesection}}{0.55em}{}
 \titleformat{\subsection}{\xheavy\large\color{ink}}{\textcolor{accent}{\thesubsection}}{0.5em}{}
@@ -197,8 +198,8 @@
       {\xheavy\color{gold}\addfontfeature{LetterSpace=28}\large EZRA\hspace{0.7em}ROBOTICS};
     \node[anchor=north west,inner sep=0,text width=\paperwidth-40mm,align=left]
       (title) at ($(brand.south west)+(0,-6mm)$)
-      {\xheavywide\color{white}%
-       \ifxdoc@afive\fontsize{27}{29}\else\fontsize{38}{40}\fi\selectfont \xdoc@title};
+      {\xheavy\color{white}%
+       \ifxdoc@afive\fontsize{27}{29}\else\fontsize{38}{40}\fi\selectfont\titlespace \xdoc@title};
     \node[anchor=north west,inner sep=0,text width=\paperwidth-46mm,align=left]
       (sub) at ($(title.south west)+(0,-5mm)$)
       {\color{coversub}\ifxdoc@afive\large\else\Large\fi \xdoc@subtitle};
@@ -268,7 +269,7 @@
   \newtcolorbox{#1}[1][#4]{enhanced,breakable,colback=#3,colframe=#2,boxrule=0pt,
     leftrule=3.2pt,arc=1.5pt,outer arc=1.5pt,left=7pt,right=7pt,top=5pt,bottom=5pt,
     before skip=8pt,after skip=8pt,
-    fontupper=\color{ink},before upper={\raggedright},
+    fontupper=\color{ink},halign upper=flush left,
     title={##1},fonttitle=\xheavy\color{#2},coltitle=#2,
     attach title to upper={\enspace}}}
 \xdoc@box{notebox}{accent}{accentsoft}{Note}
@@ -310,6 +311,8 @@
 \newcommand{\T}[2]{{}^{#1}\mathbf{T}_{#2}}
 
 % the parameter tables of tools/params.py
+% an empty tick box for checklists and test sheets
+\newcommand{\checkbox}{\tikz[baseline=-0.15ex]\draw[muted,line width=0.6pt,rounded corners=0.6pt] (0,-0.05em) rectangle (0.85em,0.8em);}
 \newcommand{\readonlynote}{Parameters marked $^\dagger$ are read at start only
   (\code{live=False}); every other one can be changed while the node runs
   (\cmd{rosparam set}) and is checked before it applies.}
