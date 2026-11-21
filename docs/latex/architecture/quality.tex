@@ -1,0 +1,45 @@
+\chapter{Tests and continuous integration}
+\label{ch:a-quality}
+
+\section{Tests}
+
+\begin{center}
+\begin{small}
+\begin{tabular}{@{}lr@{\qquad}lr@{}}
+  \toprule
+  \textbf{Package} & \textbf{Tests} & \textbf{Package} & \textbf{Tests} \\
+  \midrule
+  x30\_navigation & 261 & x30\_health & 62 \\
+  x30\_driver & 129 & x30\_inspection & 60 \\
+  x30\_sim & 95 & x30\_localization & 50 \\
+  x30\_control & 93 & x30\_bridge & 32 \\
+  x30\_perception & 83 & x30\_fleet & 32 \\
+  x30\_utils & 82 & x30\_recorder & 23 \\
+  x30\_odometry & 72 & x30\_description & 6 \\
+  x30\_bringup & 66 & \textbf{all} & \textbf{1146} \\
+  \bottomrule
+\end{tabular}
+\end{small}
+\end{center}
+
+\begin{description}
+  \item[Unit tests] (\file{test/unit}, pytest) of the pure cores: the braking model, the field, the
+    EKF, the follower's state machine, path shift, the criteria, the protocols, without ROS.
+  \item[Node tests] (\file{test/ros}, rostest) on a ROS master: the nodes with their real
+    parameters, topics and services, the simulated X30 driving routes end to end, a fake NETRA for
+    the uplink, the gateway with a simulated handheld (\file{teleop_rig.py}).
+  \item[Style] \cmd{ruff} on every package (\file{ruff.toml}), \cmd{shellcheck} on the tools.
+\end{description}
+
+\section{CI}
+
+GitHub Actions on every pull request and on \code{main}, in the \code{ros:noetic-ros-base}
+container: the dependencies from the packages' manifests, \cmd{catkin_make} and every test with
+its failures as annotations, the URDF checked, the shell scripts; a second job builds and tests
+the NeuPAN controller in its environment. The documentation's workflow builds the PDFs and the
+website from \file{docs/} and publishes the site on GitHub Pages.
+
+\section{Versions}
+
+One version for the whole stack, in every \file{package.xml} and in \file{CHANGELOG.md} (Keep a
+Changelog, Semantic Versioning).

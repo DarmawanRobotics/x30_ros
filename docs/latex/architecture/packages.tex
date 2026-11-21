@@ -1,0 +1,61 @@
+\chapter{Packages}
+\label{ch:a-packages}
+
+\begin{center}
+\begin{small}
+\begin{longtable}{@{}>{\raggedright}p{0.2\linewidth}>{\raggedright}p{0.1\linewidth}>{\raggedright}p{0.28\linewidth}>{\raggedright\arraybackslash}p{0.34\linewidth}@{}}
+  \toprule
+  \textbf{Package} & \textbf{Host} & \textbf{Nodes} & \textbf{Role} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  \pkg{x30_driver} & nav & \code{x30_driver} & the motion host's UDP protocol (API V1.0.5): \topic{cmd_vel}
+    as axis commands, leg odometry, IMU, joint states, battery, the robot's services \\
+  \pkg{x30_control} & nav & \code{control_mux_node} & the only publisher of \topic{cmd_vel}: AUTO or
+    REMOTE, envelope, protective field, e-stop \\
+  \pkg{x30_perception} & nav & \code{lidar_sector_node}, \code{aruco_detector_node} & sector scans
+    for the field and avoidance; fiducial tags \\
+  \pkg{x30_odometry} & nav & \code{wait_still}, FAST-LIO, \code{odometry_monitor_node} & LiDAR-inertial
+    odometry behind its start gate, watched \\
+  \pkg{x30_localization} & nav & \code{localization_node} & $\T{map}{odom}$ from an SE(2) EKF on tags;
+    the levelled bridge of FAST-LIO into the TF tree \\
+  \pkg{x30_navigation} & nav & \code{site_manager_node}, \code{route_recorder_node},
+    \code{path_loader_node}, \code{path_follower_node}, \code{obstacle_avoidance_node},
+    \code{docking_node} & sites and routes, teaching, following, avoidance, docking \\
+  \pkg{x30_inspection} & nav & \code{inspection_node} & thermal and partial discharge inspection at
+    the stop points; reports \\
+  \pkg{x30_recorder} & perc & \code{recorder_node} & the cameras recorded on the perception host \\
+  \pkg{x30_health} & nav & \code{health_monitor_node} & one health signal: rates, nodes, states, TF,
+    the computer \\
+  \pkg{x30_bridge} & nav & \code{teleop_udp_node} & the handheld's UDP gateway (teleop v1) \\
+  \pkg{x30_fleet} & nav & \code{fleet_uplink_node} & the NETRA uplink (robot API v1) \\
+  \pkg{x30_sim} & any & \code{sim_robot_node} & the X30 in software for the whole stack \\
+  \pkg{x30_description} & nav & \code{robot_state_publisher} & URDF from Deep Robotics' model \\
+  \pkg{x30_bringup} & both & & launch files per host, the robot profile, tools \\
+  \pkg{x30_msgs} & both & & messages and services \\
+  \pkg{x30_utils} & both & & math, typed configuration, the robot profile, the braking model,
+    logging, ROS helpers, test harness \\
+  \midrule
+  \pkg{hikmicro_driver} & perc & \code{hikmicro_ptz_node}, \code{hikmicro_camera_node} & HIKMICRO PTZ:
+    thermometry, PTZ, the visible and thermal images (own repository, \file{x30.repos}) \\
+  \pkg{hertzino_driver} & perc & \code{hertzino_acoustic_node}, \code{hertzino_camera_node} & Hertzino
+    acoustic camera: partial discharge detection, its images (own repository) \\
+  FAST-LIO, Livox driver & nav & & third party, as submodules (\file{x30.repos}) \\
+\end{longtable}
+\end{small}
+\end{center}
+
+\section{Inside a package}
+
+\begin{lstlisting}
+x30_<name>/
+  src/x30_<name>/core/      the algorithms, pure Python, no ROS (tested alone)
+  src/x30_<name>/utils/     conversions between messages and the core's types
+  src/x30_<name>/*_node.py  the nodes: parameters, topics, services around the core
+  config/*.yaml             the X30's settings
+  launch/*.launch
+  test/unit/                tests of the core (pytest, no ROS)
+  test/ros/                 tests of the nodes on a ROS master (rostest)
+  README.md
+\end{lstlisting}

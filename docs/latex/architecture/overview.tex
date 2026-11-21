@@ -1,0 +1,70 @@
+\chapter{The system}
+\label{ch:a-system}
+
+\section{What it is}
+
+\code{x30_ros} turns a Deep Robotics Jueying X30 Pro into an autonomous substation patrol robot:
+it walks routes taught by an operator, keeps clear of people and obstacles, inspects equipment
+with a thermal PTZ camera and an acoustic camera at the stop points, records its cameras, and
+reports to the NETRA command center. It runs on ROS~1 Noetic on the robot's own computers and
+replaces Deep Robotics' autonomy (localization, navigation, mapping), which it turns off; Deep
+Robotics' motion control, LiDAR and IMU drivers stay.
+
+It is the Noetic port of Dharma, the robot-agnostic stack shared with Pashupati (ROS~2, mall
+patrol) and HotDog (ROS~2, substation patrol on a Deep Robotics M20): the same packages, models
+and protocols, so a handheld or a NETRA that knows one knows the others.
+
+\section{Hosts and network}
+
+\begin{center}
+\includegraphics[width=\linewidth]{network}
+\end{center}
+
+\begin{center}
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.24\linewidth}>{\raggedright}p{0.16\linewidth}X@{}}
+  \toprule
+  \textbf{Host} & \textbf{Address} & \textbf{Runs} \\
+  \midrule
+  Motion host & 192.168.1.103 & Deep Robotics' locomotion: gait, joints, its UDP control interface \\
+  Perception host & 192.168.1.105 & the inspection cameras' drivers, \code{x30_recorder}; Deep Robotics'
+    elevation map and charging \\
+  Navigation host (intelligent controller) & 192.168.1.106 & the ROS master (Deep Robotics'), the LiDAR and
+    IMU drivers (Deep Robotics'), and the whole x30\_ros stack: driver, mux, scans, odometry,
+    localization, navigation, inspection, health, the handheld gateway, the NETRA uplink \\
+  HIKMICRO PTZ & 192.168.1.64 & thermal and visible camera (ISAPI, RTSP) \\
+  Hertzino HZ-FA-371 & 192.168.2.204 & acoustic camera, on the LiDAR network \\
+  Skydroid H12 & robot's Wi-Fi & X30Controller, UDP to 9870 \\
+  NETRA & a laptop or server & the command center, port 80 (HTTP, WebSocket) \\
+  \bottomrule
+\end{tabularx}
+\end{small}
+\end{center}
+
+Both robot hosts share one ROS master on the navigation host
+(\code{ROS_MASTER_URI=http://192.168.1.106:11311}), each with its own \code{ROS_IP}. The
+navigation host carries everything that drives or guards the robot, so a perception host busy
+decoding video never delays a stop.
+
+\section{Layers}
+
+\begin{center}
+\includegraphics[width=\linewidth]{layers}
+\end{center}
+
+\section{Principles}
+
+\begin{description}
+  \item[One publisher of \topic{cmd_vel}] every motion passes the control mux: arbitration, the
+    envelope, the protective field, the e-stop (Chapter~\ref{ch:a-safety}).
+  \item[No map] the start spot is the origin; routes are taught and repeated in that frame; tags
+    correct the drift. Nothing to build or maintain per site but the routes.
+  \item[Pure cores] every algorithm lives in a \code{core/} module without ROS, tested on its own;
+    the nodes are thin shells around them.
+  \item[Typed configuration] every parameter declared once with unit, range and meaning, validated
+    at start; live ones re-read every second; the documentation's tables are generated from them.
+  \item[Secrets in the environment] tokens and passwords only as environment variables, never as
+    ROS parameters (which \cmd{roslaunch} prints and the parameter server shares).
+  \item[Nothing lost offline] what NETRA must get waits in a spool on disk; what the robot records
+    stays on its disk until room is needed.
+\end{description}

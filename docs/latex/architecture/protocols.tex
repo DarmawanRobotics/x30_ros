@@ -1,0 +1,114 @@
+\chapter{Protocols}
+\label{ch:a-protocols}
+
+\section{The handheld: teleop UDP v1}
+
+The X30 speaks the teleop protocol v1 of Pashupati: the same datagrams, so a handheld of either
+robot drives the other; the X30's additions are ignored by a v1 handheld. One UDP port on the
+navigation host (\num{9870}); the handheld sends JSON, the robot answers JSON (control) and chunked
+binary datagrams (streams). The full reference is \file{x30_bridge/PROTOCOL.md}.
+
+\subsection{Session}
+
+\begin{enumerate}
+  \item The handheld sends \code{hello} (again every second when idle). The robot answers
+    \code{welcome} (its commands, the stick's limits, the camera names) and the route, then streams
+    \code{state} at \SI{10}{Hz}.
+  \item One driver at a time: another device's \code{hello} is answered \code{busy} while the
+    current one lives; after \SI{2}{s} of silence the robot drops it and zeroes the stick.
+  \item With a shared secret (\code{X30_TELEOP_TOKEN}) every message carries \code{"k"}, compared in
+    constant time; a \code{hello} without it is answered \code{denied}, anything else dropped.
+  \item Discovery: a broadcast \cmd{{"t": "discover"}} is answered by every robot's \code{beacon}
+    (name, \code{secured}, \code{in_use_by}, mode, battery), without a token.
+\end{enumerate}
+
+\subsection{Messages}
+
+\begin{center}
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.16\linewidth}>{\raggedright}p{0.32\linewidth}X@{}}
+  \toprule
+  \textbf{\code{t}} & \textbf{Fields} & \\
+  \midrule
+  \code{hello} & \code{name}, \code{streams} & register, keep alive \\
+  \code{joy} & \code{vx}, \code{vy} (m/s), \code{wz} (rad/s) & the stick, 20--30 Hz; drives in
+    \code{remote} only \\
+  \code{cmd} & \code{id}, \code{name}, \code{args} & a command; resent every \SI{200}{ms} until its
+    \code{ack}; runs once per \code{id} \\
+  \code{streams} & \code{camera}, \code{lidar}, \code{video}, \code{camera_fps}, \code{camera_name}
+    & which streams \\
+  \code{ack} & \code{id}, \code{ok} (\code{null}: pending), \code{msg}, \code{data} & a command's
+    answer; long ones (\code{inspect}, \code{nav_start}) answer pending first \\
+  \code{state} & mode, e-stop, field, nav state, pose, battery, health, trip, speed, \textbf{X30}:
+    camera, recorder, substation & the robot \\
+  \bottomrule
+\end{tabularx}
+\end{small}
+\end{center}
+
+\noindent Commands map one to one onto the stack's services (Chapter~\ref{ch:a-dataflow}):
+\code{estop}, \code{set_mode}, \code{nav_start}\ldots, \code{record_start}, \code{mark_stop},
+\code{list_routes}, \code{load_route}, \code{localize}, \code{record_tags}, \code{dock},
+\code{nav_speed}, \code{trip_reset}, and the X30's \code{recorder_start}, \code{recorder_stop},
+\code{inspect}, plus the driver's robot commands.
+
+\subsection{Binary streams}
+
+Each datagram starts with a 13-byte little-endian header: magic \code{PSH1}, \code{u8} stream (1
+camera, 2 LiDAR, 3 route), \code{u32} frame, \code{u16} chunk index, \code{u16} chunk count; chunks
+of at most \num{1400} bytes. The camera is one JPEG per frame, the LiDAR $N \times$
+(\code{int16} $x, y, z$ in cm, base\_link), the route a JSON list of $[x, y, \text{dwell}]$ in the
+map frame. The robot subscribes to a camera and the cloud only while a handheld wants them.
+
+\section{NETRA: robot API v1}
+
+\begin{center}
+\includegraphics[width=\linewidth]{patrol}
+\end{center}
+
+\subsection{The WebSocket}
+
+\code{/api/v1/robot/ws} with \code{Authorization: Bearer <token>} and \code{X-Robot-Id}. The robot
+sends \code{hello}, \code{telemetry} (\SI{1}{Hz}), \code{patrol_event} (started, lap, finished),
+\code{stop_event}, \code{alert} (blocked, off the path, failed, the e-stop), \code{ack} and
+\code{time_sync}; events wait while NETRA is unreachable and the connection comes back with a
+backoff. NETRA sends commands, acknowledged with the service's answer:
+
+\begin{center}
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.32\linewidth}X@{}}
+  \toprule
+  \textbf{Command} & \textbf{The stack} \\
+  \midrule
+  \cmd{start_patrol {route_id, patrol_id}} & the route and its plan into the site, then
+    \srv{navigation/load_path} and \srv{navigation/start} \\
+  \code{stop_patrol}, \code{pause}, \code{resume} & \srv{navigation/stop}, \srv{pause},
+    \srv{resume} \\
+  \code{localize} & \srv{localization/start} \\
+  \code{estop}, \code{estop_release} & \topic{control/estop_request} at once, then
+    \srv{control/estop/engage}; \srv{release} \\
+  \code{dock}, \code{undock} & \srv{docking/dock}, \srv{undock} \\
+  \code{recorder_start}, \code{recorder_stop} & \srv{recorder/start}, \srv{stop} \\
+  \cmd{inspect_point {point}} & one NETRA point where the robot stands; refused while moving \\
+  \bottomrule
+\end{tabularx}
+\end{small}
+\end{center}
+
+\subsection{Downloads and uploads}
+
+\begin{description}
+  \item[\code{GET /api/v1/robot/routes/<id>/file}] the route CSV, into \file{<site>/netra/}.
+  \item[\code{GET /api/v1/robot/routes/<id>/inspection}] NETRA's inspection points of the route, by
+    stop: each stop a point \code{netra_stop<k>}, each NETRA point a target \code{netra_<id>} (its
+    PTZ pose, its regions, its temperature limit).
+  \item[\code{POST /api/v1/robot/inspections}] one NETRA point's result, \textbf{always multipart}:
+    a \code{meta} part (JSON: \code{uid} \code{<robot_id>.<report>.<point>}, the time on NETRA's
+    clock, the patrol, the pose, the ambient, the readings) and the images \code{thermal},
+    \code{visual}, \code{acoustic}. The \code{uid} makes a retry idempotent.
+  \item[\code{POST /api/v1/robot/routes}] a route taught on the robot, for NETRA's route
+    database.
+\end{description}
+
+Uploads go through the spool (\file{~/x30/spool}): an item leaves the robot's disk only once NETRA
+answered it, so nothing is lost offline or across restarts.

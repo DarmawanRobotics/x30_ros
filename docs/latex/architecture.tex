@@ -1,0 +1,26 @@
+% X30 Architecture & Technical Reference. Build: make -C docs pdf (docs/pdf/X30-Architecture.pdf)
+\documentclass{x30doc}
+\doctitle{X30 Architecture \& Technical Reference}
+\docheader{X30 Architecture \& Technical Reference}
+\docsubtitle{How the X30 stack is built: hosts, packages, data flow, the safety chain, the
+  protocols to the handheld and to NETRA, operations and tests}
+\docversion{1.0}
+\docdate{2026-11-21}
+\docaudience{For the developers and integrators of the X30 stack and of systems that talk to it.
+  ROS 1 (Noetic) knowledge assumed.}
+\docnote{The settings and their models are in the X30 Tuning Guide, the installation in the X30
+  Installation Guide. Every package has its own README with the details of its nodes; the
+  teleop protocol is \file{x30_bridge/PROTOCOL.md}.}
+\revision{1.0}{2026-11-21}{First version, for x30\_ros 0.19}
+\begin{document}
+\makefront
+\input{architecture/overview}
+\input{architecture/packages}
+\input{architecture/dataflow}
+\input{architecture/safety}
+\input{architecture/navigation}
+\input{architecture/inspection}
+\input{architecture/protocols}
+\input{architecture/operations}
+\input{architecture/quality}
+\end{document}

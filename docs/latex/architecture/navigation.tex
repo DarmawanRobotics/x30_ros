@@ -1,0 +1,60 @@
+\chapter{Sites, routes and the follower}
+\label{ch:a-navigation}
+
+\section{On disk}
+
+\begin{lstlisting}
+~/x30/map/<site>/            a site: a substation (1-48 of a-z, 0-9, _ and -)
+  tags.json                  recorded tags: their map poses
+  routes/<name>.csv          taught routes: x, y (m, map frame), yaw_deg, dwell_sec
+  inspection.yaml            the site's own inspection points and targets
+  netra/<route_id>.csv       routes NETRA started a patrol on
+  netra/inspection.yaml      NETRA's plan for them (points netra_stop<k>, targets netra_<id>)
+~/x30/reports/<day>/...      inspection reports
+~/x30/recordings/<day>/<time>_<reason>/   recorder sessions (perception host)
+~/x30/spool/                 uploads waiting for NETRA
+~/x30/logs/                  each node's JSON lines log
+\end{lstlisting}
+
+A row with \code{dwell_sec} above zero is a stop point. Files are written atomically (a temporary
+file renamed), so a power cut never leaves half a route.
+
+\section{The follower}
+
+\begin{center}
+\includegraphics[width=\linewidth]{follower}
+\end{center}
+
+\begin{center}
+\begin{small}
+\begin{longtable}{@{}>{\bfseries}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.72\linewidth}@{}}
+  \toprule
+  State & Meaning \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  INACTIVE & no route running \\
+  JOINING & walking onto the route from up to \param{join.max_distance} away \\
+  FOLLOWING & on the route, at the speed profile's speed \\
+  APPROACHING & converging onto a stop point or the route's end \\
+  DWELLING & standing at a stop point: the inspection runs \\
+  PAUSED & a pause reason holds it: the operator, the e-stop, REMOTE, localization (NONE), the
+    battery, disarmed \\
+  BLOCKED & standing still too long: an obstacle path shift, detours and backing up could not pass \\
+  OFF\_PATH & farther from the route than \param{off_path_stop} \\
+  GOAL\_REACHED & the route's end \\
+  FAILED & a problem the follower cannot leave by itself \\
+\end{longtable}
+\end{small}
+\end{center}
+
+\noindent The follower is a pure state machine: \code{Follower.tick(inputs) -> Decision} every
+\SI{50}{ms}, with the scan, the pose, the avoidance output and the time as its inputs; the node
+only gathers them and publishes the decision. Every state may go to INACTIVE (stop) or FAILED.
+
+\section{A patrol from NETRA}
+
+\begin{center}
+\includegraphics[width=\linewidth]{patrol}
+\end{center}
