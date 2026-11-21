@@ -4,7 +4,9 @@
 #   make pdf          every document, copied to pdf/ (the committed PDFs: commit them after a change)
 #   make figures      latex/figures/*.tex -> build/figures/*.pdf, and SVG for the website
 #   make reference    latex/generated/params_*.tex from the X30 sources (tools/params.py)
-#   make site         the website in site/.vitepress/dist (pages from the LaTeX, the PDFs)
+#   make site         the website in site/.vitepress/dist: tools/tex2md.py turns every chapter into a
+#                     page (pandoc), VitePress builds them with the figures and the PDFs
+#                     (DOCS_BASE=/x30_ros/ for GitHub Pages)
 #   make clean        remove build/
 #
 # Needs XeLaTeX with fontspec, unicode-math, tcolorbox, pgfplots, siunitx and qrcode (TeX Live
@@ -57,7 +59,8 @@ pdf: docs
 reference:
 	$(PYTHON) tools/params.py
 
-site: figures
+site: figures pdf
+	$(PYTHON) tools/tex2md.py
 	cd site && npm ci --no-audit --no-fund && npm run build
 
 clean:
