@@ -11,6 +11,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: x30_host.sh build [catkin_make args]       the workspace, as the robot runs it: Release,
                                                  no tests, on the perception host its packages
+       x30_host.sh role                           this computer's role, nothing when neither
        x30_host.sh env [ROLE]                     the ROS network of this shell:
                                                  eval "$(bash tools/x30_host.sh env)"
        x30_host.sh check                          the network, the master, every node, the clocks;
@@ -433,6 +434,7 @@ main() {
   [ $# -ge 1 ] || usage
   case "$1" in
     build) shift; cmd_build "$@" ;;
+    role) [ $# = 1 ] || usage; this_role ;;
     env) [ $# -le 2 ] || usage; cmd_env "${2:-}" ;;
     check) [ $# = 1 ] || usage; cmd_check ;;
     start) [ $# -le 2 ] || usage; cmd_start "${2:-}" ;;

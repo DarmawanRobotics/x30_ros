@@ -48,6 +48,7 @@ def test_the_role_is_this_computers_and_never_the_other_hosts(tmp_path):
     # Deep Robotics calls the navigation host ysc-perception: its name misleads, its address not
     perception = {'X30_LOCAL_IPS': f'192.168.2.105 {PER_IP}'}
     assert f'export ROS_IP={PER_IP}' in host('env', env=perception).stdout
+    assert host('role', env=perception).stdout == 'perception\n'
     out = host('env', 'navigation', env=perception)
     assert out.returncode == 78 and f'this is the perception host ({PER_IP})' in out.stderr
     # a service of the other host's role ends at once and for good (RestartPreventExitStatus)
@@ -78,6 +79,7 @@ def test_the_role_is_this_computers_and_never_the_other_hosts(tmp_path):
     out = host('env', env=laptop)
     assert out.returncode == 2 and 'say which, navigation or perception' in out.stderr
     assert f'export ROS_IP={NAV_IP}' in host('env', 'navigation', env=laptop).stdout
+    assert host('role', env=laptop).stdout == ''  # and no failure: check_deps.sh asks
 
 
 def test_install_writes_the_service_with_its_watchdog_and_keeps_the_settings(tmp_path):
