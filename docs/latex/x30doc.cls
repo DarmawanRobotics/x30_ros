@@ -264,9 +264,10 @@
 
 % ----------------------------------------------------------------------------------- boxes
 % \begin{notebox}[Title] ... \end{notebox}: notebox (blue), tipbox (green), warnbox (orange),
-% dangerbox (red); the title defaults to Note, Tip, Warning, Danger
+% dangerbox (red); the title defaults to Note, Tip, Warning, Danger. Kept whole on one page: a box
+% split over two pages leaves a line or two alone.
 \newcommand{\xdoc@box}[4]{%
-  \newtcolorbox{#1}[1][#4]{enhanced,breakable,colback=#3,colframe=#2,boxrule=0pt,
+  \newtcolorbox{#1}[1][#4]{enhanced,colback=#3,colframe=#2,boxrule=0pt,
     leftrule=3.2pt,arc=1.5pt,outer arc=1.5pt,left=7pt,right=7pt,top=5pt,bottom=5pt,
     before skip=8pt,after skip=8pt,
     fontupper=\color{ink},halign upper=flush left,
@@ -308,6 +309,7 @@
 % math
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\vect}[1]{\boldsymbol{#1}}
+\newcommand{\mat}[1]{\mathbf{#1}}
 \newcommand{\T}[2]{{}^{#1}\mathbf{T}_{#2}}
 
 % the parameter tables of tools/params.py
