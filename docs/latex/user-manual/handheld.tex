@@ -1,0 +1,58 @@
+\chapter{The H12 and X30Controller}
+\label{ch:u-handheld}
+
+\begin{center}
+\includegraphics[width=\linewidth]{h12}
+\end{center}
+
+\section{Sticks, keys and modes}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.3\linewidth}X@{}}
+  \toprule
+  Control & What it does \\
+  \midrule
+  Left stick & forward and back; left and right: step sideways \\
+  Right stick & turn left and right \\
+  \key{A} & AUTO or REMOTE \\
+  \key{B} & STOP: the software e-stop \\
+  \key{C} / \key{D} & slower / faster (three speed levels) \\
+  Switch \key{E} & the speed level directly \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{REMOTE}: the sticks drive the robot. Nothing else does.
+  \item \textbf{AUTO}: the robot follows its route; the sticks do nothing. The screen says
+    \ui{AUTO mode: switch to REMOTE to drive} when you try.
+\end{itemize}
+
+The robot listens to one handheld at a time. When the H12 falls silent (out of range, app
+closed), the robot stops its stick motion within a fraction of a second.
+
+\section{The drive screen}
+
+\begin{itemize}
+  \item \textbf{Top bar}: battery, signal, mode, localization (\ui{Start pose}, \ui{Tag},
+    \ui{No loc}), the protective field (\ui{Path clear}, \ui{Slowed}, \ui{Blocked},
+    \ui{No scan}), health (\ui{Needs attention}) and the trip.
+  \item \textbf{Large view}: the inspection camera, visible or thermal (the camera button
+    switches); swap it with the map, which shows the route, its stop points and the robot.
+  \item \textbf{STOP}: the red button, same as \key{B}.
+  \item \textbf{Actions}: \ui{Record}, \ui{Point}, \ui{Finish}, \ui{Tags}, \ui{Localize},
+    \ui{Routes}, \ui{Start}, \ui{Pause}, \ui{Resume}, \ui{End}, \ui{Inspect}, the recorder, and
+    the robot's postures (stand up, sit down).
+\end{itemize}
+
+\section{STOP and release}
+
+STOP (key \key{B} or the red button) holds the robot still: \ui{E-stop on: the robot is held
+still}. A patrol pauses. To release, \textbf{hold} STOP for a second (\ui{Hold to release}).
+After a release the robot moves only once the sticks were let go: a stick held during the
+release never moves it.
+
+\section{On a phone or tablet}
+
+On any Android device without the H12 the app shows touch sticks on the screen: the left one
+drives and steps sideways, the right one turns. Everything else is the same.

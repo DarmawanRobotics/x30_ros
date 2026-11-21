@@ -1,0 +1,30 @@
+\chapter{When something is wrong}
+\label{ch:u-trouble}
+
+\begin{center}
+\begin{small}
+\begin{longtable}{@{}>{\raggedright}p{0.36\linewidth}>{\raggedright\arraybackslash}p{0.56\linewidth}@{}}
+  \toprule
+  \textbf{You see} & \textbf{Do} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  The H12: \ui{The robot does not answer} & the H12 on the robot's Wi-Fi; the robot on and
+    started (two minutes after power-up) \\
+  \ui{Another handheld is driving this robot} & close the app on the other device \\
+  \ui{The robot rejected the token} & the technician gives you the right token \\
+  The sticks do nothing & REMOTE (key \key{A}); the e-stop released (hold STOP); the robot
+    standing \\
+  \ui{No loc} & Chapter~\ref{ch:u-patrol}, ``When the robot does not know where it is'' \\
+  \ui{No scan} or \ui{Blocked} with nothing in the way & a covered LiDAR (dust, a bag on the
+    robot): clean it; otherwise call the technician \\
+  \ui{Needs attention} & the technician; NETRA's dashboard names the issue \\
+  Patrol \ui{Off the route} & bring the robot back next to its route in REMOTE, AUTO, start
+    again \\
+  No inspection results in NETRA & the inspection points belong to the stops of the route
+    patrolled; NETRA's license must include the substation module \\
+  \ui{Recorder not answering} & the robot's perception computer: the technician \\
+\end{longtable}
+\end{small}
+\end{center}

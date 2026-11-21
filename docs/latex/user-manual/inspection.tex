@@ -1,0 +1,91 @@
+\chapter{Inspection}
+\label{ch:u-inspection}
+
+At every stop point of a patrol the robot inspects the \textbf{inspection points} taught for
+that stop: it points the thermal camera at each piece of equipment, measures it and judges it,
+and listens with the acoustic camera where partial discharge is checked.
+
+\section{Teach the inspection points in NETRA}
+
+\menupath{Substation › Inspection points › New point}:
+
+\begin{enumerate}
+  \item Pick the route and its \ui{Stop}, and the type: \ui{Thermal} or \ui{Partial discharge}.
+  \item Set the camera's pose: \ui{Pan °}, tilt and zoom, as the camera saw the equipment at that
+    stop.
+  \item For a thermal point, add a \ui{Target} for each component (phase R, S, T, a clamp) and draw
+    its region on the image; give \ui{Max °C}, its rated temperature: a reading at or above it is
+    critical (P1).
+  \item \ui{Create point}.
+\end{enumerate}
+
+The robot takes the plan with every patrol started from NETRA. A point \ui{Not on a route} is
+\ui{Taken on request}: NETRA asks the robot to inspect it where it stands (not during a patrol).
+
+\begin{notebox}
+The technician can also teach targets on the robot itself, from the camera's current view
+(Tuning Guide, ``Inspection''). Both work side by side; NETRA's points are uploaded to NETRA.
+\end{notebox}
+
+\section{What happens at a stop}
+
+\begin{center}
+\includegraphics[width=\linewidth]{inspection}
+\end{center}
+
+A stop with no inspection point just waits its time. A camera that does not answer is
+reported, never a reason to end the patrol.
+
+\section{How a finding is judged}
+
+Every thermal target is judged three ways; the finding takes the highest severity of the three:
+
+\begin{center}
+\includegraphics[width=\linewidth]{severity}
+\end{center}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.24\linewidth}X@{}}
+  \toprule
+  Criterion & Compares \\
+  \midrule
+  absolute & the hottest region with fixed limits, or the target's rated temperature \\
+  ambient & the hottest region with the air temperature of the day \\
+  similar & the hottest region with the others of the same target (the three phases) \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{warnbox}[Set the air temperature]
+The ambient criterion needs the day's air temperature. The robot uses 30~°C until the
+technician sets it; on a hot day, loaded equipment otherwise reads high.
+\end{warnbox}
+
+Partial discharge is classified by the acoustic camera:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.22\linewidth}p{0.22\linewidth}X@{}}
+  \toprule
+  Type & Severity & Meaning \\
+  \midrule
+  noise & normal & no discharge \\
+  corona & attention & common outdoors on high-voltage parts: watch the trend \\
+  surface & warning & tracking on insulators or terminations \\
+  floating & critical & a loose, floating part \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Where the results are}
+
+\begin{itemize}
+  \item \textbf{NETRA}: \menupath{Substation › Overview} (every piece of equipment and its last
+    capture), \menupath{Findings} (what needs action), each point with its trend of readings and
+    its images (thermal, visible, sound map).
+  \item \textbf{The H12}: the last point and its severity after \ui{Inspect} or a stop.
+  \item \textbf{The robot}: every report with its images and raw thermal frames, by day
+    (\file{~/x30/reports}); the oldest days go when the disk runs short.
+\end{itemize}
+
+\ui{Inspect} on the H12 inspects the point where the robot stands, now: useful to check a
+newly taught point. It takes a few minutes for a point with several targets.

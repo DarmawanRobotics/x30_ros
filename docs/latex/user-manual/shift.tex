@@ -1,0 +1,27 @@
+\chapter{A shift}
+\label{ch:u-shift}
+
+\section{Start}
+
+\begin{enumerate}
+  \item The robot sits on its start spot (the dock), facing the usual way. Turn it on.
+  \item Wait about two minutes: the robot's computers start the stack by themselves.
+  \item Turn on the H12, open X30Controller and pick the robot.
+  \item Check the top bar: battery, \ui{Start pose} (or \ui{Tag}), \ui{Path clear}, no
+    \ui{Needs attention}.
+  \item Stand the robot up (the posture action).
+  \item On the Mac: \cmd{scripts/local.sh start}, then the robot shows online in NETRA.
+\end{enumerate}
+
+\begin{warnbox}[Not on the start spot?]
+If the robot was started anywhere else, its routes are shifted by that much. Sit it down, put it
+on the start spot and restart it, or ask the technician to localize it on a tag.
+\end{warnbox}
+
+\section{End}
+
+\begin{enumerate}
+  \item Stop the patrol (\ui{End}) and stop the schedules in NETRA if no one will watch.
+  \item Walk the robot back to its dock in REMOTE, sit it down.
+  \item Charge it (Deep Robotics' manual), then turn it off if it stays off.
+\end{enumerate}

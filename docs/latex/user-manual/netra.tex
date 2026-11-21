@@ -1,0 +1,36 @@
+\chapter{NETRA}
+\label{ch:u-netra}
+
+NETRA is the command center: open it in a browser on the laptop that runs it
+(\url{http://localhost}) or on any device on the same network, and log in.
+
+\section{What is where}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.3\linewidth}X@{}}
+  \toprule
+  Page & For \\
+  \midrule
+  Dashboard & every robot at a glance; what needs attention (e-stop, alarms, battery, lost);
+    \ui{E-stop} and its release \\
+  Operations map & where the robots are; a robot's card: battery, mode, health, REC, and
+    \menupath{Live control} (the recorder, the robot's computer) \\
+  Patrols & every patrol with its recap and timeline; \ui{Start a patrol now} \\
+  Schedules & patrols by day and time \\
+  Routes & the routes the robot taught \\
+  Substation & overview, findings, equipment, inspection points \\
+  Reports & PDF and Excel exports \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Alerts}
+
+The robot reports when it is blocked, off its route or failed, and when its e-stop engages.
+NETRA shows them on the dashboard and, where configured, sends them to Telegram. Every finding
+of warning or critical severity appears under \menupath{Substation › Findings}.
+
+\section{Commands to the robot}
+
+From the robot's card: pause, resume, stop the patrol, localize, the e-stop and its release, and
+the recorder. The robot answers each one; a refused command shows the robot's reason.
