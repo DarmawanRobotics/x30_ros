@@ -48,6 +48,13 @@ versions follow [SemVer](https://semver.org).
   `x30_host.sh build`, one short line, instead of a catkin_make line that wrapped when copied;
   `pack_sources.sh` names `~/x30_ws` (not `~/hotdog`), unpacks into a clean `src` (a package
   x30_ros dropped stayed in a tree unpacked over the old one) and leaves `node_modules` out.
+- tools: `check_deps.sh` asks ffmpeg (the recorder's) of the perception host only;
+  `dr_services.sh` refuses the perception and the motion host, `--force` gone.
+- docs: code in the PDFs as typed (`"` printed as a closing quote and `--` as an en dash, so a
+  copied command failed) and code words with their spaces; every command of the guides one a
+  line, none with a comment after it, checked by `docs/tools/check_listings.py` (`make check`,
+  before the PDFs); the Installation Guide builds with `x30_host.sh build` and installs each
+  host by its address.
 
 ## [Unreleased] (0.18.0)
 
