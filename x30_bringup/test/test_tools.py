@@ -80,6 +80,24 @@ def services(root: Path, *args: str):
     return run('dr_services.sh', *args, env={'JY_COG': str(root)})
 
 
+def test_the_perception_and_motion_hosts_refuse_whatever_is_asked(jy, tmp_path):
+    """Deep Robotics' transfer, elevation map and charging there stay: no way around it."""
+    root, log, spawn = jy
+    bridge = spawn('transfer/lib/message_transformer_cpp/udp_receiver')
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    hostname = bin_dir / 'hostname'
+    for ips, host in (('192.168.2.105 192.168.1.105 172.17.0.1', 'perception'),
+                      ('192.168.1.103', 'motion')):  # fmt: skip
+        hostname.write_text(f'#!/bin/sh\necho "{ips} "\n')
+        hostname.chmod(0o755)
+        env = {'JY_COG': str(root), 'PATH': f'{bin_dir}:{os.environ["PATH"]}'}
+        out = run('dr_services.sh', 'off', env=env)
+        assert out.returncode == 1 and f'this is the {host} host' in out.stdout, out.stdout
+        assert run('dr_services.sh', 'off', '--force', env=env).returncode == 2  # no such flag
+    assert bridge.poll() is None and log.read_text() == ''  # nothing stopped, no kill script
+
+
 def test_status_sorts_the_jy_cog_processes(jy):
     root, _, spawn = jy
     nav, driver = spawn('nav/bin/move_base'), spawn('drivers/livox_lidar_publisher2')
